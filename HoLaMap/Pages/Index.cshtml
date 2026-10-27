@@ -4,4 +4,48 @@
     ViewData["Title"] = "HoLaMap";
 }
 
-<h1>HoLaMap</h1>
+<header class="page-header">
+    <h1>HoLaMap</h1>
+    <ul class="legend">
+        <li><span class="swatch port-wan"></span>WAN</li>
+        <li><span class="swatch port-gbe-poe"></span>GbE PoE</li>
+        <li><span class="swatch port-gbe"></span>GbE</li>
+        <li><span class="swatch port-fe"></span>FE</li>
+        <li><span class="swatch port-down"></span>Down</li>
+    </ul>
+</header>
+
+@if (Model.Infrastructure.Count == 0)
+{
+    <p class="empty">No devices yet. Wait for the first UniFi sync.</p>
+}
+
+@foreach (Device device in Model.Infrastructure)
+{
+    <section class="device device-@device.Kind.ToString().ToLowerInvariant()">
+        <header class="device-header">
+            <span class="device-name">@device.Name</span>
+            <span class="device-meta">@device.Model · @device.Ip</span>
+        </header>
+        @if (device.Ports.Count == 0)
+        {
+            <p class="device-empty">Wireless Only</p>
+        }
+        else
+        {
+            <div class="ports">
+                @foreach (Port port in device.Ports.OrderBy(port => port.Index))
+                {
+                    List<string> connections = Model.Connections(port);
+                    <div class="port @Model.PortClass(port)" title="@port.Name · @(port.Speed?.ToString() ?? "-") Mbps · @port.NetworkName">
+                        <span class="port-index">@port.Index</span>
+                        @foreach (string connection in connections)
+                        {
+                            <span class="port-connection">@connection</span>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </section>
+}

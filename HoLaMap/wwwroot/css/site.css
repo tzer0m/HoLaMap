@@ -5,3 +5,128 @@ body {
     background: #000;
     color: #e6e6e6;
 }
+
+.page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.page-header h1 {
+    margin: 0;
+}
+
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.85rem;
+}
+
+.legend li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+}
+
+.device {
+    margin-bottom: 16px;
+    border: 2px solid #8a90b0;
+    border-radius: 6px;
+    background: #2f3640;
+}
+
+.device-gateway,
+.device-switch,
+.device-accesspoint {
+    background: #36334a;
+}
+
+.device-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #4a5068;
+}
+
+.device-name {
+    font-weight: 600;
+}
+
+.device-meta,
+.device-empty {
+    color: #9aa3b5;
+    font-size: 0.85rem;
+}
+
+.device-empty {
+    margin: 0;
+    padding: 8px 12px;
+}
+
+.ports {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 6px;
+    padding: 8px;
+}
+
+.port {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 48px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    color: #fff;
+}
+
+.port-index {
+    font-weight: 700;
+}
+
+.port-connection {
+    overflow-wrap: anywhere;
+}
+
+.port-wan {
+    background: #1e88c8;
+}
+
+.port-gbe-poe {
+    background: #9a5a12;
+}
+
+.port-gbe {
+    background: #4a8a1c;
+}
+
+.port-fe {
+    background: #f6b3cf;
+    color: #2a1a22;
+}
+
+.port-down {
+    background: #7b8794;
+    color: #1d2228;
+}
+
+.empty {
+    color: #9aa3b5;
+}
