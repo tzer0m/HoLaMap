@@ -39,5 +39,15 @@ namespace HoLaMap.Models
         /// Gets or sets the destination port, if known.
         /// </summary>
         public Port? ToPort { get; set; }
+
+        /// <summary>
+        /// Gets or sets where the link came from.
+        /// </summary>
+        public LinkSource Source { get; set; }
+
+        /// <summary>
+        /// Gets or sets optional notes about the link.
+        /// </summary>
+        public string? Notes { get; set; }
     }
 }

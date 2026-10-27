@@ -124,7 +124,7 @@ namespace HoLaMap.UniFi
         /// <returns>A task that completes when the links have been saved.</returns>
         private async Task SyncLinksAsync(Dictionary<string, Device> devices, List<UniFiDevice> unifiDevices, List<UniFiStation> stations, CancellationToken cancellationToken)
         {
-            context.Links.RemoveRange(await context.Links.ToListAsync(cancellationToken));
+            context.Links.RemoveRange(await context.Links.Where(link => link.Source == LinkSource.UniFi).ToListAsync(cancellationToken));
 
             // Switch and AP uplinks.
             foreach (UniFiDevice unifiDevice in unifiDevices.Where(unifiDevice => unifiDevice.Uplink?.UplinkMac != null && unifiDevice.Uplink.UplinkRemotePort != null))

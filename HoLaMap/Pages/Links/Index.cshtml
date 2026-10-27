@@ -1,0 +1,43 @@
+﻿@page
+@model HoLaMap.Pages.Links.IndexModel
+@{
+    ViewData["Title"] = "Links";
+}
+
+<header class="page-header">
+    <h1>Manual Links</h1>
+    <a class="button" asp-page="Create">Add Link</a>
+</header>
+
+@if (Model.Links.Count == 0)
+{
+    <p class="empty">No manual links yet. Add one for anything UniFi can't detect, like the WAN loopback.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>From</th>
+                <th>To</th>
+                <th>Notes</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (Link link in Model.Links)
+            {
+                <tr>
+                    <td>@link.FromPort.Device.Name Port @link.FromPort.Index</td>
+                    <td>@link.ToDevice.Name@(link.ToPort != null ? $" Port {link.ToPort.Index}" : "")</td>
+                    <td>@link.Notes</td>
+                    <td>
+                        <form method="post" asp-page-handler="Delete" asp-route-id="@link.Id">
+                            <button type="submit" class="button button-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

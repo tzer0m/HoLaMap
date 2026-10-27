@@ -70,6 +70,13 @@ namespace HoLaMap.Migrations
                     b.Property<int>("FromPortId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int>("ToDeviceId")
                         .HasColumnType("integer");
 

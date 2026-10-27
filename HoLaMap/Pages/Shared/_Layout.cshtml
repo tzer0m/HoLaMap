@@ -7,6 +7,14 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
+    <header class="site-header">
+        <a class="brand" asp-page="/Index">HoLaMap</a>
+        <nav class="site-nav">
+            <a asp-page="/Index">Map</a>
+            <a asp-page="/Devices/Index">Devices</a>
+            <a asp-page="/Links/Index">Links</a>
+        </nav>
+    </header>
     <main>
         @RenderBody()
     </main>
