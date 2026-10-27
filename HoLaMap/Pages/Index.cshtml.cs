@@ -33,14 +33,14 @@ namespace HoLaMap.Pages
         public async Task OnGetAsync()
         {
             List<Device> devices = await context.Devices.Where(device => device.Kind != DeviceKind.Client).Include(device => device.Ports).ToListAsync();
-            Infrastructure = devices.OrderBy(device => device.Kind).ThenBy(device => device.Name).ToList();
+            Infrastructure = [.. devices.OrderBy(device => device.Kind).ThenBy(device => device.Name)];
             List<Link> links = await context.Links.Include(link => link.FromPort).ThenInclude(port => port.Device).Include(link => link.ToDevice).Include(link => link.ToPort).ToListAsync();
             Outgoing = links.GroupBy(link => link.FromPortId).ToDictionary(group => group.Key, group => group.OrderBy(link => link.ToDevice.Name).ToList());
             Incoming = links.Where(link => link.ToPortId != null).GroupBy(link => link.ToPortId!.Value).ToDictionary(group => group.Key, group => group.First());
         }
 
         /// <summary>
-        /// Gets the CSS class for a port based on its state, speed and PoE.
+        /// Gets the CSS class for a port based on its state, speed and PoE draw.
         /// </summary>
         /// <param name="port">The port.</param>
         /// <returns>The CSS class.</returns>
@@ -58,7 +58,7 @@ namespace HoLaMap.Pages
             {
                 return "port-fe";
             }
-            return port.PoE ? "port-gbe-poe" : "port-gbe";
+            return port.PoEPower > 0 ? "port-gbe-poe" : "port-gbe";
         }
 
         /// <summary>

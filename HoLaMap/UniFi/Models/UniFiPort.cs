@@ -44,6 +44,12 @@ namespace HoLaMap.UniFi.Models
         public bool PortPoe { get; set; }
 
         /// <summary>
+        /// Gets or sets the PoE power currently being drawn in watts.
+        /// </summary>
+        [JsonPropertyName("poe_power")]
+        public double? PoePower { get; set; }
+
+        /// <summary>
         /// Gets or sets whether this is the uplink port.
         /// </summary>
         [JsonPropertyName("is_uplink")]

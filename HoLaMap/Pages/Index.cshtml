@@ -37,7 +37,7 @@
                 @foreach (Port port in device.Ports.OrderBy(port => port.Index))
                 {
                     List<string> connections = Model.Connections(port);
-                    <div class="port @Model.PortClass(port)" title="@port.Name · @(port.Speed?.ToString() ?? "-") Mbps · @port.NetworkName">
+                    <div class="port @Model.PortClass(port)" title="@port.Name · @(port.Speed?.ToString() ?? "-") Mbps · @port.NetworkName@(port.PoEPower > 0 ? $" · {port.PoEPower:0.0} W" : "")">
                         <span class="port-index">@port.Index</span>
                         @foreach (string connection in connections)
                         {

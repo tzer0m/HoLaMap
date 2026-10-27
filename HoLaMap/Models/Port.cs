@@ -46,6 +46,11 @@ namespace HoLaMap.Models
         public bool PoE { get; set; }
 
         /// <summary>
+        /// Gets or sets the PoE power currently being drawn in watts.
+        /// </summary>
+        public double? PoEPower { get; set; }
+
+        /// <summary>
         /// Gets or sets whether the link is up.
         /// </summary>
         public bool Up { get; set; }

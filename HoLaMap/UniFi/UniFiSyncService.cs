@@ -103,6 +103,7 @@ namespace HoLaMap.UniFi
                 port.MaxSpeed = MaxSpeedFromMedia(unifiPort.Media);
                 port.Speed = unifiPort.Up ? unifiPort.Speed : null;
                 port.PoE = unifiPort.PortPoe;
+                port.PoEPower = unifiPort.Up && unifiPort.PoePower > 0 ? unifiPort.PoePower : null;
                 port.Up = unifiPort.Up;
                 port.IsUplink = unifiPort.IsUplink;
                 port.NetworkName = unifiPort.NetworkName;

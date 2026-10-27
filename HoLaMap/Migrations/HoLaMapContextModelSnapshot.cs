@@ -142,6 +142,9 @@ namespace HoLaMap.Migrations
                     b.Property<bool>("PoE")
                         .HasColumnType("boolean");
 
+                    b.Property<double?>("PoEPower")
+                        .HasColumnType("double precision");
+
                     b.Property<int?>("Speed")
                         .HasColumnType("integer");
 
