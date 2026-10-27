@@ -8,7 +8,7 @@ namespace HoLaMap.Display
     public static class PortStyle
     {
         /// <summary>
-        /// Gets the CSS class for a port based on its state, speed and PoE draw.
+        /// Gets the CSS class for a port based on its state and speed.
         /// </summary>
         /// <param name="port">The port.</param>
         /// <returns>The CSS class.</returns>
@@ -22,11 +22,21 @@ namespace HoLaMap.Display
             {
                 return "port-wan";
             }
-            if (port.Speed < 1000)
+            if (port.Speed <= 10)
             {
-                return "port-fe";
+                return "port-10";
             }
-            return port.PoEPower > 0 ? "port-gbe-poe" : "port-gbe";
+            return port.Speed <= 100 ? "port-100" : "port-1000";
+        }
+
+        /// <summary>
+        /// Gets whether a port is supplying PoE power.
+        /// </summary>
+        /// <param name="port">The port.</param>
+        /// <returns>True if something is drawing power from the port.</returns>
+        public static bool IsPoE(Port port)
+        {
+            return port.Up && port.PoEPower > 0;
         }
 
         /// <summary>

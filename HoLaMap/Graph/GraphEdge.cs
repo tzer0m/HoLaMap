@@ -26,14 +26,9 @@ namespace HoLaMap.Graph
         public string SourcePort { get; set; } = string.Empty;
 
         /// <summary>
-        /// The downstream port ID, only set for links back into the same device.
+        /// The downstream port ID, if known.
         /// </summary>
         public string TargetPort { get; set; } = string.Empty;
-
-        /// <summary>
-        /// The downstream port shown next to the line, if known.
-        /// </summary>
-        public string TargetPortLabel { get; set; } = string.Empty;
 
         /// <summary>
         /// The port numbers shown on the edge.
@@ -49,6 +44,11 @@ namespace HoLaMap.Graph
         /// Whether the link was added by hand.
         /// </summary>
         public bool Manual { get; set; }
+
+        /// <summary>
+        /// Whether the upstream port is supplying PoE power over this link.
+        /// </summary>
+        public bool PoE { get; set; }
 
         /// <summary>
         /// Extra details shown when the edge is selected.

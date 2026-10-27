@@ -109,17 +109,25 @@ body {
     background: #1e88c8;
 }
 
-.port-gbe-poe {
-    background: #9a5a12;
-}
-
-.port-gbe {
+.port-1000 {
     background: #4a8a1c;
 }
 
-.port-fe {
-    background: #f6b3cf;
-    color: #2a1a22;
+.port-100 {
+    background: #e6c229;
+    color: #2a2410;
+}
+
+.port-10 {
+    background: #e67e22;
+}
+
+.swatch-zigzag {
+    width: 18px;
+    height: 10px;
+    fill: none;
+    stroke: #e6e6e6;
+    stroke-width: 1.5;
 }
 
 .port-down {

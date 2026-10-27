@@ -2,8 +2,8 @@
     const svgNs = 'http://www.w3.org/2000/svg';
     const container = document.getElementById('map');
     const details = document.getElementById('details');
-    const colours = { 'port-wan': '#1e88c8', 'port-gbe-poe': '#9a5a12', 'port-gbe': '#4a8a1c', 'port-fe': '#f6b3cf', 'port-down': '#7b8794' };
-    const darkText = ['port-fe', 'port-down'];
+    const colours = { 'port-wan': '#1e88c8', 'port-1000': '#4a8a1c', 'port-100': '#e6c229', 'port-10': '#e67e22', 'port-down': '#7b8794' };
+    const darkText = ['port-100', 'port-down'];
     const portSize = 16;
     const portGap = 3;
     const padding = 12;
@@ -41,6 +41,10 @@
         });
         return { id: `stack-${parentId}`, items: items, leafWidth: leafWidth, laneStart: leafWidth + 16, width: leafWidth + 16 + edges.length * laneGap, height: y - stackGap };
     });
+    // Ports a device is fed from are drawn on its top edge so the incoming line plugs straight into them.
+    const uplinkPortIds = new Set(graph.edges.filter(edge => edge.targetPort && edge.source !== edge.target).map(edge => edge.targetPort));
+    const portY = (port, height) => uplinkPortIds.has(port.id) ? -portSize : height;
+
     const stacksById = new Map(stacks.map(stack => [stack.id, stack]));
     const stackItemsByEdge = new Map(stacks.flatMap(stack => stack.items.map(item => [item.edge.id, { stack: stack, item: item }])));
     const stackedNodeIds = new Set(stacks.flatMap(stack => stack.items.map(item => item.node.id)));
@@ -69,7 +73,7 @@
                     layoutOptions: { 'elk.portConstraints': 'FIXED_POS' },
                     ports: [
                         { id: `${node.id}-in`, x: size.width / 2, y: 0, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } },
-                        ...node.ports.map((port, index) => ({ id: port.id, x: padding + index * (portSize + portGap), y: size.height, width: portSize, height: portSize, layoutOptions: { 'elk.port.side': 'SOUTH' } }))
+                        ...node.ports.map((port, index) => ({ id: port.id, x: padding + index * (portSize + portGap), y: portY(port, size.height), width: portSize, height: portSize, layoutOptions: { 'elk.port.side': uplinkPortIds.has(port.id) ? 'NORTH' : 'SOUTH' } }))
                     ]
                 };
             }),
@@ -122,6 +126,30 @@
         return path + ` L ${last.x} ${last.y}`;
     };
 
+    // A subtle zigzag along each straight run, used for lines carrying PoE.
+    const zigzagPath = points => {
+        const amplitude = 1.5;
+        const step = 3;
+        let path = `M ${points[0].x} ${points[0].y}`;
+        for (let i = 1; i < points.length; i++) {
+            const from = points[i - 1];
+            const to = points[i];
+            const length = Math.hypot(to.x - from.x, to.y - from.y);
+            if (length === 0) {
+                continue;
+            }
+            const unitX = (to.x - from.x) / length;
+            const unitY = (to.y - from.y) / length;
+            const steps = Math.floor(length / step);
+            for (let s = 1; s < steps; s++) {
+                const offset = s % 2 === 0 ? -amplitude : amplitude;
+                path += ` L ${from.x + unitX * s * step - unitY * offset} ${from.y + unitY * s * step + unitX * offset}`;
+            }
+            path += ` L ${to.x} ${to.y}`;
+        }
+        return path;
+    };
+
     const showDetails = (title, body) => {
         details.replaceChildren();
         const heading = document.createElement('strong');
@@ -146,11 +174,7 @@
             const d = roundedPath(points);
             const group = create('g', { class: 'map-edge' }, edgeLayer);
             create('path', { d: d, class: 'map-edge-hit' }, group);
-            create('path', { d: d, class: 'map-edge-line' + (edge.manual ? ' manual' : ''), stroke: colours[edge.style] ?? '#7b8794' }, group);
-            if (edge.targetPortLabel && !stacked) {
-                const label = create('text', { x: section.endPoint.x + 6, y: section.endPoint.y - 6, class: 'map-edge-label' }, group);
-                label.textContent = edge.targetPortLabel;
-            }
+            create('path', { d: edge.poE ? zigzagPath(points) : d, class: 'map-edge-line' + (edge.manual ? ' manual' : ''), stroke: colours[edge.style] ?? '#7b8794' }, group);
             group.addEventListener('click', event => {
                 event.stopPropagation();
                 showDetails(`${nodesById.get(edge.source).label} → ${nodesById.get(edge.target).label} (${edge.label})`, edge.detail);
@@ -168,7 +192,7 @@
             showDetails(node.label, node.detail);
         });
         node.ports.forEach((port, index) => {
-            const square = create('g', { class: 'map-port', transform: `translate(${padding + index * (portSize + portGap)}, ${height})` }, group);
+            const square = create('g', { class: 'map-port', transform: `translate(${padding + index * (portSize + portGap)}, ${portY(port, height)})` }, group);
             create('rect', { width: portSize, height: portSize, rx: 2, fill: colours[port.style] ?? '#7b8794' }, square);
             const number = create('text', { x: portSize / 2, y: portSize / 2 + 3, class: 'map-port-label' + (darkText.includes(port.style) ? ' dark' : '') }, square);
             number.textContent = port.index;
