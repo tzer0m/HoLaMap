@@ -24,5 +24,10 @@ namespace HoLaMap.Graph
         /// Extra details shown when the node is selected.
         /// </summary>
         public string Detail { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The device's ports in order.
+        /// </summary>
+        public List<GraphPort> Ports { get; set; } = [];
     }
 }

@@ -21,6 +21,21 @@ namespace HoLaMap.Graph
         public string Target { get; set; } = string.Empty;
 
         /// <summary>
+        /// The upstream port ID the line leaves from.
+        /// </summary>
+        public string SourcePort { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The downstream port ID, only set for links back into the same device.
+        /// </summary>
+        public string TargetPort { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The downstream port shown next to the line, if known.
+        /// </summary>
+        public string TargetPortLabel { get; set; } = string.Empty;
+
+        /// <summary>
         /// The port numbers shown on the edge.
         /// </summary>
         public string Label { get; set; } = string.Empty;

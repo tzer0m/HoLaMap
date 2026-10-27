@@ -262,3 +262,80 @@ body {
     color: #f08080;
     font-size: 0.85rem;
 }
+
+.map-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    touch-action: none;
+}
+
+.map-svg:active {
+    cursor: grabbing;
+}
+
+.map-node,
+.map-edge {
+    cursor: pointer;
+}
+
+.map-node-box {
+    fill: #2f3640;
+    stroke: #8a90b0;
+    stroke-width: 2;
+}
+
+.map-node.gateway .map-node-box,
+.map-node.switch .map-node-box,
+.map-node.accesspoint .map-node-box {
+    fill: #36334a;
+}
+
+.map-node-label {
+    fill: #e6e6e6;
+    font-size: 12px;
+    text-anchor: middle;
+}
+
+.map-node.gateway .map-node-label,
+.map-node.switch .map-node-label,
+.map-node.accesspoint .map-node-label {
+    font-weight: 600;
+}
+
+.map-port-label {
+    fill: #fff;
+    font-size: 8px;
+    font-weight: 700;
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+.map-port-label.dark {
+    fill: #1d2228;
+}
+
+.map-edge-line {
+    fill: none;
+    stroke-width: 3;
+}
+
+.map-edge-line.manual {
+    stroke-dasharray: 6 4;
+}
+
+.map-edge-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 12;
+}
+
+.map-edge:hover .map-edge-line {
+    stroke-width: 5;
+}
+
+.map-edge-label {
+    fill: #9aa3b5;
+    font-size: 9px;
+}
