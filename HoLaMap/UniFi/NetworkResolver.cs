@@ -34,7 +34,7 @@ namespace HoLaMap.UniFi
         {
             if (!string.IsNullOrEmpty(port.NetworkName))
             {
-                return port.NetworkName;
+                return port.NetworkName.Equals(port.NetworkName, StringComparison.InvariantCultureIgnoreCase) ? port.NetworkName.ToUpperInvariant() : port.NetworkName;
             }
             string? profileId = portOverride?.PortProfileId ?? port.PortProfileId;
             string? networkId = port.NativeNetworkId ?? portOverride?.NativeNetworkId ?? (profileId != null && Profiles.TryGetValue(profileId, out UniFiPortProfile? profile) ? profile.NativeNetworkId : null);
