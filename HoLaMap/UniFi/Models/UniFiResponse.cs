@@ -12,6 +12,6 @@ namespace HoLaMap.UniFi.Models
         /// Gets or sets the returned records.
         /// </summary>
         [JsonPropertyName("data")]
-        public List<T> Data { get; set; } = new List<T>();
+        public List<T> Data { get; set; } = [];
     }
 }

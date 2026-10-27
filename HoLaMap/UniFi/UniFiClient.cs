@@ -8,35 +8,14 @@ namespace HoLaMap.UniFi
     /// <summary>
     /// Reads data from the classic UniFi Network API using an API key.
     /// </summary>
-    public class UniFiClient
+    /// <param name="http">The HTTP client.</param>
+    /// <param name="options">The UniFi settings.</param>
+    public class UniFiClient(HttpClient http, IOptions<UniFiOptions> options)
     {
-        /// <summary>
-        /// The HTTP client.
-        /// </summary>
-        private readonly HttpClient Http;
-
-        /// <summary>
-        /// The UniFi settings.
-        /// </summary>
-        private readonly UniFiOptions Options;
-
         /// <summary>
         /// JSON options tolerant of numbers sent as strings.
         /// </summary>
-        private readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions { NumberHandling = JsonNumberHandling.AllowReadingFromString };
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="UniFiClient"/> class.
-        /// </summary>
-        /// <param name="http">The HTTP client.</param>
-        /// <param name="options">The UniFi settings.</param>
-        public UniFiClient(HttpClient http, IOptions<UniFiOptions> options)
-        {
-            Http = http;
-            Options = options.Value;
-            Http.BaseAddress = new Uri(Options.BaseUrl);
-            Http.DefaultRequestHeaders.Add("X-API-KEY", Options.ApiKey);
-        }
+        private readonly JsonSerializerOptions JsonOptions = new() { NumberHandling = JsonNumberHandling.AllowReadingFromString };
 
         /// <summary>
         /// Gets all UniFi devices with their port tables.
@@ -68,8 +47,13 @@ namespace HoLaMap.UniFi
         /// <returns>The records.</returns>
         private async Task<List<T>> GetAsync<T>(string path, CancellationToken cancellationToken)
         {
-            UniFiResponse<T>? response = await Http.GetFromJsonAsync<UniFiResponse<T>>($"proxy/network/api/s/{Options.Site}/{path}", JsonOptions, cancellationToken);
-            return response?.Data ?? new List<T>();
+            UniFiOptions settings = options.Value;
+            using HttpRequestMessage request = new(HttpMethod.Get, new Uri(new Uri(settings.BaseUrl), $"proxy/network/api/s/{settings.Site}/{path}"));
+            request.Headers.Add("X-API-KEY", settings.ApiKey);
+            using HttpResponseMessage response = await http.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            UniFiResponse<T>? body = await response.Content.ReadFromJsonAsync<UniFiResponse<T>>(JsonOptions, cancellationToken);
+            return body?.Data ?? [];
         }
     }
 }

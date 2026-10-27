@@ -43,6 +43,6 @@ namespace HoLaMap.Models
         /// <summary>
         /// Gets or sets the device's ports.
         /// </summary>
-        public List<Port> Ports { get; set; } = new List<Port>();
+        public List<Port> Ports { get; set; } = [];
     }
 }

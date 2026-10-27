@@ -8,29 +8,10 @@ namespace HoLaMap.UniFi
     /// <summary>
     /// Syncs devices, ports, links and networks from UniFi into the database.
     /// </summary>
-    public class UniFiSyncService
+    /// <param name="client">The UniFi API client.</param>
+    /// <param name="context">The database context.</param>
+    public class UniFiSyncService(UniFiClient client, HoLaMapContext context)
     {
-        /// <summary>
-        /// The UniFi API client.
-        /// </summary>
-        private readonly UniFiClient Client;
-
-        /// <summary>
-        /// The database context.
-        /// </summary>
-        private readonly HoLaMapContext Context;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="UniFiSyncService"/> class.
-        /// </summary>
-        /// <param name="client">The UniFi API client.</param>
-        /// <param name="context">The database context.</param>
-        public UniFiSyncService(UniFiClient client, HoLaMapContext context)
-        {
-            Client = client;
-            Context = context;
-        }
-
         /// <summary>
         /// Runs a full sync.
         /// </summary>
@@ -38,15 +19,15 @@ namespace HoLaMap.UniFi
         /// <returns>A task that completes when the sync has finished.</returns>
         public async Task SyncAsync(CancellationToken cancellationToken)
         {
-            List<UniFiDevice> unifiDevices = await Client.GetDevicesAsync(cancellationToken);
-            List<UniFiStation> stations = await Client.GetActiveClientsAsync(cancellationToken);
-            List<UniFiNetwork> networks = await Client.GetNetworksAsync(cancellationToken);
+            List<UniFiDevice> unifiDevices = await client.GetDevicesAsync(cancellationToken);
+            List<UniFiStation> stations = await client.GetActiveClientsAsync(cancellationToken);
+            List<UniFiNetwork> networks = await client.GetNetworksAsync(cancellationToken);
             DateTime now = DateTime.UtcNow;
-
             await SyncNetworksAsync(networks, cancellationToken);
 
-            Dictionary<string, Device> devices = await Context.Devices.Include(device => device.Ports).ToDictionaryAsync(device => device.Mac, cancellationToken);
-            HashSet<string> unifiMacs = new HashSet<string>();
+            // Gateways, switches and access points.
+            Dictionary<string, Device> devices = await context.Devices.Include(device => device.Ports).ToDictionaryAsync(device => device.Mac, cancellationToken);
+            HashSet<string> unifiMacs = [];
             foreach (UniFiDevice unifiDevice in unifiDevices)
             {
                 Device device = GetOrAdd(devices, unifiDevice.Mac);
@@ -59,6 +40,7 @@ namespace HoLaMap.UniFi
                 SyncPorts(device, unifiDevice.PortTable);
             }
 
+            // Connected clients.
             foreach (UniFiStation station in stations)
             {
                 Device device = GetOrAdd(devices, station.Mac);
@@ -66,14 +48,12 @@ namespace HoLaMap.UniFi
                 {
                     continue;
                 }
-
                 device.Name = station.Name ?? station.Hostname ?? device.Mac;
                 device.Kind = DeviceKind.Client;
                 device.Ip = station.Ip;
                 device.LastSeen = now;
             }
-
-            await Context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
             await SyncLinksAsync(devices, unifiDevices, stations, cancellationToken);
         }
 
@@ -85,20 +65,18 @@ namespace HoLaMap.UniFi
         /// <returns>A task that completes when the networks have been saved.</returns>
         private async Task SyncNetworksAsync(List<UniFiNetwork> networks, CancellationToken cancellationToken)
         {
-            Dictionary<string, Network> existing = await Context.Networks.ToDictionaryAsync(network => network.Name, cancellationToken);
+            Dictionary<string, Network> existing = await context.Networks.ToDictionaryAsync(network => network.Name, cancellationToken);
             foreach (UniFiNetwork unifiNetwork in networks.Where(network => !string.IsNullOrEmpty(network.Name) && !string.IsNullOrEmpty(network.IpSubnet)))
             {
                 if (!existing.TryGetValue(unifiNetwork.Name!, out Network? network))
                 {
                     network = new Network { Name = unifiNetwork.Name! };
-                    Context.Networks.Add(network);
+                    context.Networks.Add(network);
                 }
-
                 network.VlanId = unifiNetwork.Vlan;
                 network.Subnet = unifiNetwork.IpSubnet;
             }
-
-            await Context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
         }
 
         /// <summary>
@@ -108,12 +86,11 @@ namespace HoLaMap.UniFi
         /// <param name="portTable">The UniFi port table.</param>
         private void SyncPorts(Device device, List<UniFiPort> portTable)
         {
-            HashSet<int> indexes = portTable.Select(unifiPort => unifiPort.PortIdx).ToHashSet();
+            HashSet<int> indexes = [.. portTable.Select(unifiPort => unifiPort.PortIdx)];
             foreach (Port removed in device.Ports.Where(port => !indexes.Contains(port.Index)).ToList())
             {
-                Context.Ports.Remove(removed);
+                context.Ports.Remove(removed);
             }
-
             foreach (UniFiPort unifiPort in portTable)
             {
                 Port? port = device.Ports.FirstOrDefault(existing => existing.Index == unifiPort.PortIdx);
@@ -122,7 +99,6 @@ namespace HoLaMap.UniFi
                     port = new Port { Index = unifiPort.PortIdx };
                     device.Ports.Add(port);
                 }
-
                 port.Name = unifiPort.Name;
                 port.MaxSpeed = MaxSpeedFromMedia(unifiPort.Media);
                 port.Speed = unifiPort.Up ? unifiPort.Speed : null;
@@ -143,8 +119,9 @@ namespace HoLaMap.UniFi
         /// <returns>A task that completes when the links have been saved.</returns>
         private async Task SyncLinksAsync(Dictionary<string, Device> devices, List<UniFiDevice> unifiDevices, List<UniFiStation> stations, CancellationToken cancellationToken)
         {
-            Context.Links.RemoveRange(await Context.Links.ToListAsync(cancellationToken));
+            context.Links.RemoveRange(await context.Links.ToListAsync(cancellationToken));
 
+            // Switch and AP uplinks.
             foreach (UniFiDevice unifiDevice in unifiDevices.Where(unifiDevice => unifiDevice.Uplink?.UplinkMac != null && unifiDevice.Uplink.UplinkRemotePort != null))
             {
                 Port? fromPort = FindPort(devices, unifiDevice.Uplink!.UplinkMac!, unifiDevice.Uplink.UplinkRemotePort!.Value);
@@ -153,11 +130,11 @@ namespace HoLaMap.UniFi
                 {
                     continue;
                 }
-
                 Port? toPort = toDevice.Ports.FirstOrDefault(port => port.Index == unifiDevice.Uplink.PortIdx) ?? toDevice.Ports.FirstOrDefault(port => port.IsUplink);
-                Context.Links.Add(new Link { FromPort = fromPort, ToDevice = toDevice, ToPort = toPort });
+                context.Links.Add(new Link { FromPort = fromPort, ToDevice = toDevice, ToPort = toPort });
             }
 
+            // Wired clients.
             foreach (UniFiStation station in stations.Where(station => station.IsWired && station.SwMac != null && station.SwPort != null))
             {
                 Port? fromPort = FindPort(devices, station.SwMac!, station.SwPort!.Value);
@@ -165,11 +142,9 @@ namespace HoLaMap.UniFi
                 {
                     continue;
                 }
-
-                Context.Links.Add(new Link { FromPort = fromPort, ToDevice = toDevice });
+                context.Links.Add(new Link { FromPort = fromPort, ToDevice = toDevice });
             }
-
-            await Context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
         }
 
         /// <summary>
@@ -197,9 +172,8 @@ namespace HoLaMap.UniFi
             {
                 device = new Device { Mac = normalised };
                 devices.Add(normalised, device);
-                Context.Devices.Add(device);
+                context.Devices.Add(device);
             }
-
             return device;
         }
 

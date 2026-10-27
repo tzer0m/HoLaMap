@@ -41,7 +41,7 @@ namespace HoLaMap.UniFi.Models
         /// Gets or sets the port table.
         /// </summary>
         [JsonPropertyName("port_table")]
-        public List<UniFiPort> PortTable { get; set; } = new List<UniFiPort>();
+        public List<UniFiPort> PortTable { get; set; } = [];
 
         /// <summary>
         /// Gets or sets the uplink details.

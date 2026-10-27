@@ -6,10 +6,7 @@ namespace HoLaMap.Data
     /// <summary>
     /// Database context for HoLaMap.
     /// </summary>
-    /// <remarks>
-    /// Initializes a new instance of the <see cref="HoLaMapContext"/> class.
-    /// </remarks>
-    /// <param name="options">Context options.</param>
+    /// <param name="options">The database context options.</param>
     public class HoLaMapContext(DbContextOptions<HoLaMapContext> options) : DbContext(options)
     {
         /// <summary>
