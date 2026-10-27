@@ -1,26 +1,25 @@
-var builder = WebApplication.CreateBuilder(args);
-
-// Add services to the container.
-builder.Services.AddRazorPages();
-
-var app = builder.Build();
-
-// Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment())
+namespace HoLaMap
 {
-    app.UseExceptionHandler("/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-    app.UseHsts();
+    /// <summary>
+    /// Application entry point.
+    /// </summary>
+    public class Program
+    {
+        /// <summary>
+        /// Configures and runs the web application.
+        /// </summary>
+        /// <param name="args">Command-line arguments.</param>
+        public static void Main(string[] args)
+        {
+            WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+            builder.Services.AddRouting(options => options.LowercaseUrls = true);
+            builder.Services.AddRazorPages();
+
+            WebApplication app = builder.Build();
+            app.UseRouting();
+            app.MapStaticAssets();
+            app.MapRazorPages().WithStaticAssets();
+            app.Run();
+        }
+    }
 }
-
-app.UseHttpsRedirection();
-
-app.UseRouting();
-
-app.UseAuthorization();
-
-app.MapStaticAssets();
-app.MapRazorPages()
-   .WithStaticAssets();
-
-app.Run();
