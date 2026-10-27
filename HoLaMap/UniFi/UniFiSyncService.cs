@@ -22,12 +22,14 @@ namespace HoLaMap.UniFi
             List<UniFiDevice> unifiDevices = await client.GetDevicesAsync(cancellationToken);
             List<UniFiStation> stations = await client.GetActiveClientsAsync(cancellationToken);
             List<UniFiNetwork> networks = await client.GetNetworksAsync(cancellationToken);
+            List<UniFiPortProfile> profiles = await client.GetPortProfilesAsync(cancellationToken);
             DateTime now = DateTime.UtcNow;
             await SyncNetworksAsync(networks, cancellationToken);
 
             // Gateways, switches and access points.
             Dictionary<string, Device> devices = await context.Devices.Include(device => device.Ports).ToDictionaryAsync(device => device.Mac, cancellationToken);
             HashSet<string> unifiMacs = [];
+            NetworkResolver resolver = new(networks, profiles);
             foreach (UniFiDevice unifiDevice in unifiDevices)
             {
                 Device device = GetOrAdd(devices, unifiDevice.Mac);
@@ -37,7 +39,7 @@ namespace HoLaMap.UniFi
                 device.Model = unifiDevice.Model;
                 device.Ip = unifiDevice.Ip;
                 device.LastSeen = now;
-                SyncPorts(device, unifiDevice.PortTable);
+                SyncPorts(device, unifiDevice, resolver);
             }
 
             // Connected clients.
@@ -83,9 +85,11 @@ namespace HoLaMap.UniFi
         /// Updates a device's ports from a UniFi port table, removing ports that no longer exist.
         /// </summary>
         /// <param name="device">The device.</param>
-        /// <param name="portTable">The UniFi port table.</param>
-        private void SyncPorts(Device device, List<UniFiPort> portTable)
+        /// <param name="unifiDevice">The UniFi device and its port table.</param>
+        /// <param name="resolver">Resolves each port's native network.</param>
+        private void SyncPorts(Device device, UniFiDevice unifiDevice, NetworkResolver resolver)
         {
+            List<UniFiPort> portTable = unifiDevice.PortTable;
             HashSet<int> indexes = [.. portTable.Select(unifiPort => unifiPort.PortIdx)];
             foreach (Port removed in device.Ports.Where(port => !indexes.Contains(port.Index)).ToList())
             {
@@ -106,7 +110,7 @@ namespace HoLaMap.UniFi
                 port.PoEPower = unifiPort.Up && unifiPort.PoePower > 0 ? unifiPort.PoePower : null;
                 port.Up = unifiPort.Up;
                 port.IsUplink = unifiPort.IsUplink;
-                port.NetworkName = unifiPort.NetworkName;
+                port.NetworkName = resolver.Resolve(unifiPort, unifiDevice.PortOverrides.FirstOrDefault(portOverride => portOverride.PortIdx == unifiPort.PortIdx));
             }
         }
 

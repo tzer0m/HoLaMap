@@ -39,6 +39,13 @@ namespace HoLaMap.UniFi
         public Task<List<UniFiNetwork>> GetNetworksAsync(CancellationToken cancellationToken) => GetAsync<UniFiNetwork>("rest/networkconf", cancellationToken);
 
         /// <summary>
+        /// Gets all port profiles.
+        /// </summary>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The port profiles.</returns>
+        public Task<List<UniFiPortProfile>> GetPortProfilesAsync(CancellationToken cancellationToken) => GetAsync<UniFiPortProfile>("rest/portconf", cancellationToken);
+
+        /// <summary>
         /// Gets the data array from a classic API endpoint.
         /// </summary>
         /// <typeparam name="T">The record type.</typeparam>

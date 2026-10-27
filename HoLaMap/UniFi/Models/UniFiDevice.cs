@@ -48,5 +48,11 @@ namespace HoLaMap.UniFi.Models
         /// </summary>
         [JsonPropertyName("uplink")]
         public UniFiUplink? Uplink { get; set; }
+
+        /// <summary>
+        /// Gets or sets the per-port configuration overrides.
+        /// </summary>
+        [JsonPropertyName("port_overrides")]
+        public List<UniFiPortOverride> PortOverrides { get; set; } = [];
     }
 }

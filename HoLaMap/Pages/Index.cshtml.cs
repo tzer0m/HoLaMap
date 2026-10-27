@@ -62,6 +62,17 @@ namespace HoLaMap.Pages
         }
 
         /// <summary>
+        /// Gets the tooltip text for a port.
+        /// </summary>
+        /// <param name="port">The port.</param>
+        /// <returns>The port name, speed, network and PoE draw, skipping anything unknown.</returns>
+        public string PortTooltip(Port port)
+        {
+            List<string?> parts = [port.Name, port.Speed != null ? $"{port.Speed} Mbps" : "Down", port.NetworkName, port.PoEPower > 0 ? $"{port.PoEPower:0.0} W" : null];
+            return string.Join(" · ", parts.Where(part => !string.IsNullOrEmpty(part)));
+        }
+
+        /// <summary>
         /// Gets the names of what is connected to a port.
         /// </summary>
         /// <param name="port">The port.</param>

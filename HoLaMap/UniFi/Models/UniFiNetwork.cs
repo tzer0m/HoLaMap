@@ -8,6 +8,12 @@ namespace HoLaMap.UniFi.Models
     public class UniFiNetwork
     {
         /// <summary>
+        /// Gets or sets the network ID.
+        /// </summary>
+        [JsonPropertyName("_id")]
+        public string? Id { get; set; }
+
+        /// <summary>
         /// Gets or sets the network name.
         /// </summary>
         [JsonPropertyName("name")]

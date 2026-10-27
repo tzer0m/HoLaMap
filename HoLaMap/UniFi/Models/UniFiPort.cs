@@ -60,5 +60,17 @@ namespace HoLaMap.UniFi.Models
         /// </summary>
         [JsonPropertyName("network_name")]
         public string? NetworkName { get; set; }
+
+        /// <summary>
+        /// Gets or sets the native network ID.
+        /// </summary>
+        [JsonPropertyName("native_networkconf_id")]
+        public string? NativeNetworkId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the port profile ID.
+        /// </summary>
+        [JsonPropertyName("portconf_id")]
+        public string? PortProfileId { get; set; }
     }
 }
