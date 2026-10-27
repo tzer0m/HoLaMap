@@ -14,10 +14,19 @@
     const nodesById = new Map(graph.nodes.map(node => [node.id, node]));
     const portsById = new Map(graph.nodes.flatMap(node => node.ports.map(port => [port.id, port])));
 
+    // Measure names with the same font the labels are drawn in.
+    const measure = document.createElement('canvas').getContext('2d');
+    const fontFamily = getComputedStyle(container).fontFamily;
+    const textWidth = (text, bold) => {
+        measure.font = `${bold ? 600 : 400} 12px ${fontFamily}`;
+        return measure.measureText(text).width;
+    };
+    const isInfrastructure = node => ['gateway', 'switch', 'accesspoint'].includes(node.kind);
+
     // Size each device to fit its name and a row of port squares along the bottom.
     const sizeOf = node => {
         const portsWidth = node.ports.length * (portSize + portGap) - portGap + padding * 2;
-        return { width: Math.max(node.label.length * 7.5 + 28, node.ports.length ? portsWidth : 0), height: node.ports.length ? 44 : 32 };
+        return { width: Math.ceil(Math.max(textWidth(node.label, isInfrastructure(node)) + 28, node.ports.length ? portsWidth : 0)), height: node.ports.length ? 44 : 32 };
     };
 
     // Client devices at the end of a chain are stacked in a column under their parent instead of spreading sideways.
@@ -30,7 +39,7 @@
     const stackEdgesByParent = new Map();
     leafEdges.forEach(edge => stackEdgesByParent.set(edge.source, [...(stackEdgesByParent.get(edge.source) ?? []), edge]));
     const stacks = [...stackEdgesByParent.entries()].filter(([, edges]) => edges.length > 1).map(([parentId, edges]) => {
-        edges.sort((a, b) => (portsById.get(a.sourcePort)?.index ?? 0) - (portsById.get(b.sourcePort)?.index ?? 0));
+        edges.sort((a, b) => ((portsById.get(a.sourcePort)?.index ?? 0) - (portsById.get(b.sourcePort)?.index ?? 0)) || nodesById.get(a.target).label.localeCompare(nodesById.get(b.target).label));
         const leafWidth = Math.max(...edges.map(edge => sizeOf(nodesById.get(edge.target)).width));
         let y = 0;
         const items = edges.map((edge, lane) => {

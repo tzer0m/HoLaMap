@@ -32,7 +32,7 @@ namespace HoLaMap.Pages
             List<Device> devices = await context.Devices.Where(device => device.Kind != DeviceKind.Client || linkedIds.Contains(device.Id)).Include(device => device.Ports).ToListAsync();
             Dictionary<int, int> upstreamPort = links.Where(link => link.FromPort.DeviceId != link.ToDeviceId).GroupBy(link => link.ToDeviceId).ToDictionary(group => group.Key, group => group.Min(link => link.FromPort.Index));
             devices = [.. devices.OrderBy(device => upstreamPort.GetValueOrDefault(device.Id)).ThenBy(device => device.Name)];
-            links = [.. links.OrderBy(link => link.FromPort.Index)];
+            links = [.. links.OrderBy(link => link.FromPort.Index).ThenBy(link => link.ToDevice.Name)];
             GraphData graph = new()
             {
                 Nodes = [.. devices.Select(device => new GraphNode { Id = $"d{device.Id}", Label = device.Name, Kind = device.Kind.ToString().ToLowerInvariant(), Detail = string.Join(" · ", new[] { device.Model, device.Ip, device.Mac }.Where(part => !string.IsNullOrEmpty(part))), Ports = [.. device.Ports.OrderBy(port => port.Index).Select(port => new GraphPort { Id = $"p{port.Id}", Index = port.Index, Style = PortStyle.Class(port), Detail = PortStyle.Tooltip(port) })] })],
