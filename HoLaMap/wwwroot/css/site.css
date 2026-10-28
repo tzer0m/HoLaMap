@@ -52,7 +52,7 @@ body {
 .device-gateway,
 .device-switch,
 .device-accesspoint {
-    background: #36334a;
+    background: #1f3550;
 }
 
 .device-header {
@@ -293,7 +293,8 @@ body {
 .map-node.gateway .map-node-box,
 .map-node.switch .map-node-box,
 .map-node.accesspoint .map-node-box {
-    fill: #36334a;
+    fill: #2f5d94;
+    stroke: #6f9bd1;
 }
 
 .map-node-label {
@@ -484,7 +485,7 @@ body {
 .room-device.device-gateway,
 .room-device.device-switch,
 .room-device.device-accesspoint {
-    background: #5b5680;
+    background: #2f5d94;
 }
 
 .room-resize {
@@ -633,7 +634,7 @@ body {
 .rack-gateway,
 .rack-switch,
 .rack-accesspoint {
-    background: #5b5680;
+    background: #2f5d94;
 }
 
 .rack-device.selected {
@@ -666,8 +667,8 @@ body {
 }
 
 .map-node.rack .map-node-box {
-    fill: #2c4a3a;
-    stroke: #6fbf8e;
+    fill: #3a414d;
+    stroke: #8a90b0;
 }
 
 .map-node.rack .map-node-label {
@@ -675,7 +676,7 @@ body {
 }
 
 .room-rack {
-    background: #2c4a3a;
+    background: #5c6475;
     color: #fff;
     text-decoration: none;
 }
