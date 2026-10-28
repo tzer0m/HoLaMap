@@ -38,7 +38,7 @@ namespace HoLaMap.Pages.Floorplan
             Current = Floors.FirstOrDefault(floor => floor.Id == FloorId) ?? Floors.FirstOrDefault();
             if (Current != null)
             {
-                Current.Rooms = await context.Rooms.Where(room => room.FloorId == Current.Id).Include(room => room.Devices).OrderBy(room => room.Name).ToListAsync();
+                Current.Rooms = await context.Rooms.Where(room => room.FloorId == Current.Id).Include(room => room.Devices).Include(room => room.Racks).OrderBy(room => room.Name).ToListAsync();
             }
         }
 

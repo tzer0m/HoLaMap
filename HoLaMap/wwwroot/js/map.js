@@ -39,11 +39,14 @@
         measure.font = `${bold ? 600 : 400} 12px ${fontFamily}`;
         return measure.measureText(text).width;
     };
-    const isInfrastructure = node => ['gateway', 'switch', 'accesspoint'].includes(node.kind);
+    const isInfrastructure = node => ['gateway', 'switch', 'accesspoint', 'rack'].includes(node.kind);
 
     // Size each device to fit its name and a row of port squares along the bottom. Widths are multiples of 8 so lines can land on the routing grid.
     const sizeOf = node => {
         const portsWidth = node.ports.length * (portSize + portGap) - portGap + padding * 2;
+        if (node.kind === 'rack') {
+            return { width: roundUp(Math.max(textWidth(node.label, true) + 40, 120), 8), height: 48 };
+        }
         return { width: roundUp(Math.max(textWidth(node.label, isInfrastructure(node)) + 28, node.ports.length ? portsWidth : 0), 8), height: node.ports.length ? 44 : 32 };
     };
 
@@ -222,6 +225,7 @@
                         layoutOptions: { 'elk.portConstraints': 'FIXED_POS' },
                         ports: [
                             { id: `${node.id}-in`, x: size.width / 2, y: 0, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } },
+                            { id: `${node.id}-out`, x: size.width / 2, y: size.height, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'SOUTH' } },
                             ...node.ports.map((port, index) => ({ id: port.id, x: portX(index), y: portY(port, size.height), width: portSize, height: portSize, layoutOptions: { 'elk.port.side': uplinkPortIds.has(port.id) ? 'NORTH' : 'SOUTH' } }))
                         ]
                     };
@@ -237,7 +241,7 @@
             edges: group.edges.map(edge => {
                 const stacked = stackItemsByEdge.get(edge.id);
                 const target = stacked ? `${stacked.stack.id}-lane-${stacked.item.lane}` : edge.targetPort || `${edge.target}-in`;
-                return { id: edge.id, sources: [edge.sourcePort], targets: [target] };
+                return { id: edge.id, sources: [edge.sourcePort || `${edge.source}-out`], targets: [target] };
             })
         };
         const layout = await new ELK().layout(elkGraph);

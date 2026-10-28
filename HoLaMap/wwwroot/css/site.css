@@ -664,3 +664,18 @@ body {
     color: #e6e6e6;
     font: inherit;
 }
+
+.map-node.rack .map-node-box {
+    fill: #2c4a3a;
+    stroke: #6fbf8e;
+}
+
+.map-node.rack .map-node-label {
+    font-weight: 600;
+}
+
+.room-rack {
+    background: #2c4a3a;
+    color: #fff;
+    text-decoration: none;
+}

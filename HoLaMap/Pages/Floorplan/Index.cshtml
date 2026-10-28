@@ -42,7 +42,11 @@ else
                     </form>
                 </header>
                 <div class="room-devices">
-                    @foreach (Device device in room.Devices.OrderBy(device => device.Kind).ThenBy(device => device.Name))
+                    @foreach (Rack rack in room.Racks.OrderBy(rack => rack.Name))
+                    {
+                        <a class="room-device room-rack" asp-page="/Racks/Details" asp-route-id="@rack.Id">@rack.Name</a>
+                    }
+                    @foreach (Device device in room.Devices.Where(device => device.RackId == null).OrderBy(device => device.Kind).ThenBy(device => device.Name))
                     {
                         <span class="room-device device-@device.Kind.ToString().ToLowerInvariant()" title="@(string.Join(" · ", new[] { device.Model, device.Ip }.Where(part => !string.IsNullOrEmpty(part))))">@device.Name</span>
                     }
