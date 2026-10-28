@@ -175,8 +175,8 @@
     };
 
     // A device with its ports, or just its name when compact.
-    const drawNode = (node, x, y, width, height, parent, compact) => {
-        const group = create('g', { class: `map-node ${node.kind}${node.online ? '' : ' offline'}`, transform: `translate(${x}, ${y})` }, parent);
+    const drawNode = (node, x, y, width, height, parent, compact, scale) => {
+        const group = create('g', { class: `map-node ${node.kind}${node.online ? '' : ' offline'}`, transform: `translate(${x}, ${y}) scale(${scale ?? 1})` }, parent);
         create('rect', { width: width, height: height, rx: compact ? 4 : 8, class: 'map-node-box' }, group);
         const label = create('text', { x: width / 2, y: !compact && node.ports.length ? 18 : height / 2 + 4, class: 'map-node-label' }, group);
         label.textContent = node.label;
@@ -306,22 +306,22 @@
         result.placements.forEach(placement => drawNode(placement.node, placement.x, placement.y, placement.width, placement.height, layers.nodes, false));
     };
 
-    // Wraps compact device boxes into rows no wider than maxWidth. Sizes are multiples of 8 so lines can land on the routing grid.
+    // Wraps compact device boxes into rows no wider than maxWidth.
     const flowChips = (nodes, maxWidth) => {
-        let x = 8;
+        let x = 0;
         let y = 0;
         const sorted = [...nodes].sort((a, b) => (isInfrastructure(b) - isInfrastructure(a)) || a.label.localeCompare(b.label));
         const items = sorted.map(node => {
             const width = roundUp(textWidth(node.label, isInfrastructure(node)) + 16, 8);
-            if (x > 8 && x + width > maxWidth) {
-                x = 8;
+            if (x > 0 && x + width > maxWidth) {
+                x = 0;
                 y += chipHeight + rowGap;
             }
             const item = { node: node, x: x, y: y, width: width, height: chipHeight, compact: true, stacked: false };
             x += width + chipGap;
             return item;
         });
-        return { items: items, width: maxWidth, height: nodes.length ? y + chipHeight : 0 };
+        return { items: items, width: Math.max(0, ...items.map(item => item.x + item.width)), height: nodes.length ? y + chipHeight : 0 };
     };
 
     // How far a device reaches beyond its box: port squares hang below it, or above it for the ports it is fed from.
@@ -329,74 +329,62 @@
         if (item.compact || !item.node.ports.length) {
             return { top: 0, bottom: 0 };
         }
-        return { top: item.node.ports.some(port => uplinkPortIds.has(port.id)) ? portSize : 0, bottom: item.node.ports.some(port => !uplinkPortIds.has(port.id)) ? portSize : 0 };
+        const reach = portSize * (item.scale ?? 1);
+        return { top: item.node.ports.some(port => uplinkPortIds.has(port.id)) ? reach : 0, bottom: item.node.ports.some(port => !uplinkPortIds.has(port.id)) ? reach : 0 };
     };
 
-    // Puts the devices of one room (or the unplaced ones) in their own space.
+    // Lays a set of devices out at full size, leaving room above for the ports they are fed from.
     const contentFor = async (mode, nodes, maxWidth) => {
         if (mode === 'floorplan') {
             return flowChips(nodes, maxWidth);
         }
-        if (!nodes.length) {
-            return { items: [], width: 0, height: 0 };
-        }
         const ids = new Set(nodes.map(node => node.id));
         const result = await layoutGroup({ nodes: nodes, edges: graph.edges.filter(edge => ids.has(edge.source) && ids.has(edge.target)) });
-        const items = result.placements.map(placement => ({ ...placement, x: roundUp(placement.x, step), y: roundUp(placement.y, step), compact: false }));
+        const items = result.placements.map(placement => ({ ...placement, y: placement.y + portSize, compact: false }));
         return { items: items, width: Math.max(...items.map(item => item.x + item.width)), height: Math.max(...items.map(item => item.y + item.height + extents(item).bottom)) };
     };
 
-    // A room that grew to fit its devices can run into its neighbours, so push the later room right or down, whichever moves it less.
-    const separate = rooms => {
-        const gap = 24;
-        for (let pass = 0; pass < rooms.length * rooms.length; pass++) {
-            const ordered = [...rooms].sort((a, b) => (a.y - b.y) || (a.x - b.x));
-            let moved = false;
-            for (let i = 0; i < ordered.length && !moved; i++) {
-                for (let j = i + 1; j < ordered.length && !moved; j++) {
-                    const a = ordered[i];
-                    const b = ordered[j];
-                    if (a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height) {
-                        const right = a.x + a.width + gap - b.x;
-                        const down = a.y + a.height + gap - b.y;
-                        if (right <= down) {
-                            b.x += right;
-                        } else {
-                            b.y += down;
-                        }
-                        moved = true;
-                    }
-                }
-            }
-            if (!moved) {
-                break;
-            }
-        }
-    };
+    // Turns laid-out devices into boxes inside a room, shrunk by the scale so they fit.
+    const place = (content, scale, left, top) => content.items.map(item => ({ ...item, nativeWidth: item.width, nativeHeight: item.height, x: left + item.x * scale, y: top + item.y * scale, width: item.width * scale, height: item.height * scale, scale: scale }));
 
-    // Rooms at their saved floor plan positions, floors side by side. Rooms grow if their devices don't fit.
+    // Rooms exactly as saved on the floor plan, floors side by side. Devices shrink to fit their room.
     const buildFrames = async mode => {
         const frames = [];
         for (const floor of graph.floors) {
             const rooms = [];
             for (const room of floor.rooms) {
-                const savedWidth = room.width * gridCell;
-                const content = await contentFor(mode, graph.nodes.filter(node => node.room === room.id), savedWidth - 8);
-                const left = mode === 'floorplan' ? 0 : roomPadding;
-                const width = roundUp(Math.max(savedWidth, left + content.width + roomPadding), 8);
-                const height = roundUp(Math.max(room.height * gridCell, roomHeader + content.height + roomPadding + portSize), 8);
-                rooms.push({ name: room.name, x: room.x * gridCell, y: room.y * gridCell, width: width, height: height, items: content.items.map(item => ({ ...item, x: item.x + left, y: item.y + roomHeader })) });
+                const width = room.width * gridCell;
+                const height = room.height * gridCell;
+                const availWidth = width - roomPadding * 2;
+                const availHeight = height - roomHeader - roomPadding;
+                const nodes = graph.nodes.filter(node => node.room === room.id);
+                let items = [];
+                if (nodes.length && mode === 'floorplan') {
+                    let scale = 1;
+                    let content = flowChips(nodes, availWidth);
+                    for (const candidate of [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3]) {
+                        scale = candidate;
+                        content = flowChips(nodes, availWidth / scale);
+                        if (content.height * scale <= availHeight) {
+                            break;
+                        }
+                    }
+                    items = place(content, scale, roomPadding, roomHeader);
+                } else if (nodes.length) {
+                    const content = await contentFor(mode, nodes, availWidth);
+                    items = place(content, Math.max(0.25, Math.min(1, availWidth / content.width, availHeight / content.height)), roomPadding, roomHeader);
+                }
+                rooms.push({ name: room.name, x: room.x * gridCell, y: room.y * gridCell, width: width, height: height, items: items });
             }
             if (rooms.length) {
-                separate(rooms);
                 frames.push({ title: floor.name, rooms: rooms });
             }
         }
         const unplaced = graph.nodes.filter(node => !roomsById.has(node.room));
         if (unplaced.length) {
-            const content = await contentFor(mode, unplaced, unplacedWidth);
-            const left = mode === 'floorplan' ? 0 : roomPadding;
-            frames.push({ title: 'Unplaced', rooms: [{ name: '', x: 0, y: 0, width: roundUp(Math.max(mode === 'floorplan' ? unplacedWidth : 0, left + content.width + roomPadding), 8), height: roundUp(content.height + portSize + roomPadding, 8), items: content.items.map(item => ({ ...item, x: item.x + left, y: item.y + 8 })) }] });
+            const content = await contentFor(mode, unplaced, unplacedWidth - roomPadding * 2);
+            const width = mode === 'floorplan' ? unplacedWidth : content.width + roomPadding * 2;
+            frames.push({ title: 'Unplaced', rooms: [{ name: '', x: 0, y: 0, width: width, height: content.height + roomPadding * 2 + portSize, items: place(content, 1, roomPadding, roomPadding) }] });
         }
         return frames;
     };
@@ -561,7 +549,13 @@
     };
 
     // Where a line leaves or enters a device, with a short stub clear of the device so the router starts on a free grid point.
-    const withStub = anchor => ({ ...anchor, stub: { x: anchor.x + [0, 1, 0, -1][anchor.dir] * step, y: anchor.y + [-1, 0, 1, 0][anchor.dir] * step } });
+    const withStub = anchor => {
+        const snap = value => Math.round(value / step) * step;
+        const stub = anchor.dir === 0 ? { x: snap(anchor.x), y: Math.floor((anchor.y - 2) / step) * step } : anchor.dir === 2 ? { x: snap(anchor.x), y: Math.ceil((anchor.y + 2) / step) * step } : anchor.dir === 1 ? { x: Math.ceil((anchor.x + 2) / step) * step, y: snap(anchor.y) } : { x: Math.floor((anchor.x - 2) / step) * step, y: snap(anchor.y) };
+        return { ...anchor, stub: stub };
+    };
+    // The short jog from an exact anchor to its grid-aligned stub.
+    const jog = anchor => anchor.dir === 0 || anchor.dir === 2 ? { x: anchor.x, y: anchor.stub.y } : { x: anchor.stub.x, y: anchor.y };
     const sideAnchors = box => [{ x: box.x + box.width / 2, y: box.y, dir: 0 }, { x: box.x + box.width, y: box.y + box.height / 2, dir: 1 }, { x: box.x + box.width / 2, y: box.y + box.height, dir: 2 }, { x: box.x, y: box.y + box.height / 2, dir: 3 }].map(withStub);
     const portAnchor = (box, portId) => {
         const index = box.node.ports.findIndex(port => port.id === portId);
@@ -569,7 +563,8 @@
             return null;
         }
         const top = uplinkPortIds.has(portId);
-        return withStub({ x: box.x + portX(index) + portSize / 2, y: top ? box.y - portSize : box.y + box.height + portSize, dir: top ? 0 : 2 });
+        const scale = box.scale ?? 1;
+        return withStub({ x: box.x + (portX(index) + portSize / 2) * scale, y: top ? box.y - portSize * scale : box.y + box.height + portSize * scale, dir: top ? 0 : 2 });
     };
 
     const routeEdges = (edges, boxes, bounds) => {
@@ -595,7 +590,7 @@
             if (!found) {
                 return { edge: edge, points: elbow(from, to, lane) };
             }
-            return { edge: edge, points: [found.start, found.start.stub, ...found.points, found.goal.stub, found.goal] };
+            return { edge: edge, points: [found.start, jog(found.start), found.start.stub, ...found.points, found.goal.stub, jog(found.goal), found.goal] };
         });
     };
 
@@ -662,7 +657,7 @@
                 ox += width + groupPadding * 2 + groupGap;
             });
             bounds.width = ox - groupGap;
-            boxes.forEach(box => drawNode(box.node, box.x, box.y, box.width, box.height, layers.nodes, box.compact));
+            boxes.forEach(box => drawNode(box.node, box.x, box.y, box.nativeWidth, box.nativeHeight, layers.nodes, box.compact, box.scale));
             routeEdges(graph.edges, boxes, bounds).forEach(routed => drawEdge(routed.edge, routed.points, layers.edges));
         }
 
