@@ -59,5 +59,35 @@ namespace HoLaMap.Models
         /// Gets or sets the room the device is in, if placed.
         /// </summary>
         public Room? Room { get; set; }
+
+        /// <summary>
+        /// Gets or sets the identifier of the rack the device is in, if any.
+        /// </summary>
+        public int? RackId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the rack the device is in, if any.
+        /// </summary>
+        public Rack? Rack { get; set; }
+
+        /// <summary>
+        /// Gets or sets the lowest rack unit the device occupies, counting from 1 at the bottom.
+        /// </summary>
+        public int? RackU { get; set; }
+
+        /// <summary>
+        /// Gets or sets the left column the device occupies, from 0 to 3.
+        /// </summary>
+        public int? RackColumn { get; set; }
+
+        /// <summary>
+        /// Gets or sets how many of the four columns the device is wide: 1, 2 or 4.
+        /// </summary>
+        public int RackWidth { get; set; } = 4;
+
+        /// <summary>
+        /// Gets or sets how many rack units tall the device is.
+        /// </summary>
+        public int RackHeight { get; set; } = 1;
     }
 }

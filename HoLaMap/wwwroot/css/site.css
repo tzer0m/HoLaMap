@@ -580,3 +580,87 @@ body {
     font-size: 14px;
     font-weight: 700;
 }
+
+.rack-layout {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 32px;
+}
+
+.rack {
+    display: flex;
+    gap: 6px;
+    padding: 8px;
+    border: 2px solid #8a90b0;
+    border-radius: 6px;
+    background: #1b1f27;
+}
+
+.rack-labels {
+    display: grid;
+    grid-auto-rows: 28px;
+    gap: 2px;
+    color: #9aa3b5;
+    font-size: 0.75rem;
+    line-height: 28px;
+    text-align: right;
+}
+
+.rack-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 90px);
+    gap: 2px;
+    background-image: linear-gradient(#2a2f3a 1px, transparent 1px);
+    background-size: 100% 30px;
+}
+
+.rack-device {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: #4a5068;
+    color: #fff;
+    font-size: 0.75rem;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rack-gateway,
+.rack-switch,
+.rack-accesspoint {
+    background: #5b5680;
+}
+
+.rack-device.selected {
+    outline: 2px solid #4a8a1c;
+}
+
+.rack-forms {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.rack-forms h2 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.rack-add {
+    margin-bottom: 16px;
+}
+
+.rack-add select,
+.inline-form select {
+    padding: 6px;
+    border: 1px solid #4a5068;
+    border-radius: 4px;
+    background: #1a1d24;
+    color: #e6e6e6;
+    font: inherit;
+}

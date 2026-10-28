@@ -44,9 +44,15 @@ namespace HoLaMap.Pages.Floorplan
         /// <returns>A redirect back to the list.</returns>
         public async Task<IActionResult> OnPostSaveAsync(int id, int? roomId)
         {
-            Device? device = await context.Devices.FirstOrDefaultAsync(item => item.Id == id);
+            Device? device = await context.Devices.Include(item => item.Rack).FirstOrDefaultAsync(item => item.Id == id);
             if (device != null && (roomId == null || await context.Rooms.AnyAsync(room => room.Id == roomId)))
             {
+                if (device.Rack != null && device.Rack.RoomId != roomId)
+                {
+                    device.RackId = null;
+                    device.RackU = null;
+                    device.RackColumn = null;
+                }
                 device.RoomId = roomId;
                 await context.SaveChangesAsync();
             }

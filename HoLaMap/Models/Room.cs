@@ -49,5 +49,10 @@ namespace HoLaMap.Models
         /// Gets or sets the devices in this room.
         /// </summary>
         public List<Device> Devices { get; set; } = [];
+
+        /// <summary>
+        /// Gets or sets the racks in this room.
+        /// </summary>
+        public List<Rack> Racks { get; set; } = [];
     }
 }
