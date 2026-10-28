@@ -64,5 +64,10 @@ namespace HoLaMap.Models
         /// Gets or sets the name of the network (VLAN) assigned to the port.
         /// </summary>
         public string? NetworkName { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether several devices can share this port, e.g. behind an unmanaged switch.
+        /// </summary>
+        public bool Shared { get; set; }
     }
 }

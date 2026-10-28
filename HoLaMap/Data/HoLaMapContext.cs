@@ -30,6 +30,11 @@ namespace HoLaMap.Data
         public DbSet<Network> Networks => Set<Network>();
 
         /// <summary>
+        /// Gets the action items.
+        /// </summary>
+        public DbSet<ActionItem> ActionItems => Set<ActionItem>();
+
+        /// <summary>
         /// Configures keys, indexes and relationships.
         /// </summary>
         /// <param name="modelBuilder">The model builder.</param>
@@ -44,6 +49,7 @@ namespace HoLaMap.Data
             modelBuilder.Entity<Link>().HasIndex(link => link.FromPortId);
             modelBuilder.Entity<Link>().Property(link => link.Source).HasConversion<string>();
             modelBuilder.Entity<Network>().HasIndex(network => network.Name).IsUnique();
+            modelBuilder.Entity<ActionItem>().HasIndex(item => new { item.PortId, item.DeviceId }).IsUnique();
         }
     }
 }

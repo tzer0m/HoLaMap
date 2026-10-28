@@ -56,7 +56,7 @@ namespace HoLaMap.UniFi
                 device.LastSeen = now;
             }
             await context.SaveChangesAsync(cancellationToken);
-            await SyncLinksAsync(devices, unifiDevices, stations, cancellationToken);
+            await SyncLinksAsync(devices, unifiDevices, stations, now, cancellationToken);
         }
 
         /// <summary>
@@ -115,18 +115,20 @@ namespace HoLaMap.UniFi
         }
 
         /// <summary>
-        /// Rebuilds all links from switch uplinks and wired client switch ports.
+        /// Records links from switch uplinks and wired clients, adding to free ports and raising action items for collisions.
         /// </summary>
         /// <param name="devices">All devices keyed by MAC.</param>
         /// <param name="unifiDevices">UniFi devices.</param>
         /// <param name="stations">Connected clients.</param>
+        /// <param name="now">The time of this sync (UTC).</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>A task that completes when the links have been saved.</returns>
-        private async Task SyncLinksAsync(Dictionary<string, Device> devices, List<UniFiDevice> unifiDevices, List<UniFiStation> stations, CancellationToken cancellationToken)
+        private async Task SyncLinksAsync(Dictionary<string, Device> devices, List<UniFiDevice> unifiDevices, List<UniFiStation> stations, DateTime now, CancellationToken cancellationToken)
         {
-            context.Links.RemoveRange(await context.Links.Where(link => link.Source == LinkSource.UniFi).ToListAsync(cancellationToken));
+            List<Link> links = await context.Links.ToListAsync(cancellationToken);
+            List<ActionItem> actions = await context.ActionItems.ToListAsync(cancellationToken);
 
-            // Switch and AP uplinks.
+            // Switch and AP uplinks are trusted, so they always replace whatever UniFi reported before.
             foreach (UniFiDevice unifiDevice in unifiDevices.Where(unifiDevice => unifiDevice.Uplink?.UplinkMac != null && unifiDevice.Uplink.UplinkRemotePort != null))
             {
                 Port? fromPort = FindPort(devices, unifiDevice.Uplink!.UplinkMac!, unifiDevice.Uplink.UplinkRemotePort!.Value);
@@ -135,21 +137,106 @@ namespace HoLaMap.UniFi
                 {
                     continue;
                 }
-                Port? toPort = toDevice.Ports.FirstOrDefault(port => port.Index == unifiDevice.Uplink.PortIdx) ?? toDevice.Ports.FirstOrDefault(port => port.IsUplink);
-                context.Links.Add(new Link { FromPort = fromPort, ToDevice = toDevice, ToPort = toPort });
+                foreach (Link stale in links.Where(link => link.Source == LinkSource.UniFi && (link.ToDeviceId == toDevice.Id || link.FromPortId == fromPort.Id) && !(link.FromPortId == fromPort.Id && link.ToDeviceId == toDevice.Id)).ToList())
+                {
+                    RemoveLink(links, stale);
+                }
+                Link link = links.FirstOrDefault(existing => existing.FromPortId == fromPort.Id && existing.ToDeviceId == toDevice.Id) ?? AddLink(links, fromPort, toDevice);
+                link.ToPortId = (toDevice.Ports.FirstOrDefault(port => port.Index == unifiDevice.Uplink.PortIdx) ?? toDevice.Ports.FirstOrDefault(port => port.IsUplink))?.Id;
+                link.LastSeen = now;
+                RemoveActions(actions, toDevice.Id);
             }
 
-            // Wired clients.
+            // A client can't really be on a switch's uplink port, or on a port feeding another switch or AP; UniFi reports these when it only sees the MAC through that cable.
+            HashSet<int> infrastructureIds = [.. devices.Values.Where(device => device.Kind != DeviceKind.Client).Select(device => device.Id)];
+            HashSet<int> throughPortIds = [.. devices.Values.SelectMany(device => device.Ports).Where(port => port.IsUplink).Select(port => port.Id), .. links.Where(link => infrastructureIds.Contains(link.ToDeviceId)).Select(link => link.FromPortId)];
+            foreach (Link upstream in links.Where(link => link.Source == LinkSource.UniFi && !infrastructureIds.Contains(link.ToDeviceId) && throughPortIds.Contains(link.FromPortId)).ToList())
+            {
+                RemoveLink(links, upstream);
+            }
+
+            // Devices with a manual link stay where they were put.
+            HashSet<int> manualIds = [.. links.Where(link => link.Source == LinkSource.Manual).Select(link => link.ToDeviceId)];
+            foreach (Link overridden in links.Where(link => link.Source == LinkSource.UniFi && manualIds.Contains(link.ToDeviceId) && !infrastructureIds.Contains(link.ToDeviceId)).ToList())
+            {
+                RemoveLink(links, overridden);
+            }
+
+            // Wired clients: free or shared ports are assigned automatically, anything else becomes an action item.
             foreach (UniFiStation station in stations.Where(station => station.IsWired && station.SwMac != null && station.SwPort != null))
             {
-                Port? fromPort = FindPort(devices, station.SwMac!, station.SwPort!.Value);
-                if (fromPort == null || !devices.TryGetValue(NormaliseMac(station.Mac), out Device? toDevice))
+                Port? port = FindPort(devices, station.SwMac!, station.SwPort!.Value);
+                if (port == null || throughPortIds.Contains(port.Id) || !devices.TryGetValue(NormaliseMac(station.Mac), out Device? device) || manualIds.Contains(device.Id))
                 {
                     continue;
                 }
-                context.Links.Add(new Link { FromPort = fromPort, ToDevice = toDevice });
+                Link? existing = links.FirstOrDefault(link => link.FromPortId == port.Id && link.ToDeviceId == device.Id);
+                if (existing != null)
+                {
+                    existing.LastSeen = now;
+                    RemoveActions(actions, device.Id);
+                    continue;
+                }
+                if (!port.Shared && links.Any(link => link.FromPortId == port.Id))
+                {
+                    ActionItem? action = actions.FirstOrDefault(item => item.PortId == port.Id && item.DeviceId == device.Id);
+                    if (action == null)
+                    {
+                        action = new ActionItem { PortId = port.Id, DeviceId = device.Id, FirstSeen = now };
+                        actions.Add(action);
+                        context.ActionItems.Add(action);
+                    }
+                    action.LastSeen = now;
+                    continue;
+                }
+                foreach (Link moved in links.Where(link => link.ToDeviceId == device.Id && link.Source == LinkSource.UniFi).ToList())
+                {
+                    RemoveLink(links, moved);
+                }
+                AddLink(links, port, device).LastSeen = now;
+                RemoveActions(actions, device.Id);
             }
             await context.SaveChangesAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// Adds a UniFi link and tracks it in the working list.
+        /// </summary>
+        /// <param name="links">The working list of links.</param>
+        /// <param name="port">The port the link starts from.</param>
+        /// <param name="device">The device the link goes to.</param>
+        /// <returns>The new link.</returns>
+        private Link AddLink(List<Link> links, Port port, Device device)
+        {
+            Link link = new Link { FromPortId = port.Id, ToDeviceId = device.Id, Source = LinkSource.UniFi };
+            links.Add(link);
+            context.Links.Add(link);
+            return link;
+        }
+
+        /// <summary>
+        /// Removes a link and stops tracking it in the working list.
+        /// </summary>
+        /// <param name="links">The working list of links.</param>
+        /// <param name="link">The link to remove.</param>
+        private void RemoveLink(List<Link> links, Link link)
+        {
+            links.Remove(link);
+            context.Links.Remove(link);
+        }
+
+        /// <summary>
+        /// Removes any action items for a device, because it has now been seen on an assigned port.
+        /// </summary>
+        /// <param name="actions">The working list of action items.</param>
+        /// <param name="deviceId">The device ID.</param>
+        private void RemoveActions(List<ActionItem> actions, int deviceId)
+        {
+            foreach (ActionItem action in actions.Where(item => item.DeviceId == deviceId).ToList())
+            {
+                actions.Remove(action);
+                context.ActionItems.Remove(action);
+            }
         }
 
         /// <summary>

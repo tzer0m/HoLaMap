@@ -22,6 +22,39 @@ namespace HoLaMap.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("HoLaMap.Models.ActionItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DeviceId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Dismissed")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("FirstSeen")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastSeen")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PortId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId");
+
+                    b.HasIndex("PortId", "DeviceId")
+                        .IsUnique();
+
+                    b.ToTable("ActionItems");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.Device", b =>
                 {
                     b.Property<int>("Id")
@@ -69,6 +102,9 @@ namespace HoLaMap.Migrations
 
                     b.Property<int>("FromPortId")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastSeen")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
@@ -152,6 +188,9 @@ namespace HoLaMap.Migrations
                     b.Property<double?>("PoEPower")
                         .HasColumnType("double precision");
 
+                    b.Property<bool>("Shared")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("Speed")
                         .HasColumnType("integer");
 
@@ -164,6 +203,25 @@ namespace HoLaMap.Migrations
                         .IsUnique();
 
                     b.ToTable("Ports");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.ActionItem", b =>
+                {
+                    b.HasOne("HoLaMap.Models.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("HoLaMap.Models.Port", "Port")
+                        .WithMany()
+                        .HasForeignKey("PortId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+
+                    b.Navigation("Port");
                 });
 
             modelBuilder.Entity("HoLaMap.Models.Link", b =>

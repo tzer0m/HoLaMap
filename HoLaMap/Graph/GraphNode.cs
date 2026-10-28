@@ -29,5 +29,10 @@ namespace HoLaMap.Graph
         /// The device's ports in order.
         /// </summary>
         public List<GraphPort> Ports { get; set; } = [];
+
+        /// <summary>
+        /// Whether the device was seen by the last few syncs.
+        /// </summary>
+        public bool Online { get; set; }
     }
 }

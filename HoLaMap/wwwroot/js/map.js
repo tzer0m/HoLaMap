@@ -181,9 +181,9 @@
                 points.push({ x: section.endPoint.x, y: centreY }, { x: stackLayout.x + stacked.stack.leafWidth, y: centreY });
             }
             const d = roundedPath(points);
-            const group = create('g', { class: 'map-edge' }, edgeLayer);
+            const group = create('g', { class: 'map-edge' + (edge.online ? '' : ' offline') }, edgeLayer);
             create('path', { d: d, class: 'map-edge-hit' }, group);
-            create('path', { d: edge.poE ? zigzagPath(points) : d, class: 'map-edge-line' + (edge.manual ? ' manual' : ''), stroke: colours[edge.style] ?? '#7b8794' }, group);
+            create('path', { d: edge.poE ? zigzagPath(points) : d, class: 'map-edge-line', stroke: colours[edge.style] ?? '#7b8794' }, group);
             group.addEventListener('click', event => {
                 event.stopPropagation();
                 showDetails(`${nodesById.get(edge.source).label} → ${nodesById.get(edge.target).label} (${edge.label})`, edge.detail);
@@ -192,7 +192,7 @@
     });
 
     const drawNode = (node, x, y, width, height) => {
-        const group = create('g', { class: `map-node ${node.kind}`, transform: `translate(${x}, ${y})` }, nodeLayer);
+        const group = create('g', { class: `map-node ${node.kind}${node.online ? '' : ' offline'}`, transform: `translate(${x}, ${y})` }, nodeLayer);
         create('rect', { width: width, height: height, rx: 8, class: 'map-node-box' }, group);
         const label = create('text', { x: width / 2, y: node.ports.length ? 18 : height / 2 + 4, class: 'map-node-label' }, group);
         label.textContent = node.label;

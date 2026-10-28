@@ -1,0 +1,40 @@
+﻿@page
+@model HoLaMap.Pages.Actions.IndexModel
+@{
+    ViewData["Title"] = "Actions";
+}
+
+<header class="page-header">
+    <h1>Actions</h1>
+</header>
+
+@if (Model.Items.Count == 0)
+{
+    <p class="empty">Nothing to review. Devices seen on ports that are already assigned will show up here.</p>
+}
+else
+{
+    <div class="action-list">
+        @foreach (ActionItem item in Model.Items)
+        {
+            List<Link> current = Model.CurrentLinks.GetValueOrDefault(item.PortId) ?? [];
+            <section class="action-item">
+                <strong>@item.Device.Name Seen on @item.Port.Device.Name Port @item.Port.Index</strong>
+                <p>Currently Assigned: @(current.Count == 0 ? "Nothing" : string.Join(", ", current.Select(link => link.ToDevice.Name)))</p>
+                <p>First Seen @item.FirstSeen.ToLocalTime().ToString("d MMM HH:mm") · Last Seen @item.LastSeen.ToLocalTime().ToString("d MMM HH:mm")</p>
+                <div class="action-buttons">
+                    <form method="post" asp-page-handler="Replace" asp-route-id="@item.Id">
+                        <button type="submit" class="button">Replace</button>
+                    </form>
+                    <form method="post" asp-page-handler="Alongside" asp-route-id="@item.Id">
+                        <button type="submit" class="button">Add Alongside</button>
+                        <label><input type="checkbox" name="markShared" value="true" /> Mark Port as Shared</label>
+                    </form>
+                    <form method="post" asp-page-handler="Dismiss" asp-route-id="@item.Id">
+                        <button type="submit" class="button button-secondary">Dismiss</button>
+                    </form>
+                </div>
+            </section>
+        }
+    </div>
+}

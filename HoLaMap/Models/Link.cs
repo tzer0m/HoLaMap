@@ -49,5 +49,10 @@ namespace HoLaMap.Models
         /// Gets or sets optional notes about the link.
         /// </summary>
         public string? Notes { get; set; }
+
+        /// <summary>
+        /// Gets or sets when the sync last saw this link (UTC), or null for manual links.
+        /// </summary>
+        public DateTime? LastSeen { get; set; }
     }
 }

@@ -51,6 +51,11 @@ namespace HoLaMap.Graph
         public bool PoE { get; set; }
 
         /// <summary>
+        /// Whether the downstream device was seen by the last few syncs.
+        /// </summary>
+        public bool Online { get; set; }
+
+        /// <summary>
         /// Extra details shown when the edge is selected.
         /// </summary>
         public string Detail { get; set; } = string.Empty;

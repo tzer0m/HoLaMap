@@ -1,4 +1,8 @@
-﻿<!DOCTYPE html>
+﻿@inject HoLaMapContext Database
+@{
+    int actionCount = Database.ActionItems.Count(item => !item.Dismissed);
+}
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -13,6 +17,13 @@
             <a asp-page="/Index">Map</a>
             <a asp-page="/Devices/Index">Devices</a>
             <a asp-page="/Links/Index">Links</a>
+            <a asp-page="/Actions/Index">
+                Actions
+                @if (actionCount > 0)
+                {
+                    <span class="badge">@actionCount</span>
+                }
+            </a>
         </nav>
     </header>
     <main>

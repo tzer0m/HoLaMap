@@ -12,7 +12,8 @@ namespace HoLaMap.Pages
     /// Shows the physical network as an interactive map.
     /// </summary>
     /// <param name="context">The database context.</param>
-    public class IndexModel(HoLaMapContext context) : PageModel
+    /// <param name="configuration">The app configuration.</param>
+    public class IndexModel(HoLaMapContext context, IConfiguration configuration) : PageModel
     {
         /// <summary>
         /// Handles GET requests for the page.
@@ -33,10 +34,11 @@ namespace HoLaMap.Pages
             Dictionary<int, int> upstreamPort = links.Where(link => link.FromPort.DeviceId != link.ToDeviceId).GroupBy(link => link.ToDeviceId).ToDictionary(group => group.Key, group => group.Min(link => link.FromPort.Index));
             devices = [.. devices.OrderBy(device => upstreamPort.GetValueOrDefault(device.Id)).ThenBy(device => device.Name)];
             links = [.. links.OrderBy(link => link.FromPort.Index).ThenBy(link => link.ToDevice.Name)];
+            DateTime onlineSince = DateTime.UtcNow.AddMinutes(-configuration.GetValue<int>("Map:OfflineAfterMinutes"));
             GraphData graph = new()
             {
-                Nodes = [.. devices.Select(device => new GraphNode { Id = $"d{device.Id}", Label = device.Name, Kind = device.Kind.ToString().ToLowerInvariant(), Detail = string.Join(" · ", new[] { device.Model, device.Ip, device.Mac }.Where(part => !string.IsNullOrEmpty(part))), Ports = [.. device.Ports.OrderBy(port => port.Index).Select(port => new GraphPort { Id = $"p{port.Id}", Index = port.Index, Style = PortStyle.Class(port), Detail = PortStyle.Tooltip(port) })] })],
-                Edges = [.. links.Select(link => new GraphEdge { Id = $"l{link.Id}", Source = $"d{link.FromPort.DeviceId}", Target = $"d{link.ToDeviceId}", SourcePort = $"p{link.FromPortId}", TargetPort = link.ToPortId != null ? $"p{link.ToPortId}" : string.Empty, Label = link.ToPort == null ? $"{link.FromPort.Index}" : $"{link.FromPort.Index} → {link.ToPort.Index}", Style = PortStyle.Class(link.FromPort), Manual = link.Source == LinkSource.Manual, PoE = PortStyle.IsPoE(link.FromPort), Detail = string.IsNullOrEmpty(link.Notes) ? PortStyle.Tooltip(link.FromPort) : $"{PortStyle.Tooltip(link.FromPort)} · {link.Notes}" })]
+                Nodes = [.. devices.Select(device => new GraphNode { Id = $"d{device.Id}", Label = device.Name, Kind = device.Kind.ToString().ToLowerInvariant(), Detail = string.Join(" · ", new[] { device.Model, device.Ip, device.Mac, $"Last Seen {device.LastSeen.ToLocalTime():d MMM HH:mm}" }.Where(part => !string.IsNullOrEmpty(part))), Online = device.LastSeen >= onlineSince, Ports = [.. device.Ports.OrderBy(port => port.Index).Select(port => new GraphPort { Id = $"p{port.Id}", Index = port.Index, Style = PortStyle.Class(port), Detail = PortStyle.Tooltip(port) })] })],
+                Edges = [.. links.Select(link => new GraphEdge { Id = $"l{link.Id}", Source = $"d{link.FromPort.DeviceId}", Target = $"d{link.ToDeviceId}", SourcePort = $"p{link.FromPortId}", TargetPort = link.ToPortId != null ? $"p{link.ToPortId}" : string.Empty, Label = link.ToPort == null ? $"{link.FromPort.Index}" : $"{link.FromPort.Index} → {link.ToPort.Index}", Style = PortStyle.Class(link.FromPort), Manual = link.Source == LinkSource.Manual, PoE = PortStyle.IsPoE(link.FromPort), Online = link.ToDevice.LastSeen >= onlineSince, Detail = string.IsNullOrEmpty(link.Notes) ? PortStyle.Tooltip(link.FromPort) : $"{PortStyle.Tooltip(link.FromPort)} · {link.Notes}" })]
             };
             return new JsonResult(graph);
         }

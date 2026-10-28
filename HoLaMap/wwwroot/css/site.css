@@ -169,10 +169,6 @@ body {
     color: #fff;
 }
 
-.swatch-manual {
-    border: 2px dashed #e6e6e6;
-}
-
 .map-layout {
     display: grid;
     grid-template-columns: 1fr 280px;
@@ -329,10 +325,6 @@ body {
     stroke-width: 3;
 }
 
-.map-edge-line.manual {
-    stroke-dasharray: 6 4;
-}
-
 .map-edge-hit {
     fill: none;
     stroke: transparent;
@@ -346,4 +338,60 @@ body {
 .map-edge-label {
     fill: #9aa3b5;
     font-size: 9px;
+}
+
+.map-node.offline,
+.map-edge.offline {
+    opacity: 0.4;
+}
+
+.site-nav .badge {
+    display: inline-block;
+    min-width: 18px;
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: #e67e22;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+}
+
+.action-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.action-item {
+    padding: 12px;
+    border: 1px solid #2a2f3a;
+    border-radius: 6px;
+}
+
+.action-item p {
+    margin: 4px 0;
+    color: #9aa3b5;
+    font-size: 0.85rem;
+}
+
+.action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.action-buttons form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.button-secondary {
+    background: #4a5068;
 }
