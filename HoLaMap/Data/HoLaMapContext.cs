@@ -35,6 +35,11 @@ namespace HoLaMap.Data
         public DbSet<ActionItem> ActionItems => Set<ActionItem>();
 
         /// <summary>
+        /// Gets the extra MAC addresses of merged devices.
+        /// </summary>
+        public DbSet<DeviceMac> DeviceMacs => Set<DeviceMac>();
+
+        /// <summary>
         /// Configures keys, indexes and relationships.
         /// </summary>
         /// <param name="modelBuilder">The model builder.</param>
@@ -50,6 +55,7 @@ namespace HoLaMap.Data
             modelBuilder.Entity<Link>().Property(link => link.Source).HasConversion<string>();
             modelBuilder.Entity<Network>().HasIndex(network => network.Name).IsUnique();
             modelBuilder.Entity<ActionItem>().HasIndex(item => new { item.PortId, item.DeviceId }).IsUnique();
+            modelBuilder.Entity<DeviceMac>().HasIndex(deviceMac => deviceMac.Mac).IsUnique();
         }
     }
 }

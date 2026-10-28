@@ -27,7 +27,12 @@ namespace HoLaMap.UniFi
             await SyncNetworksAsync(networks, cancellationToken);
 
             // Gateways, switches and access points.
-            Dictionary<string, Device> devices = await context.Devices.Include(device => device.Ports).ToDictionaryAsync(device => device.Mac, cancellationToken);
+            List<Device> known = await context.Devices.Include(device => device.Ports).Include(device => device.Macs).ToListAsync(cancellationToken);
+            Dictionary<string, Device> devices = known.ToDictionary(device => device.Mac);
+            foreach (Device device in known)
+            {
+                device.Macs.ForEach(deviceMac => devices[deviceMac.Mac] = device);
+            }
             HashSet<string> unifiMacs = [];
             NetworkResolver resolver = new(networks, profiles);
             foreach (UniFiDevice unifiDevice in unifiDevices)

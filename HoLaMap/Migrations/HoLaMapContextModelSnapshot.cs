@@ -92,6 +92,31 @@ namespace HoLaMap.Migrations
                     b.ToTable("Devices");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.DeviceMac", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DeviceId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Mac")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId");
+
+                    b.HasIndex("Mac")
+                        .IsUnique();
+
+                    b.ToTable("DeviceMacs");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.Link", b =>
                 {
                     b.Property<int>("Id")
@@ -224,6 +249,17 @@ namespace HoLaMap.Migrations
                     b.Navigation("Port");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.DeviceMac", b =>
+                {
+                    b.HasOne("HoLaMap.Models.Device", "Device")
+                        .WithMany("Macs")
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.Link", b =>
                 {
                     b.HasOne("HoLaMap.Models.Port", "FromPort")
@@ -263,6 +299,8 @@ namespace HoLaMap.Migrations
 
             modelBuilder.Entity("HoLaMap.Models.Device", b =>
                 {
+                    b.Navigation("Macs");
+
                     b.Navigation("Ports");
                 });
 #pragma warning restore 612, 618

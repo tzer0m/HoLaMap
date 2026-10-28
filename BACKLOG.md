@@ -2,13 +2,9 @@
 
 ## Done
 - Persistent sync and action items (links recorded with LastSeen, auto-assign to free or shared ports, auto-move, trusted uplinks, Actions page with badge, offline devices faded on the map).
+- Merge devices (extra MACs kept in `DeviceMac` so syncs still match, links move to the kept device).
 
 ## Next Up
-
-### Merge Devices
-- Merge two or more devices into one, e.g. the ONT appearing with two MAC addresses on Living Room Switch port 5.
-- Merged device keeps all its MACs so future syncs match any of them (MACs move from `Device` to their own table or a list).
-- Links from the merged devices move to the surviving device.
 
 ## Later
 - Backfill offline devices from UniFi's client history (`v2/api/site/default/clients/history`), if it returns last uplink switch and port.

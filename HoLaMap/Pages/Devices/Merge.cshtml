@@ -1,0 +1,29 @@
+﻿@page
+@model HoLaMap.Pages.Devices.MergeModel
+@{
+    ViewData["Title"] = "Merge Devices";
+}
+
+<header class="page-header">
+    <h1>Merge Devices</h1>
+</header>
+
+<form method="post" class="form">
+    <label>
+        Keep
+        <select asp-for="KeepId" asp-items="Model.DeviceOptions">
+            <option value="">Choose the device to keep…</option>
+        </select>
+        <span asp-validation-for="KeepId" class="field-error"></span>
+    </label>
+    <label>
+        Merge Into It
+        <select asp-for="MergeIds" asp-items="Model.DeviceOptions" multiple size="12"></select>
+        <span asp-validation-for="MergeIds" class="field-error"></span>
+    </label>
+    <p class="empty">The merged devices are removed. Their MAC addresses move to the kept device so future syncs still match them, and their links move across.</p>
+    <div class="form-actions">
+        <button type="submit" class="button">Merge</button>
+        <a asp-page="Index">Cancel</a>
+    </div>
+</form>

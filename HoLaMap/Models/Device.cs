@@ -44,5 +44,10 @@ namespace HoLaMap.Models
         /// Gets or sets the device's ports.
         /// </summary>
         public List<Port> Ports { get; set; } = [];
+
+        /// <summary>
+        /// Gets or sets extra MAC addresses from devices merged into this one.
+        /// </summary>
+        public List<DeviceMac> Macs { get; set; } = [];
     }
 }
