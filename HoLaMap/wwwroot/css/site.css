@@ -395,3 +395,188 @@ body {
 .button-secondary {
     background: #4a5068;
 }
+
+.floor-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.floor-tabs a {
+    padding: 4px 12px;
+    border: 1px solid #4a5068;
+    border-radius: 4px;
+    color: #9aa3b5;
+    text-decoration: none;
+}
+
+.floor-tabs a.active {
+    border-color: #4a8a1c;
+    color: #fff;
+}
+
+.floorplan {
+    position: relative;
+    min-height: 320px;
+    border: 1px solid #2a2f3a;
+    border-radius: 6px;
+    background-image: linear-gradient(#14171d 1px, transparent 1px), linear-gradient(90deg, #14171d 1px, transparent 1px);
+    background-size: 40px 40px;
+    overflow: auto;
+}
+
+.room {
+    position: absolute;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    border: 2px solid #8a90b0;
+    border-radius: 4px;
+    background: #2f3640;
+    overflow: hidden;
+}
+
+.room-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px;
+    border-bottom: 1px solid #4a5068;
+    font-weight: 600;
+    user-select: none;
+}
+
+.floorplan.editing .room-header {
+    cursor: move;
+}
+
+.room-header form {
+    margin: 0;
+}
+
+.room-delete {
+    border: 0;
+    background: none;
+    color: #e57373;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.room-devices {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 4px;
+    padding: 6px;
+    overflow: hidden;
+}
+
+.room-device {
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: #4a5068;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.room-device.device-gateway,
+.room-device.device-switch,
+.room-device.device-accesspoint {
+    background: #5b5680;
+}
+
+.room-resize {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    background: linear-gradient(135deg, transparent 50%, #8a90b0 50%);
+    cursor: nwse-resize;
+}
+
+.edit-only {
+    display: none;
+}
+
+.floorplan.editing .edit-only,
+.floorplan-tools.editing {
+    display: flex;
+}
+
+.floorplan-tools {
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 12px;
+}
+
+.inline-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.inline-form input {
+    padding: 6px;
+    border: 1px solid #4a5068;
+    border-radius: 4px;
+    background: #1a1d24;
+    color: #e6e6e6;
+    font: inherit;
+}
+
+.floor-add {
+    margin-top: 16px;
+}
+
+.table select {
+    padding: 4px;
+    border: 1px solid #4a5068;
+    border-radius: 4px;
+    background: #1a1d24;
+    color: #e6e6e6;
+    font: inherit;
+}
+
+.floor-tabs button {
+    padding: 4px 12px;
+    border: 1px solid #4a5068;
+    border-radius: 4px;
+    background: none;
+    color: #9aa3b5;
+    font: inherit;
+    cursor: pointer;
+}
+
+.floor-tabs button.active {
+    border-color: #4a8a1c;
+    color: #fff;
+}
+
+.map-room-box {
+    fill: #1b1f27;
+    stroke: #4a5068;
+    stroke-width: 1.5;
+}
+
+.map-room-title {
+    fill: #9aa3b5;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.map-floor-box {
+    fill: none;
+    stroke: #3a4054;
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+}
+
+.map-floor-title {
+    fill: #fff;
+    font-size: 14px;
+    font-weight: 700;
+}

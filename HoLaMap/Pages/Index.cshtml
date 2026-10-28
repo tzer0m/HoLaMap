@@ -16,6 +16,13 @@
     </ul>
 </header>
 
+<nav id="view-tabs" class="floor-tabs">
+    <button type="button" data-view="all">All</button>
+    <button type="button" data-view="unifi">UniFi</button>
+    <button type="button" data-view="floorplan">Floor Plan</button>
+    <a asp-page="/Floorplan/Index">Edit Floors and Rooms</a>
+</nav>
+
 <div class="map-layout">
     <div id="map" class="map" data-graph-url="@Url.Page("/Index", "Graph")"></div>
     <aside id="details" class="details">Select a device or link to see its details.</aside>

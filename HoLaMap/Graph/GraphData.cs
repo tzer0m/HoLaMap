@@ -14,5 +14,10 @@ namespace HoLaMap.Graph
         /// The links.
         /// </summary>
         public List<GraphEdge> Edges { get; set; } = [];
+
+        /// <summary>
+        /// The floors and their rooms.
+        /// </summary>
+        public List<GraphFloor> Floors { get; set; } = [];
     }
 }

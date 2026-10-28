@@ -40,6 +40,16 @@ namespace HoLaMap.Data
         public DbSet<DeviceMac> DeviceMacs => Set<DeviceMac>();
 
         /// <summary>
+        /// Gets the floors.
+        /// </summary>
+        public DbSet<Floor> Floors => Set<Floor>();
+
+        /// <summary>
+        /// Gets the rooms.
+        /// </summary>
+        public DbSet<Room> Rooms => Set<Room>();
+
+        /// <summary>
         /// Configures keys, indexes and relationships.
         /// </summary>
         /// <param name="modelBuilder">The model builder.</param>
@@ -56,6 +66,10 @@ namespace HoLaMap.Data
             modelBuilder.Entity<Network>().HasIndex(network => network.Name).IsUnique();
             modelBuilder.Entity<ActionItem>().HasIndex(item => new { item.PortId, item.DeviceId }).IsUnique();
             modelBuilder.Entity<DeviceMac>().HasIndex(deviceMac => deviceMac.Mac).IsUnique();
+            modelBuilder.Entity<Floor>().HasIndex(floor => floor.Name).IsUnique();
+            modelBuilder.Entity<Room>().HasIndex(room => new { room.FloorId, room.Name }).IsUnique();
+            modelBuilder.Entity<Room>().HasOne(room => room.Floor).WithMany(floor => floor.Rooms).HasForeignKey(room => room.FloorId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<Device>().HasOne(device => device.Room).WithMany(room => room.Devices).HasForeignKey(device => device.RoomId).OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

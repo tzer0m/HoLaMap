@@ -34,5 +34,10 @@ namespace HoLaMap.Graph
         /// Whether the device was seen by the last few syncs.
         /// </summary>
         public bool Online { get; set; }
+
+        /// <summary>
+        /// The ID of the room the device is in, or empty if unplaced.
+        /// </summary>
+        public string Room { get; set; } = string.Empty;
     }
 }

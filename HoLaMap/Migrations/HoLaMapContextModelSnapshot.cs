@@ -84,10 +84,15 @@ namespace HoLaMap.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("RoomId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Mac")
                         .IsUnique();
+
+                    b.HasIndex("RoomId");
 
                     b.ToTable("Devices");
                 });
@@ -115,6 +120,29 @@ namespace HoLaMap.Migrations
                         .IsUnique();
 
                     b.ToTable("DeviceMacs");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.Floor", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Floors");
                 });
 
             modelBuilder.Entity("HoLaMap.Models.Link", b =>
@@ -230,6 +258,41 @@ namespace HoLaMap.Migrations
                     b.ToTable("Ports");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.Room", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("FloorId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("X")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Y")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FloorId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("Rooms");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.ActionItem", b =>
                 {
                     b.HasOne("HoLaMap.Models.Device", "Device")
@@ -247,6 +310,16 @@ namespace HoLaMap.Migrations
                     b.Navigation("Device");
 
                     b.Navigation("Port");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.Device", b =>
+                {
+                    b.HasOne("HoLaMap.Models.Room", "Room")
+                        .WithMany("Devices")
+                        .HasForeignKey("RoomId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Room");
                 });
 
             modelBuilder.Entity("HoLaMap.Models.DeviceMac", b =>
@@ -297,11 +370,32 @@ namespace HoLaMap.Migrations
                     b.Navigation("Device");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.Room", b =>
+                {
+                    b.HasOne("HoLaMap.Models.Floor", "Floor")
+                        .WithMany("Rooms")
+                        .HasForeignKey("FloorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Floor");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.Device", b =>
                 {
                     b.Navigation("Macs");
 
                     b.Navigation("Ports");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.Floor", b =>
+                {
+                    b.Navigation("Rooms");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.Room", b =>
+                {
+                    b.Navigation("Devices");
                 });
 #pragma warning restore 612, 618
         }

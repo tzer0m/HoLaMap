@@ -1,0 +1,73 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Floor Plan";
+    int gridCell = 40;
+    int planHeight = Model.Current == null ? 0 : (Model.Current.Rooms.Select(room => room.Y + room.Height).DefaultIfEmpty(0).Max() + 2) * gridCell;
+}
+
+<header class="page-header">
+    <h1>Floor Plan</h1>
+    <div class="action-buttons">
+        <a class="button button-secondary" asp-page="Assign">Assign Devices</a>
+        @if (Model.Current != null)
+        {
+            <button type="button" id="edit-toggle" class="button">Edit Layout</button>
+        }
+    </div>
+</header>
+
+<nav class="floor-tabs">
+    @foreach (Floor floor in Model.Floors)
+    {
+        <a asp-page="Index" asp-route-floorId="@floor.Id" class="@(floor.Id == Model.Current?.Id ? "active" : "")">@floor.Name</a>
+    }
+</nav>
+
+@if (Model.Current == null)
+{
+    <p class="empty">No floors yet. Add one below.</p>
+}
+else
+{
+    <div id="floorplan" class="floorplan" data-cell="@gridCell" data-move-url="@Url.Page("Index", "Move")" style="height: @(planHeight)px">
+        @Html.AntiForgeryToken()
+        @foreach (Room room in Model.Current.Rooms)
+        {
+            <section class="room" data-id="@room.Id" data-x="@room.X" data-y="@room.Y" data-width="@room.Width" data-height="@room.Height" style="left: @(room.X * gridCell)px; top: @(room.Y * gridCell)px; width: @(room.Width * gridCell)px; height: @(room.Height * gridCell)px">
+                <header class="room-header">
+                    <span class="room-name">@room.Name</span>
+                    <form method="post" asp-page-handler="DeleteRoom" asp-route-id="@room.Id" class="edit-only" onsubmit="return confirm('Delete this room? Its devices become unplaced.')">
+                        <button type="submit" class="room-delete" title="Delete Room">×</button>
+                    </form>
+                </header>
+                <div class="room-devices">
+                    @foreach (Device device in room.Devices.OrderBy(device => device.Kind).ThenBy(device => device.Name))
+                    {
+                        <span class="room-device device-@device.Kind.ToString().ToLowerInvariant()" title="@(string.Join(" · ", new[] { device.Model, device.Ip }.Where(part => !string.IsNullOrEmpty(part))))">@device.Name</span>
+                    }
+                </div>
+                <span class="room-resize edit-only"></span>
+            </section>
+        }
+    </div>
+    <section id="floorplan-tools" class="floorplan-tools edit-only">
+        <form method="post" asp-page-handler="AddRoom" class="inline-form">
+            <input type="hidden" name="floorId" value="@Model.Current.Id" />
+            <input name="name" placeholder="Room Name" required />
+            <button type="submit" class="button">Add Room</button>
+        </form>
+        <form method="post" asp-page-handler="DeleteFloor" asp-route-id="@Model.Current.Id" class="inline-form" onsubmit="return confirm('Delete this floor and all its rooms?')">
+            <button type="submit" class="button button-danger">Delete Floor</button>
+        </form>
+    </section>
+}
+
+<form method="post" asp-page-handler="AddFloor" class="inline-form floor-add">
+    <input name="name" placeholder="Floor Name" required />
+    <button type="submit" class="button">Add Floor</button>
+</form>
+
+@section Scripts {
+    <script src="~/js/floorplan.js" asp-append-version="true"></script>
+}

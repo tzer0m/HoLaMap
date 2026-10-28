@@ -1,0 +1,53 @@
+@page
+@using Microsoft.AspNetCore.Mvc.Rendering
+@model AssignModel
+@{
+    ViewData["Title"] = "Assign Devices";
+}
+
+<header class="page-header">
+    <h1>Assign Devices</h1>
+    <a class="button button-secondary" asp-page="Index">Back to Floor Plan</a>
+</header>
+
+@if (Model.RoomOptions.Count == 0)
+{
+    <p class="empty">Add a floor and a room on the floor plan first.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Device</th>
+                <th>Kind</th>
+                <th>Room</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (Device device in Model.Devices)
+            {
+                <tr>
+                    <td>@device.Name</td>
+                    <td>@device.Kind</td>
+                    <td>
+                        <form method="post" asp-page-handler="Save" asp-route-id="@device.Id">
+                            <select name="roomId" onchange="this.form.submit()">
+                                <option value="" selected="@(device.RoomId == null)">No Room</option>
+                                @foreach (IGrouping<string?, SelectListItem> group in Model.RoomOptions.GroupBy(option => option.Group?.Name))
+                                {
+                                    <optgroup label="@group.Key">
+                                        @foreach (SelectListItem option in group)
+                                        {
+                                            <option value="@option.Value" selected="@(option.Value == device.RoomId?.ToString())">@option.Text</option>
+                                        }
+                                    </optgroup>
+                                }
+                            </select>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

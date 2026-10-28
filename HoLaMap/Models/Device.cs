@@ -49,5 +49,15 @@ namespace HoLaMap.Models
         /// Gets or sets extra MAC addresses from devices merged into this one.
         /// </summary>
         public List<DeviceMac> Macs { get; set; } = [];
+
+        /// <summary>
+        /// Gets or sets the identifier of the room the device is in, if placed.
+        /// </summary>
+        public int? RoomId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the room the device is in, if placed.
+        /// </summary>
+        public Room? Room { get; set; }
     }
 }
