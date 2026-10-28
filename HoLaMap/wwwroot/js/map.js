@@ -26,10 +26,43 @@
     const defaultDetails = details.textContent;
 
     const response = await fetch(container.dataset.graphUrl);
-    const graph = await response.json();
-    const nodesById = new Map(graph.nodes.map(node => [node.id, node]));
-    const portsById = new Map(graph.nodes.flatMap(node => node.ports.map(port => [port.id, port])));
-    const roomsById = new Map(graph.floors.flatMap(floor => floor.rooms.map(room => [room.id, room])));
+    const raw = await response.json();
+    const portsById = new Map(raw.nodes.flatMap(node => node.ports.map(port => [port.id, port])));
+    const roomsById = new Map(raw.floors.flatMap(floor => floor.rooms.map(room => [room.id, room])));
+    const rawById = new Map(raw.nodes.map(node => [node.id, node]));
+    const rackOf = new Map(raw.nodes.filter(node => node.rack).map(node => [node.id, node.rack]));
+
+    // The All and Floor Plan views draw each rack as one block in place of its devices. Links between devices in the same rack are hidden.
+    const collapsed = {
+        ...raw,
+        nodes: [...raw.nodes.filter(node => !node.rack), ...raw.racks.map(rack => ({ id: rack.id, label: rack.name, kind: 'rack', detail: rack.detail, room: rack.room, rack: '', online: rack.online, ports: [] }))],
+        edges: raw.edges.filter(edge => !rackOf.get(edge.source) || rackOf.get(edge.source) !== rackOf.get(edge.target)).map(edge => {
+            const fromRack = rackOf.get(edge.source);
+            const toRack = rackOf.get(edge.target);
+            if (!fromRack && !toRack) {
+                return edge;
+            }
+            const fromPort = portsById.get(edge.sourcePort);
+            const toPort = portsById.get(edge.targetPort);
+            return { ...edge, source: fromRack ?? edge.source, target: toRack ?? edge.target, sourcePort: fromRack ? '' : edge.sourcePort, targetPort: toRack ? '' : edge.targetPort, label: `${rawById.get(edge.source).label}${fromPort ? ` Port ${fromPort.index}` : ''} → ${rawById.get(edge.target).label}${toPort ? ` Port ${toPort.index}` : ''}` };
+        })
+    };
+
+    // What the current view is drawing, and the lookups built from it.
+    let graph = raw;
+    let nodesById = null;
+    let sources = null;
+    let incoming = null;
+    let uplinkPortIds = null;
+    const useView = data => {
+        graph = data;
+        nodesById = new Map(graph.nodes.map(node => [node.id, node]));
+        sources = new Set(graph.edges.map(edge => edge.source));
+        incoming = new Map();
+        graph.edges.filter(edge => edge.source !== edge.target).forEach(edge => incoming.set(edge.target, [...(incoming.get(edge.target) ?? []), edge]));
+        // Ports a device is fed from are drawn on its top edge so the incoming line plugs straight into them.
+        uplinkPortIds = new Set(graph.edges.filter(edge => edge.targetPort && edge.source !== edge.target).map(edge => edge.targetPort));
+    };
     const roundUp = (value, to) => Math.ceil(value / to) * to;
 
     // Measure names with the same font the labels are drawn in.
@@ -50,11 +83,6 @@
         return { width: roundUp(Math.max(textWidth(node.label, isInfrastructure(node)) + 28, node.ports.length ? portsWidth : 0), 8), height: node.ports.length ? 44 : 32 };
     };
 
-    const sources = new Set(graph.edges.map(edge => edge.source));
-    const incoming = new Map();
-    graph.edges.filter(edge => edge.source !== edge.target).forEach(edge => incoming.set(edge.target, [...(incoming.get(edge.target) ?? []), edge]));
-    // Ports a device is fed from are drawn on its top edge so the incoming line plugs straight into them.
-    const uplinkPortIds = new Set(graph.edges.filter(edge => edge.targetPort && edge.source !== edge.target).map(edge => edge.targetPort));
     const portY = (port, height) => uplinkPortIds.has(port.id) ? -portSize : height;
     const portX = index => padding + index * (portSize + portGap);
 
@@ -590,6 +618,7 @@
     let renderId = 0;
     const render = async mode => {
         const id = ++renderId;
+        useView(mode === 'unifi' ? raw : collapsed);
         tabs.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.view === mode));
         details.textContent = defaultDetails;
         if (mode === 'floorplan' && !graph.floors.length) {

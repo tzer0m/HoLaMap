@@ -39,5 +39,10 @@ namespace HoLaMap.Graph
         /// The ID of the room the device is in, or empty if unplaced.
         /// </summary>
         public string Room { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The ID of the rack the device is in, or empty if it isn't in one.
+        /// </summary>
+        public string Rack { get; set; } = string.Empty;
     }
 }

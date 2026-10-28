@@ -19,5 +19,10 @@ namespace HoLaMap.Graph
         /// The floors and their rooms.
         /// </summary>
         public List<GraphFloor> Floors { get; set; } = [];
+
+        /// <summary>
+        /// The racks.
+        /// </summary>
+        public List<GraphRack> Racks { get; set; } = [];
     }
 }
