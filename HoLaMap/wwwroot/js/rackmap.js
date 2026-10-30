@@ -172,7 +172,7 @@ window.RackMap = (function () {
             }
             carried.forEach(edge => routed.add(edge.id));
             const base = carried[0];
-            const style = base ? { style: base.style, poE: base.poE, online: base.online, detail: base.detail } : defaultStyle;
+            const style = base ? { style: base.style, poE: base.poE, online: base.online, detail: base.detail, route: start } : { ...defaultStyle, route: start };
             route.path.forEach(socket => styleOf.set(socket, style));
             if (!route.far && base) {
                 inferred.push({ ...style, id: `${route.end}-inferred`, source: panelOf(route.end), sourcePort: route.end, target: matches(base, 'source', near) ? base.target : base.source, targetPort: matches(base, 'source', near) ? base.targetPort : base.sourcePort, back: route.end.endsWith('-r') });
@@ -602,9 +602,13 @@ window.RackMap = (function () {
             svg.querySelectorAll('.related').forEach(element => element.classList.remove('related'));
             info.textContent = defaultInfo;
         };
-        const focus = (cableList, deviceIds, text) => {
+        // Selecting a cable that runs through a patch panel lights up its whole route, from device to device.
+        const focus = (picked, picks, text) => {
             clear();
             svg.classList.add('focusing');
+            const routes = new Set(picked.map(cable => cable.edge.route).filter(route => route));
+            const cableList = [...new Set([...picked, ...cables.filter(cable => routes.has(cable.edge.route))])];
+            const deviceIds = [...picks, ...cableList.flatMap(cable => [cable.from, cable.to].filter(end => end).map(end => end.box.node.id))];
             cableList.forEach(cable => svg.querySelectorAll(`[data-edge="${cable.edge.id}"]`).forEach(element => element.classList.add('related')));
             deviceIds.forEach(id => svg.querySelectorAll(`[data-node="${id}"]`).forEach(element => element.classList.add('related')));
             info.textContent = text;
