@@ -51,6 +51,11 @@ namespace HoLaMap.Graph
         public bool PoE { get; set; }
 
         /// <summary>
+        /// Whether a PoE splitter sits inline on the cable, just before the target device.
+        /// </summary>
+        public bool Splitter { get; set; }
+
+        /// <summary>
         /// Whether the downstream device was seen by the last few syncs.
         /// </summary>
         public bool Online { get; set; }

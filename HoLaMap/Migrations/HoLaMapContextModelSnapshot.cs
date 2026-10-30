@@ -179,6 +179,9 @@ namespace HoLaMap.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
+                    b.Property<bool>("PoESplitter")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasColumnType("text");

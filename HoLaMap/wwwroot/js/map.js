@@ -5,9 +5,9 @@
     const tabs = document.getElementById('view-tabs');
     const colours = { 'port-wan': '#1e88c8', 'port-1000': '#4a8a1c', 'port-100': '#e6c229', 'port-10': '#e67e22', 'port-down': '#7b8794' };
     const darkText = ['port-100', 'port-down'];
-    // PoE cables are drawn in a darker shade of their speed colour.
+    // Cables are drawn in a darker shade of their speed colour, and PoE cables in the full colour so they stand out.
     const darken = hex => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.substr(i, 2), 16) * 0.65).toString(16).padStart(2, '0')).join('');
-    const cableColour = edge => edge.poE ? darken(colours[edge.style] ?? '#7b8794') : colours[edge.style] ?? '#7b8794';
+    const cableColour = edge => edge.poE ? colours[edge.style] ?? '#7b8794' : darken(colours[edge.style] ?? '#7b8794');
     const portSize = 16;
     const portGap = 4;
     const padding = 12;
@@ -184,12 +184,46 @@
         const d = roundedPath(clean);
         const group = create('g', { class: 'map-edge' + (edge.online ? '' : ' offline'), 'data-edge': edge.id }, parent);
         create('path', { d: d, class: 'map-edge-hit' }, group);
-        create('path', { d: edge.poE ? zigzagPath(clean) : d, class: 'map-edge-line', stroke: cableColour(edge) }, group);
+        drawLine(edge, clean, 'map-edge-line', group, true);
         group.addEventListener('click', event => {
             event.stopPropagation();
             showDetails(`${nodesById.get(edge.source).label} → ${nodesById.get(edge.target).label} (${edge.label})`, edge.detail);
             focusEdges([edge]);
         });
+    };
+
+    // A PoE splitter sits inline near the end of a cable. The cable carries PoE up to it and plain Ethernet after it.
+    const splitAt = (points, distance) => {
+        let remaining = distance;
+        for (let i = points.length - 1; i > 0; i--) {
+            const from = points[i - 1];
+            const to = points[i];
+            const length = Math.hypot(to.x - from.x, to.y - from.y);
+            if (length >= remaining && length > 0) {
+                const at = { x: to.x + (from.x - to.x) * remaining / length, y: to.y + (from.y - to.y) * remaining / length };
+                return { before: [...points.slice(0, i), at], after: [at, ...points.slice(i)], at: at, vertical: from.x === to.x };
+            }
+            remaining -= length;
+        }
+        return null;
+    };
+    const pathLength = points => points.slice(1).reduce((sum, point, index) => sum + Math.hypot(point.x - points[index].x, point.y - points[index].y), 0);
+    const drawSplitter = (at, vertical, colour, parent) => {
+        const group = create('g', { class: 'poe-splitter', transform: `translate(${at.x}, ${at.y})${vertical ? ' rotate(90)' : ''}` }, parent);
+        create('polygon', { points: '-13,6 -7,-6 13,-6 7,6', stroke: colour }, group);
+        create('path', { d: 'M -1 -4 L -4 1 L 1 1 L -2 5', stroke: colour }, group);
+        create('title', {}, group).textContent = 'PoE Splitter';
+    };
+    // Draws a cable's line, split at its PoE splitter when it has one: full colour with the zigzag up to the splitter, the plain darker shade after it.
+    const drawLine = (edge, clean, lineClass, parent, splitterAtEnd) => {
+        const split = edge.splitter && splitterAtEnd !== null ? splitAt(splitterAtEnd ? clean : [...clean].reverse(), Math.min(40, pathLength(clean) * 0.3)) : null;
+        if (!split) {
+            create('path', { d: edge.poE && !edge.back ? zigzagPath(clean) : roundedPath(clean), class: lineClass, stroke: cableColour(edge) }, parent);
+            return;
+        }
+        create('path', { d: edge.back ? roundedPath(split.before) : zigzagPath(split.before), class: lineClass, stroke: colours[edge.style] ?? '#7b8794' }, parent);
+        create('path', { d: roundedPath(split.after), class: lineClass, stroke: cableColour({ ...edge, poE: false }) }, parent);
+        drawSplitter(split.at, split.vertical, colours[edge.style] ?? '#7b8794', parent);
     };
 
     // A device with its ports, or just its name when compact.

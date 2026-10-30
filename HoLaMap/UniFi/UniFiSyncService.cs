@@ -197,11 +197,16 @@ namespace HoLaMap.UniFi
                     action.LastSeen = now;
                     continue;
                 }
+                // A device that moved port keeps its PoE splitter, since the splitter travels with the device's cable.
+                bool splitter = false;
                 foreach (Link moved in links.Where(link => link.ToDeviceId == device.Id && link.Source == LinkSource.UniFi).ToList())
                 {
+                    splitter |= moved.PoESplitter;
                     RemoveLink(links, moved);
                 }
-                AddLink(links, port, device).LastSeen = now;
+                Link added = AddLink(links, port, device);
+                added.LastSeen = now;
+                added.PoESplitter = splitter;
                 RemoveActions(actions, device.Id);
             }
             await context.SaveChangesAsync(cancellationToken);

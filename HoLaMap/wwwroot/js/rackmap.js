@@ -3,9 +3,9 @@ window.RackMap = (function () {
     const svgNs = 'http://www.w3.org/2000/svg';
     const colours = { 'patch': '#b0b4bc', 'port-wan': '#1e88c8', 'port-1000': '#4a8a1c', 'port-100': '#e6c229', 'port-10': '#e67e22', 'port-down': '#7b8794' };
     const darkText = ['patch', 'port-100', 'port-down'];
-    // PoE cables are drawn in a darker shade of their speed colour.
+    // Cables are drawn in a darker shade of their speed colour, and PoE cables in the full colour so they stand out.
     const darken = hex => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.substr(i, 2), 16) * 0.65).toString(16).padStart(2, '0')).join('');
-    const cableColour = edge => edge.poE ? darken(colours[edge.style] ?? '#7b8794') : colours[edge.style] ?? '#7b8794';
+    const cableColour = edge => edge.poE ? colours[edge.style] ?? '#7b8794' : darken(colours[edge.style] ?? '#7b8794');
     const unitHeight = 44;
     const columnWidth = 150;
     const columns = 4;
@@ -81,6 +81,40 @@ window.RackMap = (function () {
             const after = distinct[index + 1];
             return !((before.x === point.x && point.x === after.x) || (before.y === point.y && point.y === after.y));
         });
+    };
+
+    // A PoE splitter sits inline near the end of a cable. The cable carries PoE up to it and plain Ethernet after it.
+    const splitAt = (points, distance) => {
+        let remaining = distance;
+        for (let i = points.length - 1; i > 0; i--) {
+            const from = points[i - 1];
+            const to = points[i];
+            const length = Math.hypot(to.x - from.x, to.y - from.y);
+            if (length >= remaining && length > 0) {
+                const at = { x: to.x + (from.x - to.x) * remaining / length, y: to.y + (from.y - to.y) * remaining / length };
+                return { before: [...points.slice(0, i), at], after: [at, ...points.slice(i)], at: at, vertical: from.x === to.x };
+            }
+            remaining -= length;
+        }
+        return null;
+    };
+    const pathLength = points => points.slice(1).reduce((sum, point, index) => sum + Math.hypot(point.x - points[index].x, point.y - points[index].y), 0);
+    const drawSplitter = (at, vertical, colour, parent) => {
+        const group = create('g', { class: 'poe-splitter', transform: `translate(${at.x}, ${at.y})${vertical ? ' rotate(90)' : ''}` }, parent);
+        create('polygon', { points: '-13,6 -7,-6 13,-6 7,6', stroke: colour }, group);
+        create('path', { d: 'M -1 -4 L -4 1 L 1 1 L -2 5', stroke: colour }, group);
+        create('title', {}, group).textContent = 'PoE Splitter';
+    };
+    // Draws a cable's line, split at its PoE splitter when it has one: full colour with the zigzag up to the splitter, the plain darker shade after it.
+    const drawLine = (edge, clean, lineClass, parent, splitterAtEnd) => {
+        const split = edge.splitter && splitterAtEnd !== null ? splitAt(splitterAtEnd ? clean : [...clean].reverse(), Math.min(40, pathLength(clean) * 0.3)) : null;
+        if (!split) {
+            create('path', { d: edge.poE && !edge.back ? zigzagPath(clean) : roundedPath(clean), class: lineClass, stroke: cableColour(edge) }, parent);
+            return;
+        }
+        create('path', { d: edge.back ? roundedPath(split.before) : zigzagPath(split.before), class: lineClass, stroke: colours[edge.style] ?? '#7b8794' }, parent);
+        create('path', { d: roundedPath(split.after), class: lineClass, stroke: cableColour({ ...edge, poE: false }) }, parent);
+        drawSplitter(split.at, split.vertical, colours[edge.style] ?? '#7b8794', parent);
     };
 
     // Gives each interval the lowest track no overlapping interval already holds, shortest first so short runs stay close in.
@@ -172,7 +206,7 @@ window.RackMap = (function () {
             }
             carried.forEach(edge => routed.add(edge.id));
             const base = carried[0];
-            const style = base ? { style: base.style, poE: base.poE, online: base.online, detail: base.detail, route: start } : { ...defaultStyle, route: start };
+            const style = base ? { style: base.style, poE: base.poE, online: base.online, detail: base.detail, route: start, splitter: base.splitter, splitterAt: base.target } : { ...defaultStyle, route: start };
             route.path.forEach(socket => styleOf.set(socket, style));
             if (!route.far && base) {
                 inferred.push({ ...style, id: `${route.end}-inferred`, source: panelOf(route.end), sourcePort: route.end, target: matches(base, 'source', near) ? base.target : base.source, targetPort: matches(base, 'source', near) ? base.targetPort : base.sourcePort, back: route.end.endsWith('-r') });
@@ -681,7 +715,11 @@ window.RackMap = (function () {
             const clean = tidy(points);
             const group = create('g', { class: 'rackmap-cable' + (cable.edge.online ? '' : ' offline') + (cable.edge.back ? ' back' : ''), 'data-edge': cable.edge.id }, cableLayer);
             create('path', { d: roundedPath(clean), class: 'rackmap-cable-hit' }, group);
-            create('path', { d: cable.edge.poE && !cable.edge.back ? zigzagPath(clean) : roundedPath(clean), class: 'rackmap-cable-line', stroke: cableColour(cable.edge) }, group);
+            // The splitter goes at the end of the cable nearest the device the link feeds.
+            const splitterNode = cable.edge.splitterAt ?? cable.edge.target;
+            const startNode = cable.external ? cable.inside.box.node.id : cable.from.box.node.id;
+            const endNode = cable.external ? (cable.inside === cable.from ? cable.edge.target : cable.edge.source) : cable.to.box.node.id;
+            drawLine(cable.edge, clean, 'rackmap-cable-line', group, endNode === splitterNode ? true : startNode === splitterNode ? false : null);
             group.addEventListener('click', event => {
                 event.stopPropagation();
                 focus([cable], endsOf(cable), describe(cable));

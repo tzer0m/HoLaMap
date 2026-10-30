@@ -54,5 +54,10 @@ namespace HoLaMap.Models
         /// Gets or sets when the sync last saw this link (UTC), or null for manual links.
         /// </summary>
         public DateTime? LastSeen { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether a PoE splitter sits inline on the cable, taking the power off before the far device.
+        /// </summary>
+        public bool PoESplitter { get; set; }
     }
 }

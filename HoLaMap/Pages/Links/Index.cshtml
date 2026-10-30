@@ -5,13 +5,13 @@
 }
 
 <header class="page-header">
-    <h1>Manual Links</h1>
+    <h1>Links</h1>
     <a class="button" asp-page="Create">Add Link</a>
 </header>
 
 @if (Model.Links.Count == 0)
 {
-    <p class="empty">No manual links yet. Add one for anything UniFi can't detect, like the WAN loopback.</p>
+    <p class="empty">No links yet. Add one for anything UniFi can't detect, like the WAN loopback.</p>
 }
 else
 {
@@ -20,7 +20,9 @@ else
             <tr>
                 <th>From</th>
                 <th>To</th>
+                <th>Source</th>
                 <th>Notes</th>
+                <th>PoE Splitter</th>
                 <th></th>
             </tr>
         </thead>
@@ -30,11 +32,20 @@ else
                 <tr>
                     <td>@link.FromPort.Device.Name Port @link.FromPort.Index</td>
                     <td>@link.ToDevice.Name@(link.ToPort != null ? $" Port {link.ToPort.Index}" : "")</td>
+                    <td>@link.Source</td>
                     <td>@link.Notes</td>
                     <td>
-                        <form method="post" asp-page-handler="Delete" asp-route-id="@link.Id">
-                            <button type="submit" class="button button-danger">Delete</button>
+                        <form method="post" asp-page-handler="Splitter" asp-route-id="@link.Id">
+                            <button type="submit" class="button@(link.PoESplitter ? "" : " button-secondary")">@(link.PoESplitter ? "Yes" : "No")</button>
                         </form>
+                    </td>
+                    <td>
+                        @if (link.Source == LinkSource.Manual)
+                        {
+                            <form method="post" asp-page-handler="Delete" asp-route-id="@link.Id">
+                                <button type="submit" class="button button-danger">Delete</button>
+                            </form>
+                        }
                     </td>
                 </tr>
             }
