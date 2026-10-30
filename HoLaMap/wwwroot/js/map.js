@@ -145,6 +145,22 @@
         });
     };
 
+    // Clicking a rack opens a drawing of the rack and its cables over the map.
+    const rackDialog = document.getElementById('rack-dialog');
+    const openRack = id => {
+        const rack = raw.racks.find(item => item.id === id);
+        rackDialog.querySelector('[data-title]').textContent = rack.name;
+        rackDialog.querySelector('[data-edit]').href = rackDialog.dataset.rackUrl.replace(/0$/, id.substring(1));
+        window.RackMap.draw(rackDialog.querySelector('[data-body]'), raw, id);
+        rackDialog.showModal();
+    };
+    rackDialog.querySelector('[data-close]').addEventListener('click', () => rackDialog.close());
+    rackDialog.addEventListener('click', event => {
+        if (event.target === rackDialog) {
+            rackDialog.close();
+        }
+    });
+
     const showDetails = (title, body) => {
         details.replaceChildren();
         const heading = document.createElement('strong');
@@ -180,6 +196,9 @@
             event.stopPropagation();
             showDetails(node.label, node.detail);
             focusNode(node.id);
+            if (node.kind === 'rack') {
+                openRack(node.id);
+            }
         });
         if (compact) {
             return;

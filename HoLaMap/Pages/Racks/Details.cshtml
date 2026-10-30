@@ -124,4 +124,12 @@
             </div>
         </form>
     </div>
+    <section class="rack-cables">
+        <h2>Cables</h2>
+        <div class="rackmap" data-rack-map="k@(Model.Rack.Id)" data-graph-url="@Url.Page("/Index", "Graph")"></div>
+    </section>
 </div>
+
+@section Scripts {
+    <script src="~/js/rackmap.js" asp-append-version="true"></script>
+}

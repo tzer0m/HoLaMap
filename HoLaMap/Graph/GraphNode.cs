@@ -44,5 +44,25 @@ namespace HoLaMap.Graph
         /// The ID of the rack the device is in, or empty if it isn't in one.
         /// </summary>
         public string Rack { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The lowest rack unit the device occupies, counting from 1 at the bottom, or 0 if it isn't in a rack.
+        /// </summary>
+        public int RackU { get; set; }
+
+        /// <summary>
+        /// The left column the device occupies in its rack, from 0 to 3.
+        /// </summary>
+        public int RackColumn { get; set; }
+
+        /// <summary>
+        /// How many of the rack's four columns the device is wide.
+        /// </summary>
+        public int RackWidth { get; set; }
+
+        /// <summary>
+        /// How many rack units tall the device is.
+        /// </summary>
+        public int RackHeight { get; set; }
     }
 }

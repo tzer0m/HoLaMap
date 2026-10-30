@@ -27,7 +27,17 @@
     <aside id="details" class="details">Select a device or link to see its details.</aside>
 </div>
 
+<dialog id="rack-dialog" class="rack-dialog" data-rack-url="@Url.Page("/Racks/Details", new { id = 0 })">
+    <header class="rack-dialog-header">
+        <strong data-title></strong>
+        <a class="button button-secondary" data-edit>Edit Rack</a>
+        <button type="button" class="button button-secondary" data-close>Close</button>
+    </header>
+    <div class="rackmap" data-body></div>
+</dialog>
+
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>
+    <script src="~/js/rackmap.js" asp-append-version="true"></script>
     <script src="~/js/map.js" asp-append-version="true"></script>
 }

@@ -742,3 +742,147 @@ body {
 .map-labels {
     pointer-events: none;
 }
+
+.rack-dialog {
+    max-width: 95vw;
+    max-height: 92vh;
+    padding: 16px;
+    border: 1px solid #4a5068;
+    border-radius: 8px;
+    background: #12151b;
+    color: #e6e6e6;
+}
+
+.rack-dialog::backdrop {
+    background: rgb(0 0 0 / 60%);
+}
+
+.rack-dialog-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.rack-dialog-header strong {
+    flex: 1;
+    font-size: 1.1rem;
+}
+
+.rackmap {
+    overflow: auto;
+}
+
+.rackmap-svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+.rackmap-info {
+    margin: 8px 0 0;
+    color: #9aa3b5;
+    font-size: 0.85rem;
+}
+
+.rackmap-frame {
+    fill: #2a2f3a;
+    stroke: #8a90b0;
+    stroke-width: 2;
+}
+
+.rackmap-inside {
+    fill: #14171d;
+}
+
+.rackmap-manager {
+    fill: #1b1f27;
+}
+
+.rackmap-unit {
+    fill: none;
+    stroke: #232833;
+}
+
+.rackmap-u {
+    fill: #9aa3b5;
+    font-size: 11px;
+    text-anchor: end;
+}
+
+.rackmap-device,
+.rackmap-cable,
+.rackmap-out-label {
+    cursor: pointer;
+}
+
+.rackmap-device-box {
+    fill: #4a5068;
+    stroke: #8a90b0;
+    stroke-width: 1.5;
+}
+
+.rackmap-device.gateway .rackmap-device-box,
+.rackmap-device.switch .rackmap-device-box,
+.rackmap-device.accesspoint .rackmap-device-box {
+    fill: #2f5d94;
+    stroke: #6f9bd1;
+}
+
+.rackmap-device-label {
+    fill: #fff;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.rackmap-port-box {
+    stroke: #14171d;
+}
+
+.rackmap-port-label {
+    fill: #fff;
+    font-size: 8px;
+    font-weight: 700;
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+.rackmap-port-label.dark {
+    fill: #1d2228;
+}
+
+.rackmap-cable-line {
+    fill: none;
+    stroke-width: 2.5;
+}
+
+.rackmap-cable-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 10;
+}
+
+.rackmap-cable:hover .rackmap-cable-line {
+    stroke-width: 4;
+}
+
+.rackmap-out-label {
+    fill: #e6e6e6;
+    font-size: 12px;
+}
+
+.rackmap-device.offline,
+.rackmap-cable.offline {
+    opacity: 0.4;
+}
+
+.rackmap-svg.focusing .rackmap-device:not(.related),
+.rackmap-svg.focusing .rackmap-cable:not(.related),
+.rackmap-svg.focusing .rackmap-out-label:not(.related) {
+    opacity: 0.15;
+}
+
+.rack-cables h2 {
+    margin: 0 0 8px;
+    font-size: 1.1rem;
+}

@@ -29,5 +29,10 @@ namespace HoLaMap.Graph
         /// Whether any device in the rack was seen by the last few syncs, or the rack is empty.
         /// </summary>
         public bool Online { get; set; }
+
+        /// <summary>
+        /// The rack height in units.
+        /// </summary>
+        public int HeightU { get; set; }
     }
 }
