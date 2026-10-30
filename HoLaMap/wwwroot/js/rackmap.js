@@ -304,6 +304,11 @@ window.RackMap = (function () {
         if (laneWidth) {
             create('rect', { x: frame + railWidth, y: frame, width: laneWidth - 4, height: frameBottom - frame * 2, class: 'rackmap-manager' }, svg);
         }
+        // A divider through the middle of each gap between units, drawn first so the devices and cables sit on top of it.
+        for (let b = 0; b <= height; b++) {
+            const middle = channelTop[b] + channelHeight[b] / 2;
+            create('line', { x1: frame, y1: middle, x2: frameRight - frame, y2: middle, class: 'rackmap-divider' }, svg);
+        }
         for (let unit = 1; unit <= height; unit++) {
             create('rect', { x: deviceLeft, y: unitTop[unit], width: deviceRight - deviceLeft, height: unitHeight, class: 'rackmap-unit' }, svg);
             create('text', { x: frame + railWidth - 8, y: unitTop[unit] + unitHeight / 2 + 4, class: 'rackmap-u' }, svg).textContent = unit;

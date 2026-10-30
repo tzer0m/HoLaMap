@@ -801,8 +801,12 @@ body {
 }
 
 .rackmap-unit {
-    fill: none;
-    stroke: #232833;
+    fill: #1a1d24;
+}
+
+.rackmap-divider {
+    stroke: #4a5068;
+    stroke-width: 1.5;
 }
 
 .rackmap-u {
