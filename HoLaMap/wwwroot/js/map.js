@@ -216,73 +216,106 @@
         const sizeFor = node => compact ? chipSize(node) : sizeOf(node);
         const stackEdgesByParent = new Map();
         group.edges.filter(edge => edge.source !== edge.target && !sources.has(edge.target) && nodesById.get(edge.target).kind === 'client' && incoming.get(edge.target).length === 1).forEach(edge => stackEdgesByParent.set(edge.source, [...(stackEdgesByParent.get(edge.source) ?? []), edge]));
-        const stacks = [...stackEdgesByParent.entries()].filter(([, edges]) => edges.length > 1).map(([parentId, edges]) => {
+
+        // A stack's lanes run down one side and each cable turns into its device from that side. Lanes on the left put the devices on the right, and the other way round.
+        const makeStacks = leftSide => [...stackEdgesByParent.entries()].filter(([, edges]) => edges.length > 1).map(([parentId, edges]) => {
             edges.sort((a, b) => ((portsById.get(a.sourcePort)?.index ?? 0) - (portsById.get(b.sourcePort)?.index ?? 0)) || nodesById.get(a.target).label.localeCompare(nodesById.get(b.target).label));
+            const id = `stack-${parentId}`;
+            const left = leftSide.has(id);
             const leafWidth = Math.max(...edges.map(edge => sizeFor(nodesById.get(edge.target)).width));
+            const lanesWidth = edges.length * laneGap + 16;
             let y = 0;
             const items = edges.map((edge, lane) => {
                 const size = sizeFor(nodesById.get(edge.target));
-                const item = { edge: edge, node: nodesById.get(edge.target), lane: lane, y: y, width: size.width, height: size.height };
+                const item = { edge: edge, node: nodesById.get(edge.target), lane: lane, x: left ? lanesWidth : leafWidth - size.width, y: y, width: size.width, height: size.height };
                 y += size.height + stackGap;
                 return item;
             });
-            return { id: `stack-${parentId}`, items: items, leafWidth: leafWidth, laneStart: leafWidth + 16, width: leafWidth + 16 + edges.length * laneGap, height: y - stackGap };
+            // The top device takes the lane nearest the devices so no two cables cross.
+            const laneX = lane => left ? (edges.length - 1 - lane) * laneGap + 4 : leafWidth + 16 + lane * laneGap;
+            return { id: id, parentId: parentId, left: left, items: items, laneX: laneX, entryX: left ? lanesWidth : leafWidth, width: leafWidth + lanesWidth, height: y - stackGap };
         });
-        const stackItemsByEdge = new Map(stacks.flatMap(stack => stack.items.map(item => [item.edge.id, { stack: stack, item: item }])));
-        const stackedNodeIds = new Set(stacks.flatMap(stack => stack.items.map(item => item.node.id)));
 
-        const elkGraph = {
-            id: 'root',
-            layoutOptions: {
-                'elk.algorithm': 'layered',
-                'elk.direction': 'DOWN',
-                'elk.edgeRouting': 'ORTHOGONAL',
-                'elk.layered.spacing.nodeNodeBetweenLayers': '50',
-                'elk.layered.spacing.edgeNodeBetweenLayers': '20',
-                'elk.layered.spacing.edgeEdgeBetweenLayers': '10',
-                'elk.spacing.nodeNode': '24',
-                'elk.spacing.edgeEdge': '10',
-                'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-                'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
-                ...(aspect ? { 'elk.aspectRatio': String(aspect) } : {})
-            },
-            children: [
-                ...group.nodes.filter(node => !stackedNodeIds.has(node.id)).map(node => {
-                    const size = sizeFor(node);
-                    return {
-                        id: node.id,
-                        width: size.width,
-                        height: size.height,
+        const run = async leftSide => {
+            const stacks = makeStacks(leftSide);
+            const stackItemsByEdge = new Map(stacks.flatMap(stack => stack.items.map(item => [item.edge.id, { stack: stack, item: item }])));
+            const stackedNodeIds = new Set(stacks.flatMap(stack => stack.items.map(item => item.node.id)));
+            // Chips have no ports, so each cable gets its own spot along the bottom and ELK spreads them out rather than running them on top of each other.
+            const outgoing = new Map();
+            group.edges.forEach(edge => outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge]));
+            const elkGraph = {
+                id: 'root',
+                layoutOptions: {
+                    'elk.algorithm': 'layered',
+                    'elk.direction': 'DOWN',
+                    'elk.edgeRouting': 'ORTHOGONAL',
+                    'elk.layered.spacing.nodeNodeBetweenLayers': '50',
+                    'elk.layered.spacing.edgeNodeBetweenLayers': '20',
+                    'elk.layered.spacing.edgeEdgeBetweenLayers': '10',
+                    'elk.spacing.nodeNode': '24',
+                    'elk.spacing.edgeEdge': '10',
+                    'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+                    'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+                    ...(aspect ? { 'elk.aspectRatio': String(aspect) } : {})
+                },
+                children: [
+                    ...group.nodes.filter(node => !stackedNodeIds.has(node.id)).map(node => {
+                        const size = sizeFor(node);
+                        if (compact) {
+                            return {
+                                id: node.id,
+                                width: size.width,
+                                height: size.height,
+                                layoutOptions: { 'elk.portConstraints': 'FIXED_SIDE', 'elk.spacing.portPort': '8' },
+                                ports: [{ id: `${node.id}-in`, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } }, ...(outgoing.get(node.id) ?? []).map(edge => ({ id: `${edge.id}-from`, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'SOUTH' } }))]
+                            };
+                        }
+                        return {
+                            id: node.id,
+                            width: size.width,
+                            height: size.height,
+                            layoutOptions: { 'elk.portConstraints': 'FIXED_POS' },
+                            ports: [
+                                { id: `${node.id}-in`, x: size.width / 2, y: 0, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } },
+                                { id: `${node.id}-out`, x: size.width / 2, y: size.height, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'SOUTH' } },
+                                ...node.ports.map((port, index) => ({ id: port.id, x: portX(index), y: portY(port, size.height), width: portSize, height: portSize, layoutOptions: { 'elk.port.side': uplinkPortIds.has(port.id) ? 'NORTH' : 'SOUTH' } }))
+                            ]
+                        };
+                    }),
+                    ...stacks.map(stack => ({
+                        id: stack.id,
+                        width: stack.width,
+                        height: stack.height,
                         layoutOptions: { 'elk.portConstraints': 'FIXED_POS' },
-                        ports: [
-                            { id: `${node.id}-in`, x: size.width / 2, y: 0, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } },
-                            { id: `${node.id}-out`, x: size.width / 2, y: size.height, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'SOUTH' } },
-                            ...(compact ? [] : node.ports).map((port, index) => ({ id: port.id, x: portX(index), y: portY(port, size.height), width: portSize, height: portSize, layoutOptions: { 'elk.port.side': uplinkPortIds.has(port.id) ? 'NORTH' : 'SOUTH' } }))
-                        ]
-                    };
-                }),
-                ...stacks.map(stack => ({
-                    id: stack.id,
-                    width: stack.width,
-                    height: stack.height,
-                    layoutOptions: { 'elk.portConstraints': 'FIXED_POS' },
-                    ports: stack.items.map(item => ({ id: `${stack.id}-lane-${item.lane}`, x: stack.laneStart + item.lane * laneGap, y: 0, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } }))
-                }))
-            ],
-            edges: group.edges.map(edge => {
-                const stacked = stackItemsByEdge.get(edge.id);
-                const target = stacked ? `${stacked.stack.id}-lane-${stacked.item.lane}` : edge.targetPort || `${edge.target}-in`;
-                return { id: edge.id, sources: [(compact ? '' : edge.sourcePort) || `${edge.source}-out`], targets: [compact && !stacked ? `${edge.target}-in` : target] };
-            })
+                        ports: stack.items.map(item => ({ id: `${stack.id}-lane-${item.lane}`, x: stack.laneX(item.lane), y: 0, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } }))
+                    }))
+                ],
+                edges: group.edges.map(edge => {
+                    const stacked = stackItemsByEdge.get(edge.id);
+                    const target = stacked ? `${stacked.stack.id}-lane-${stacked.item.lane}` : compact ? `${edge.target}-in` : edge.targetPort || `${edge.target}-in`;
+                    return { id: edge.id, sources: [compact ? `${edge.id}-from` : edge.sourcePort || `${edge.source}-out`], targets: [target] };
+                })
+            };
+            const layout = await new ELK().layout(elkGraph);
+            return { layout: layout, stacks: stacks, stackItemsByEdge: stackItemsByEdge };
         };
-        const layout = await new ELK().layout(elkGraph);
-        const layoutById = new Map(layout.children.map(child => [child.id, child]));
 
+        // On the Floor Plan, lay out once, then put each stack's lanes on whichever side faces the device feeding it and lay out again.
+        let pass = await run(new Set());
+        if (compact && pass.stacks.length) {
+            const byId = new Map(pass.layout.children.map(child => [child.id, child]));
+            const leftSide = new Set(pass.stacks.filter(stack => byId.has(stack.parentId) && byId.get(stack.id).x + byId.get(stack.id).width / 2 > byId.get(stack.parentId).x + byId.get(stack.parentId).width / 2).map(stack => stack.id));
+            if (leftSide.size) {
+                pass = await run(leftSide);
+            }
+        }
+        const { layout, stacks, stackItemsByEdge } = pass;
+        const layoutById = new Map(layout.children.map(child => [child.id, child]));
         const placements = [];
         layout.children.forEach(child => {
             const stack = stacks.find(candidate => candidate.id === child.id);
             if (stack) {
-                stack.items.forEach(item => placements.push({ node: item.node, x: child.x + stack.leafWidth - item.width, y: child.y + item.y, width: item.width, height: item.height, stacked: true }));
+                stack.items.forEach(item => placements.push({ node: item.node, x: child.x + item.x, y: child.y + item.y, width: item.width, height: item.height, stacked: true }));
             } else {
                 placements.push({ node: nodesById.get(child.id), x: child.x, y: child.y, width: child.width, height: child.height, stacked: false });
             }
@@ -301,7 +334,7 @@
                     // Continue down the lane, then turn into the side of the stacked device.
                     const stackLayout = result.layoutById.get(stacked.stack.id);
                     const centreY = stackLayout.y + stacked.item.y + stacked.item.height / 2;
-                    points.push({ x: section.endPoint.x, y: centreY }, { x: stackLayout.x + stacked.stack.leafWidth, y: centreY });
+                    points.push({ x: section.endPoint.x, y: centreY }, { x: stackLayout.x + stacked.stack.entryX, y: centreY });
                 }
                 drawEdge(edge, points, layers.edges);
             });
