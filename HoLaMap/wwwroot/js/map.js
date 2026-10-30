@@ -72,8 +72,11 @@
     // Size each device to fit its name and a row of port squares along the bottom.
     const sizeOf = node => {
         const portsWidth = node.ports.length * (portSize + portGap) - portGap + padding * 2;
+        // Racks are square so they stand out, and wide enough for a connection point per cable along each edge.
         if (node.kind === 'rack') {
-            return { width: roundUp(Math.max(textWidth(node.label, true) + 40, 120), 8), height: 48 };
+            const cables = Math.max(graph.edges.filter(edge => edge.target === node.id).length, graph.edges.filter(edge => edge.source === node.id).length);
+            const side = roundUp(Math.max(textWidth(node.label, true) + 32, cables * 10 + 20, 96), 8);
+            return { width: side, height: side };
         }
         return { width: roundUp(Math.max(textWidth(node.label, isInfrastructure(node)) + 28, node.ports.length ? portsWidth : 0), 8), height: node.ports.length ? 44 : 32 };
     };
@@ -238,7 +241,13 @@
     };
 
     // A device drawn as just its name, used on the Floor Plan view.
-    const chipSize = node => ({ width: roundUp(textWidth(node.label, isInfrastructure(node)) + 16, 8), height: chipHeight });
+    const chipSize = node => {
+        if (node.kind === 'rack') {
+            const side = roundUp(Math.max(textWidth(node.label, true) + 16, 64), 8);
+            return { width: side, height: side };
+        }
+        return { width: roundUp(textWidth(node.label, isInfrastructure(node)) + 16, 8), height: chipHeight };
+    };
 
     // Lays out a set of devices with ELK and routes their lines. Client devices at the end of a chain are stacked in a column under their parent instead of spreading sideways.
     // Compact lays devices out as name-only chips; aspect asks ELK to pack separate groups to roughly that width-to-height ratio.

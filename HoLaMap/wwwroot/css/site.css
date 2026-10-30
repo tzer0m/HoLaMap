@@ -675,8 +675,8 @@ body {
 }
 
 .map-node.rack .map-node-box {
-    fill: #3a414d;
-    stroke: #8a90b0;
+    fill: #232427;
+    stroke: #b0b4bc;
 }
 
 .map-node.rack .map-node-label {
@@ -684,7 +684,8 @@ body {
 }
 
 .room-rack {
-    background: #5c6475;
+    border: 1px solid #b0b4bc;
+    background: #232427;
     color: #fff;
     text-decoration: none;
 }
@@ -786,8 +787,8 @@ body {
 }
 
 .rackmap-frame {
-    fill: #2a2f3a;
-    stroke: #8a90b0;
+    fill: #232427;
+    stroke: #b0b4bc;
     stroke-width: 2;
 }
 
