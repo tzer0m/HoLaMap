@@ -21,6 +21,12 @@ namespace HoLaMap.Pages.Racks
         public int? EditId { get; set; }
 
         /// <summary>
+        /// The ID of the panel being edited.
+        /// </summary>
+        [BindProperty(SupportsGet = true, Name = "panel")]
+        public int? EditPanelId { get; set; }
+
+        /// <summary>
         /// The rack being shown.
         /// </summary>
         public Rack Rack { get; private set; } = null!;
@@ -34,6 +40,16 @@ namespace HoLaMap.Pages.Racks
         /// The placed device being edited, if any.
         /// </summary>
         public Device? Editing { get; private set; }
+
+        /// <summary>
+        /// The blank and brush panels in the rack.
+        /// </summary>
+        public List<RackPanel> Panels { get; private set; } = [];
+
+        /// <summary>
+        /// The panel being edited, if any.
+        /// </summary>
+        public RackPanel? EditingPanel { get; private set; }
 
         /// <summary>
         /// The devices that can be added to the rack.
@@ -81,7 +97,7 @@ namespace HoLaMap.Pages.Racks
             {
                 return RedirectToPage(new { id });
             }
-            string? problem = Check(device, u, column, width, height);
+            string? problem = Check(device.Id, null, u, column, width, height);
             if (problem != null)
             {
                 Error = problem;
@@ -119,6 +135,66 @@ namespace HoLaMap.Pages.Racks
         }
 
         /// <summary>
+        /// Adds a blank or brush panel to the rack, or changes one already in it.
+        /// </summary>
+        /// <param name="id">The rack ID.</param>
+        /// <param name="panelId">The panel to change, or null to add a new one.</param>
+        /// <param name="kind">The kind of panel.</param>
+        /// <param name="u">The lowest unit the panel occupies.</param>
+        /// <param name="column">The left column from 0 to 3.</param>
+        /// <param name="width">The width in columns: 1, 2 or 4.</param>
+        /// <param name="height">The height in units.</param>
+        /// <returns>A redirect back to the rack, or the page again if the spot is not valid.</returns>
+        public async Task<IActionResult> OnPostPlacePanelAsync(int id, int? panelId, RackPanelKind kind, int u, int column, int width, int height)
+        {
+            if (!await LoadAsync(id))
+            {
+                return NotFound();
+            }
+            RackPanel? panel = panelId == null ? new RackPanel { RackId = id } : await context.RackPanels.FirstOrDefaultAsync(item => item.Id == panelId && item.RackId == id);
+            if (panel == null)
+            {
+                return RedirectToPage(new { id });
+            }
+            string? problem = Check(null, panelId, u, column, width, height);
+            if (problem != null)
+            {
+                Error = problem;
+                EditPanelId = panelId;
+                EditingPanel = Panels.FirstOrDefault(item => item.Id == panelId);
+                return Page();
+            }
+            panel.Kind = kind;
+            panel.RackU = u;
+            panel.RackColumn = column;
+            panel.RackWidth = width;
+            panel.RackHeight = height;
+            if (panelId == null)
+            {
+                context.RackPanels.Add(panel);
+            }
+            await context.SaveChangesAsync();
+            return RedirectToPage(new { id });
+        }
+
+        /// <summary>
+        /// Takes a panel out of the rack.
+        /// </summary>
+        /// <param name="id">The rack ID.</param>
+        /// <param name="panelId">The panel to remove.</param>
+        /// <returns>A redirect back to the rack.</returns>
+        public async Task<IActionResult> OnPostRemovePanelAsync(int id, int panelId)
+        {
+            RackPanel? panel = await context.RackPanels.FirstOrDefaultAsync(item => item.Id == panelId && item.RackId == id);
+            if (panel != null)
+            {
+                context.RackPanels.Remove(panel);
+                await context.SaveChangesAsync();
+            }
+            return RedirectToPage(new { id });
+        }
+
+        /// <summary>
         /// Changes the rack's name, room or height.
         /// </summary>
         /// <param name="id">The rack ID.</param>
@@ -133,7 +209,7 @@ namespace HoLaMap.Pages.Racks
                 return NotFound();
             }
             string trimmed = name?.Trim() ?? string.Empty;
-            int highest = Placed.Select(device => device.RackU!.Value + device.RackHeight - 1).DefaultIfEmpty(0).Max();
+            int highest = Placed.Select(device => device.RackU!.Value + device.RackHeight - 1).Concat(Panels.Select(panel => panel.RackU + panel.RackHeight - 1)).DefaultIfEmpty(0).Max();
             bool clash = await context.Racks.AnyAsync(rack => rack.Id != id && rack.RoomId == roomId && rack.Name == trimmed);
             if (trimmed.Length == 0 || clash || !await context.Rooms.AnyAsync(room => room.Id == roomId))
             {
@@ -142,7 +218,7 @@ namespace HoLaMap.Pages.Racks
             }
             if (heightU < Math.Max(1, highest))
             {
-                Error = $"Devices reach unit {highest}, so the rack can't be shorter than that.";
+                Error = $"Devices or panels reach unit {highest}, so the rack can't be shorter than that.";
                 return Page();
             }
             Rack existing = await context.Racks.Include(item => item.Devices).FirstAsync(item => item.Id == id);
@@ -176,6 +252,9 @@ namespace HoLaMap.Pages.Racks
             List<Device> placed = await context.Devices.Where(device => device.RackId == id).ToListAsync();
             Placed = [.. placed.OrderByDescending(device => device.RackU).ThenBy(device => device.RackColumn)];
             Editing = Placed.FirstOrDefault(device => device.Id == EditId);
+            List<RackPanel> panels = await context.RackPanels.Where(panel => panel.RackId == id).ToListAsync();
+            Panels = [.. panels.OrderByDescending(panel => panel.RackU).ThenBy(panel => panel.RackColumn)];
+            EditingPanel = Panels.FirstOrDefault(panel => panel.Id == EditPanelId);
             List<Device> others = await context.Devices.Where(device => device.RackId == null || device.RackId != id).Include(device => device.Rack).ToListAsync();
             Candidates = [.. others.OrderBy(device => device.Kind == DeviceKind.Client).ThenBy(device => device.Kind).ThenBy(device => device.Name)];
             RoomOptions = await RoomChoices.LoadAsync(context);
@@ -183,15 +262,16 @@ namespace HoLaMap.Pages.Racks
         }
 
         /// <summary>
-        /// Checks that a device fits in the rack at the given spot without touching another device.
+        /// Checks that a device or panel fits in the rack at the given spot without touching another device or panel.
         /// </summary>
-        /// <param name="device">The device being placed.</param>
+        /// <param name="deviceId">The device being placed, if it's a device.</param>
+        /// <param name="panelId">The panel being changed, if it's an existing panel.</param>
         /// <param name="u">The lowest unit.</param>
         /// <param name="column">The left column.</param>
         /// <param name="width">The width in columns.</param>
         /// <param name="height">The height in units.</param>
         /// <returns>A message if the spot is not valid, otherwise null.</returns>
-        private string? Check(Device device, int u, int column, int width, int height)
+        private string? Check(int? deviceId, int? panelId, int u, int column, int width, int height)
         {
             if (width != 1 && width != 2 && width != 4)
             {
@@ -203,10 +283,15 @@ namespace HoLaMap.Pages.Racks
             }
             if (u < 1 || height < 1 || u + height - 1 > Rack.HeightU)
             {
-                return $"The device must sit between unit 1 and unit {Rack.HeightU}.";
+                return $"It must sit between unit 1 and unit {Rack.HeightU}.";
             }
-            Device? clash = Placed.FirstOrDefault(other => other.Id != device.Id && u <= other.RackU!.Value + other.RackHeight - 1 && other.RackU!.Value <= u + height - 1 && column < other.RackColumn!.Value + other.RackWidth && other.RackColumn!.Value < column + width);
-            return clash == null ? null : $"That spot is taken by {clash.Name}.";
+            Device? clash = Placed.FirstOrDefault(other => other.Id != deviceId && u <= other.RackU!.Value + other.RackHeight - 1 && other.RackU!.Value <= u + height - 1 && column < other.RackColumn!.Value + other.RackWidth && other.RackColumn!.Value < column + width);
+            if (clash != null)
+            {
+                return $"That spot is taken by {clash.Name}.";
+            }
+            RackPanel? panel = Panels.FirstOrDefault(other => other.Id != panelId && u <= other.RackU + other.RackHeight - 1 && other.RackU <= u + height - 1 && column < other.RackColumn + other.RackWidth && other.RackColumn < column + width);
+            return panel == null ? null : $"That spot is taken by a {panel.Kind} Panel at unit {panel.RackU}.";
         }
     }
 }

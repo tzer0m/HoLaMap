@@ -341,6 +341,34 @@ window.RackMap = (function () {
         };
         const endsOf = cable => [cable.from, cable.to].filter(end => end).map(end => end.box.node.id);
 
+        // Blank and brush panels sit behind the cables like the devices, but have no ports.
+        (rack.panels ?? []).forEach(panel => {
+            const x = deviceLeft + panel.rackColumn * columnWidth + inset;
+            const top = unitTop[panel.rackU + panel.rackHeight - 1] + inset;
+            const width = panel.rackWidth * columnWidth - inset * 2;
+            const panelHeight = unitTop[panel.rackU] + unitHeight - inset - top;
+            const name = panel.kind === 'brush' ? 'Brush Panel' : 'Blank Panel';
+            const group = create('g', { class: `rackmap-panel ${panel.kind}`, transform: `translate(${x}, ${top})` }, deviceLayer);
+            create('rect', { width: width, height: panelHeight, rx: 4, class: 'rackmap-panel-box' }, group);
+            create('title', {}, group).textContent = `${name} · U${panel.rackU}${panel.rackHeight > 1 ? `–U${panel.rackU + panel.rackHeight - 1}` : ''}`;
+            [10, width - 10].forEach(cx => create('circle', { cx: cx, cy: panelHeight / 2, r: 2.5, class: 'rackmap-panel-screw' }, group));
+            if (panel.kind === 'brush') {
+                const slotHeight = Math.min(16, panelHeight - 16);
+                const slotTop = (panelHeight - slotHeight) / 2;
+                create('rect', { x: 22, y: slotTop, width: width - 44, height: slotHeight, rx: slotHeight / 2, class: 'rackmap-brush-slot' }, group);
+                let bristles = '';
+                for (let bx = 28; bx < width - 28; bx += 3) {
+                    bristles += `M ${bx} ${slotTop + 2} L ${bx + 1} ${slotTop + slotHeight / 2 - 1} M ${bx} ${slotTop + slotHeight - 2} L ${bx + 1} ${slotTop + slotHeight / 2 + 1} `;
+                }
+                create('path', { d: bristles, class: 'rackmap-brush-bristles' }, group);
+            }
+            group.addEventListener('click', event => {
+                event.stopPropagation();
+                clear();
+                info.textContent = group.querySelector('title').textContent;
+            });
+        });
+
         boxes.forEach(box => {
             const group = create('g', { class: `rackmap-device ${box.node.kind}${box.node.online ? '' : ' offline'}`, transform: `translate(${box.x}, ${box.y})`, 'data-node': box.node.id }, deviceLayer);
             create('rect', { width: box.width, height: box.drawHeight, rx: 4, class: 'rackmap-device-box' }, group);

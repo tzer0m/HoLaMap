@@ -55,6 +55,11 @@ namespace HoLaMap.Data
         public DbSet<Rack> Racks => Set<Rack>();
 
         /// <summary>
+        /// Gets the blank and brush panels in racks.
+        /// </summary>
+        public DbSet<RackPanel> RackPanels => Set<RackPanel>();
+
+        /// <summary>
         /// Configures keys, indexes and relationships.
         /// </summary>
         /// <param name="modelBuilder">The model builder.</param>
@@ -77,6 +82,8 @@ namespace HoLaMap.Data
             modelBuilder.Entity<Rack>().HasIndex(rack => new { rack.RoomId, rack.Name }).IsUnique();
             modelBuilder.Entity<Rack>().HasOne(rack => rack.Room).WithMany(room => room.Racks).HasForeignKey(rack => rack.RoomId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<Device>().HasOne(device => device.Rack).WithMany(rack => rack.Devices).HasForeignKey(device => device.RackId).OnDelete(DeleteBehavior.SetNull);
+            modelBuilder.Entity<RackPanel>().HasOne(panel => panel.Rack).WithMany(rack => rack.Panels).HasForeignKey(panel => panel.RackId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<RackPanel>().Property(panel => panel.Kind).HasConversion<string>();
             modelBuilder.Entity<Device>().HasOne(device => device.Room).WithMany(room => room.Devices).HasForeignKey(device => device.RoomId).OnDelete(DeleteBehavior.SetNull);
         }
     }

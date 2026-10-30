@@ -645,6 +645,16 @@ body {
     background: #2f5d94;
 }
 
+.rack-panel-blank {
+    background: #2c2f35;
+    color: #9aa3b5;
+}
+
+.rack-panel-brush {
+    background: repeating-linear-gradient(90deg, #1c1e22 0 2px, #33363c 2px 4px);
+    color: #c4c9d4;
+}
+
 .rack-device.selected {
     outline: 2px solid #4a8a1c;
 }
@@ -816,6 +826,7 @@ body {
 }
 
 .rackmap-device,
+.rackmap-panel,
 .rackmap-cable,
 .rackmap-out-label {
     cursor: pointer;
@@ -832,6 +843,27 @@ body {
 .rackmap-device.accesspoint .rackmap-device-box {
     fill: #2f5d94;
     stroke: #6f9bd1;
+}
+
+.rackmap-panel-box {
+    fill: #2c2f35;
+    stroke: #5a5f68;
+    stroke-width: 1.5;
+}
+
+.rackmap-panel-screw {
+    fill: #14171d;
+    stroke: #6b7079;
+}
+
+.rackmap-brush-slot {
+    fill: #0c0d10;
+}
+
+.rackmap-brush-bristles {
+    fill: none;
+    stroke: #4a4e56;
+    stroke-width: 1;
 }
 
 .rackmap-device-label {
@@ -881,6 +913,7 @@ body {
     opacity: 0.4;
 }
 
+.rackmap-svg.focusing .rackmap-panel,
 .rackmap-svg.focusing .rackmap-device:not(.related),
 .rackmap-svg.focusing .rackmap-cable:not(.related),
 .rackmap-svg.focusing .rackmap-out-label:not(.related) {

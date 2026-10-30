@@ -34,5 +34,10 @@ namespace HoLaMap.Models
         /// Gets or sets the devices in the rack.
         /// </summary>
         public List<Device> Devices { get; set; } = [];
+
+        /// <summary>
+        /// Gets or sets the blank and brush panels in the rack.
+        /// </summary>
+        public List<RackPanel> Panels { get; set; } = [];
     }
 }

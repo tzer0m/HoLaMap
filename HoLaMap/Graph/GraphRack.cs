@@ -34,5 +34,10 @@ namespace HoLaMap.Graph
         /// The rack height in units.
         /// </summary>
         public int HeightU { get; set; }
+
+        /// <summary>
+        /// The blank and brush panels in the rack.
+        /// </summary>
+        public List<GraphPanel> Panels { get; set; } = [];
     }
 }

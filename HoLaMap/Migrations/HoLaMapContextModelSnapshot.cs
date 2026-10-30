@@ -301,6 +301,40 @@ namespace HoLaMap.Migrations
                     b.ToTable("Racks");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.RackPanel", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("RackColumn")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RackHeight")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RackId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RackU")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RackWidth")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RackId");
+
+                    b.ToTable("RackPanels");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.Room", b =>
                 {
                     b.Property<int>("Id")
@@ -431,6 +465,17 @@ namespace HoLaMap.Migrations
                     b.Navigation("Room");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.RackPanel", b =>
+                {
+                    b.HasOne("HoLaMap.Models.Rack", "Rack")
+                        .WithMany("Panels")
+                        .HasForeignKey("RackId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Rack");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.Room", b =>
                 {
                     b.HasOne("HoLaMap.Models.Floor", "Floor")
@@ -457,6 +502,8 @@ namespace HoLaMap.Migrations
             modelBuilder.Entity("HoLaMap.Models.Rack", b =>
                 {
                     b.Navigation("Devices");
+
+                    b.Navigation("Panels");
                 });
 
             modelBuilder.Entity("HoLaMap.Models.Room", b =>

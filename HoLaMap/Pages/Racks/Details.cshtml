@@ -4,6 +4,7 @@
 @{
     ViewData["Title"] = Model.Rack.Name;
     Device? editing = Model.Editing;
+    RackPanel? panel = Model.EditingPanel;
 }
 
 <header class="page-header">
@@ -32,6 +33,11 @@
             {
                 int row = Model.Rack.HeightU - (device.RackU!.Value + device.RackHeight - 1) + 1;
                 <a class="rack-device rack-@device.Kind.ToString().ToLowerInvariant()@(device.Id == editing?.Id ? " selected" : "")" style="grid-column: @(device.RackColumn!.Value + 1) / span @device.RackWidth; grid-row: @row / span @device.RackHeight" asp-page="Details" asp-route-id="@Model.Rack.Id" asp-route-edit="@device.Id" title="@device.Name">@device.Name</a>
+            }
+            @foreach (RackPanel item in Model.Panels)
+            {
+                int row = Model.Rack.HeightU - (item.RackU + item.RackHeight - 1) + 1;
+                <a class="rack-device rack-panel rack-panel-@item.Kind.ToString().ToLowerInvariant()@(item.Id == panel?.Id ? " selected" : "")" style="grid-column: @(item.RackColumn + 1) / span @item.RackWidth; grid-row: @row / span @item.RackHeight" asp-page="Details" asp-route-id="@Model.Rack.Id" asp-route-panel="@item.Id" title="@item.Kind Panel">@item.Kind Panel</a>
             }
         </div>
     </div>
@@ -93,6 +99,59 @@
             <form method="post" asp-page-handler="Remove" asp-route-id="@Model.Rack.Id" class="form">
                 <input type="hidden" name="deviceId" value="@editing.Id" />
                 <button type="submit" class="button button-danger">Remove From Rack</button>
+            </form>
+        }
+        <form method="post" asp-page-handler="PlacePanel" asp-route-id="@Model.Rack.Id" class="form">
+            <h2>@(panel == null ? "Add Panel" : "Edit Panel")</h2>
+            @if (panel != null)
+            {
+                <input type="hidden" name="panelId" value="@panel.Id" />
+            }
+            <label>
+                Type
+                <select name="kind">
+                    <option value="Blank" selected="@(panel?.Kind != RackPanelKind.Brush)">Blank</option>
+                    <option value="Brush" selected="@(panel?.Kind == RackPanelKind.Brush)">Brush</option>
+                </select>
+            </label>
+            <label>
+                Lowest U
+                <input name="u" type="number" min="1" max="@Model.Rack.HeightU" value="@(panel?.RackU ?? 1)" />
+            </label>
+            <label>
+                Height in U
+                <input name="height" type="number" min="1" max="@Model.Rack.HeightU" value="@(panel?.RackHeight ?? 1)" />
+            </label>
+            <label>
+                Width
+                <select name="width">
+                    <option value="4" selected="@((panel?.RackWidth ?? 4) == 4)">Full</option>
+                    <option value="2" selected="@(panel?.RackWidth == 2)">Half</option>
+                    <option value="1" selected="@(panel?.RackWidth == 1)">Quarter</option>
+                </select>
+            </label>
+            <label>
+                Column
+                <select name="column">
+                    @for (int column = 0; column < 4; column++)
+                    {
+                        <option value="@column" selected="@((panel?.RackColumn ?? 0) == column)">Column @(column + 1)</option>
+                    }
+                </select>
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="button">Save Panel</button>
+                @if (panel != null)
+                {
+                    <a asp-page="Details" asp-route-id="@Model.Rack.Id">Cancel</a>
+                }
+            </div>
+        </form>
+        @if (panel != null)
+        {
+            <form method="post" asp-page-handler="RemovePanel" asp-route-id="@Model.Rack.Id" class="form">
+                <input type="hidden" name="panelId" value="@panel.Id" />
+                <button type="submit" class="button button-danger">Remove Panel</button>
             </form>
         }
         <form method="post" asp-page-handler="SaveRack" asp-route-id="@Model.Rack.Id" class="form">
