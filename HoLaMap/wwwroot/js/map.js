@@ -5,6 +5,9 @@
     const tabs = document.getElementById('view-tabs');
     const colours = { 'port-wan': '#1e88c8', 'port-1000': '#4a8a1c', 'port-100': '#e6c229', 'port-10': '#e67e22', 'port-down': '#7b8794' };
     const darkText = ['port-100', 'port-down'];
+    // PoE cables are drawn in a darker shade of their speed colour.
+    const darken = hex => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.substr(i, 2), 16) * 0.65).toString(16).padStart(2, '0')).join('');
+    const cableColour = edge => edge.poE ? darken(colours[edge.style] ?? '#7b8794') : colours[edge.style] ?? '#7b8794';
     const portSize = 16;
     const portGap = 4;
     const padding = 12;
@@ -181,7 +184,7 @@
         const d = roundedPath(clean);
         const group = create('g', { class: 'map-edge' + (edge.online ? '' : ' offline'), 'data-edge': edge.id }, parent);
         create('path', { d: d, class: 'map-edge-hit' }, group);
-        create('path', { d: edge.poE ? zigzagPath(clean) : d, class: 'map-edge-line', stroke: colours[edge.style] ?? '#7b8794' }, group);
+        create('path', { d: edge.poE ? zigzagPath(clean) : d, class: 'map-edge-line', stroke: cableColour(edge) }, group);
         group.addEventListener('click', event => {
             event.stopPropagation();
             showDetails(`${nodesById.get(edge.source).label} → ${nodesById.get(edge.target).label} (${edge.label})`, edge.detail);

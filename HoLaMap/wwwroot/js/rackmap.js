@@ -3,6 +3,9 @@ window.RackMap = (function () {
     const svgNs = 'http://www.w3.org/2000/svg';
     const colours = { 'patch': '#b0b4bc', 'port-wan': '#1e88c8', 'port-1000': '#4a8a1c', 'port-100': '#e6c229', 'port-10': '#e67e22', 'port-down': '#7b8794' };
     const darkText = ['patch', 'port-100', 'port-down'];
+    // PoE cables are drawn in a darker shade of their speed colour.
+    const darken = hex => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.substr(i, 2), 16) * 0.65).toString(16).padStart(2, '0')).join('');
+    const cableColour = edge => edge.poE ? darken(colours[edge.style] ?? '#7b8794') : colours[edge.style] ?? '#7b8794';
     const unitHeight = 44;
     const columnWidth = 150;
     const columns = 4;
@@ -674,7 +677,7 @@ window.RackMap = (function () {
             const clean = tidy(points);
             const group = create('g', { class: 'rackmap-cable' + (cable.edge.online ? '' : ' offline') + (cable.edge.back ? ' back' : ''), 'data-edge': cable.edge.id }, cableLayer);
             create('path', { d: roundedPath(clean), class: 'rackmap-cable-hit' }, group);
-            create('path', { d: cable.edge.poE && !cable.edge.back ? zigzagPath(clean) : roundedPath(clean), class: 'rackmap-cable-line', stroke: colours[cable.edge.style] ?? '#7b8794' }, group);
+            create('path', { d: cable.edge.poE && !cable.edge.back ? zigzagPath(clean) : roundedPath(clean), class: 'rackmap-cable-line', stroke: cableColour(cable.edge) }, group);
             group.addEventListener('click', event => {
                 event.stopPropagation();
                 focus([cable], endsOf(cable), describe(cable));
@@ -686,7 +689,7 @@ window.RackMap = (function () {
             const group = drawCable(cable, cable.points);
             if (cable.external) {
                 const last = cable.points[cable.points.length - 1];
-                create('circle', { cx: last.x, cy: last.y, r: 3, fill: colours[cable.edge.style] ?? '#7b8794' }, group);
+                create('circle', { cx: last.x, cy: last.y, r: 3, fill: cableColour(cable.edge) }, group);
                 const label = create('text', { x: last.x + 6, y: last.y + 4, class: 'rackmap-out-label', 'data-edge': cable.edge.id }, labelLayer);
                 label.textContent = cable.text;
                 label.addEventListener('click', event => {
