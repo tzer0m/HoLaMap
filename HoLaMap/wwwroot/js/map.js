@@ -18,9 +18,6 @@
     const chipHeight = 24;
     const laneGap = 10;
     const stackGap = 8;
-    const step = 4;
-    const margin = 40;
-    const corridor = 80;
     const defaultDetails = details.textContent;
 
     const response = await fetch(container.dataset.graphUrl);
@@ -62,8 +59,6 @@
         uplinkPortIds = new Set(graph.edges.filter(edge => edge.targetPort && edge.source !== edge.target).map(edge => edge.targetPort));
     };
     const roundUp = (value, to) => Math.ceil(value / to) * to;
-    // How much devices are shrunk on the current view; lines shrink to match.
-    let lineScale = 1;
 
     // Measure names with the same font the labels are drawn in.
     const measure = document.createElement('canvas').getContext('2d');
@@ -74,7 +69,7 @@
     };
     const isInfrastructure = node => ['gateway', 'switch', 'accesspoint', 'rack'].includes(node.kind);
 
-    // Size each device to fit its name and a row of port squares along the bottom. Widths are multiples of 8 so lines can land on the routing grid.
+    // Size each device to fit its name and a row of port squares along the bottom.
     const sizeOf = node => {
         const portsWidth = node.ports.length * (portSize + portGap) - portGap + padding * 2;
         if (node.kind === 'rack') {
@@ -104,7 +99,7 @@
             const next = points[i + 1];
             const inLength = Math.hypot(current.x - previous.x, current.y - previous.y);
             const outLength = Math.hypot(next.x - current.x, next.y - current.y);
-            const radius = Math.min(cornerRadius * lineScale, inLength / 2, outLength / 2);
+            const radius = Math.min(cornerRadius, inLength / 2, outLength / 2);
             const start = { x: current.x - (current.x - previous.x) / inLength * radius, y: current.y - (current.y - previous.y) / inLength * radius };
             const end = { x: current.x + (next.x - current.x) / outLength * radius, y: current.y + (next.y - current.y) / outLength * radius };
             path += ` L ${start.x} ${start.y} Q ${current.x} ${current.y} ${end.x} ${end.y}`;
@@ -115,8 +110,8 @@
 
     // A subtle zigzag along each straight run, used for lines carrying PoE.
     const zigzagPath = points => {
-        const amplitude = 1.5 * lineScale;
-        const zigStep = Math.max(1.5, 3 * lineScale);
+        const amplitude = 1.5;
+        const zigStep = 3;
         let path = `M ${points[0].x} ${points[0].y}`;
         for (let i = 1; i < points.length; i++) {
             const from = points[i - 1];
@@ -165,24 +160,26 @@
             return;
         }
         const d = roundedPath(clean);
-        const group = create('g', { class: 'map-edge' + (edge.online ? '' : ' offline') }, parent);
+        const group = create('g', { class: 'map-edge' + (edge.online ? '' : ' offline'), 'data-edge': edge.id }, parent);
         create('path', { d: d, class: 'map-edge-hit' }, group);
-        create('path', { d: edge.poE ? zigzagPath(clean) : d, class: 'map-edge-line', stroke: colours[edge.style] ?? '#7b8794', style: `stroke-width: ${3 * lineScale}px` }, group);
+        create('path', { d: edge.poE ? zigzagPath(clean) : d, class: 'map-edge-line', stroke: colours[edge.style] ?? '#7b8794' }, group);
         group.addEventListener('click', event => {
             event.stopPropagation();
             showDetails(`${nodesById.get(edge.source).label} → ${nodesById.get(edge.target).label} (${edge.label})`, edge.detail);
+            focusEdges([edge]);
         });
     };
 
     // A device with its ports, or just its name when compact.
     const drawNode = (node, x, y, width, height, parent, compact, scale) => {
-        const group = create('g', { class: `map-node ${node.kind}${node.online ? '' : ' offline'}`, transform: `translate(${x}, ${y}) scale(${scale ?? 1})` }, parent);
+        const group = create('g', { class: `map-node ${node.kind}${node.online ? '' : ' offline'}`, transform: `translate(${x}, ${y}) scale(${scale ?? 1})`, 'data-node': node.id }, parent);
         create('rect', { width: width, height: height, rx: compact ? 4 : 8, class: 'map-node-box' }, group);
         const label = create('text', { x: width / 2, y: !compact && node.ports.length ? 18 : height / 2 + 4, class: 'map-node-label' }, group);
         label.textContent = node.label;
         group.addEventListener('click', event => {
             event.stopPropagation();
             showDetails(node.label, node.detail);
+            focusNode(node.id);
         });
         if (compact) {
             return;
@@ -293,8 +290,8 @@
         return { layout: layout, layoutById: layoutById, layoutEdges: layout.edges ?? [], placements: placements, stackItemsByEdge: stackItemsByEdge, width: layout.width, height: layout.height };
     };
 
-    // Draws a laid-out group with the lines ELK routed.
-    const drawGroup = (result, layers) => {
+    // Draws a laid-out group with the lines ELK routed, as name-only chips when compact.
+    const drawGroup = (result, layers, compact) => {
         result.layoutEdges.forEach(layoutEdge => {
             const edge = graph.edges.find(candidate => candidate.id === layoutEdge.id);
             const stacked = result.stackItemsByEdge.get(edge.id);
@@ -309,458 +306,199 @@
                 drawEdge(edge, points, layers.edges);
             });
         });
-        result.placements.forEach(placement => drawNode(placement.node, placement.x, placement.y, placement.width, placement.height, layers.nodes, false));
+        result.placements.forEach(placement => drawNode(placement.node, placement.x, placement.y, placement.width, placement.height, layers.nodes, compact));
     };
 
-    // How far a device reaches beyond its box: port squares hang below it, or above it for the ports it is fed from.
-    const extents = item => {
-        if (item.compact || !item.node.ports.length) {
-            return { top: 0, bottom: 0 };
+    // Highlights a device or link and everything connected to it, fading the rest. Pass nothing to clear.
+    let currentSvg = null;
+    const focusOn = (nodeIds, edgeIds) => {
+        if (!currentSvg) {
+            return;
         }
-        const reach = portSize * (item.scale ?? 1);
-        return { top: item.node.ports.some(port => uplinkPortIds.has(port.id)) ? reach : 0, bottom: item.node.ports.some(port => !uplinkPortIds.has(port.id)) ? reach : 0 };
+        currentSvg.classList.toggle('focusing', nodeIds.size > 0 || edgeIds.size > 0);
+        currentSvg.querySelectorAll('[data-node]').forEach(element => element.classList.toggle('related', nodeIds.has(element.dataset.node)));
+        currentSvg.querySelectorAll('[data-edge]').forEach(element => element.classList.toggle('related', edgeIds.has(element.dataset.edge)));
+        currentSvg.querySelectorAll('[data-edges]').forEach(element => element.classList.toggle('related', element.dataset.edges.split(' ').some(edgeId => edgeIds.has(edgeId))));
+    };
+    const focusNode = nodeId => {
+        const edges = graph.edges.filter(edge => edge.source === nodeId || edge.target === nodeId);
+        focusOn(new Set([nodeId, ...edges.flatMap(edge => [edge.source, edge.target])]), new Set(edges.map(edge => edge.id)));
+    };
+    const focusEdges = edges => focusOn(new Set(edges.flatMap(edge => [edge.source, edge.target])), new Set(edges.map(edge => edge.id)));
+    const clearFocus = () => focusOn(new Set(), new Set());
+
+    // All view: floors contain rooms, rooms contain devices, and ELK lays out and routes the whole thing at once. Not to scale.
+    const layoutNested = async () => {
+        const groupOptions = { 'elk.algorithm': 'layered', 'elk.direction': 'DOWN', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.layered.spacing.nodeNodeBetweenLayers': '50', 'elk.layered.spacing.edgeNodeBetweenLayers': '20', 'elk.layered.spacing.edgeEdgeBetweenLayers': '10', 'elk.spacing.nodeNode': '30', 'elk.spacing.edgeEdge': '10', 'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF' };
+        const device = node => {
+            const size = sizeOf(node);
+            return {
+                id: node.id,
+                width: size.width,
+                height: size.height,
+                layoutOptions: { 'elk.portConstraints': 'FIXED_POS' },
+                ports: [
+                    { id: `${node.id}-in`, x: size.width / 2, y: 0, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } },
+                    { id: `${node.id}-out`, x: size.width / 2, y: size.height, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'SOUTH' } },
+                    ...node.ports.map((port, index) => ({ id: port.id, x: portX(index), y: portY(port, size.height), width: portSize, height: portSize, layoutOptions: { 'elk.port.side': uplinkPortIds.has(port.id) ? 'NORTH' : 'SOUTH' } }))
+                ]
+            };
+        };
+        const room = (id, nodes) => ({ id: id, layoutOptions: { ...groupOptions, 'elk.padding': `[top=${roomHeader + 20},left=16,bottom=${portSize + 16},right=16]` }, children: nodes.map(device) });
+        const floors = graph.floors.map(floor => ({
+            id: `floor-${floor.id}`,
+            layoutOptions: { ...groupOptions, 'elk.padding': `[top=${titleHeight + 12},left=16,bottom=16,right=16]` },
+            children: floor.rooms.map(item => room(`room-${item.id}`, graph.nodes.filter(node => node.room === item.id))).filter(item => item.children.length)
+        })).filter(floor => floor.children.length);
+        const unplaced = graph.nodes.filter(node => !roomsById.has(node.room));
+        if (unplaced.length) {
+            floors.push({ id: 'floor-unplaced', layoutOptions: { ...groupOptions, 'elk.padding': `[top=${titleHeight + 12},left=16,bottom=${portSize + 16},right=16]` }, children: unplaced.map(device) });
+        }
+        const layout = await new ELK().layout({
+            id: 'root',
+            layoutOptions: groupOptions,
+            children: floors,
+            edges: graph.edges.map(edge => ({ id: edge.id, sources: [edge.sourcePort || `${edge.source}-out`], targets: [edge.targetPort || `${edge.target}-in`] }))
+        });
+        return layout;
     };
 
-    // Lays a set of devices out as a small tree, leaving room above for the ports they are fed from. The Floor Plan view uses name-only chips.
-    const contentFor = async (mode, nodes, aspect) => {
-        const compact = mode === 'floorplan';
-        const ids = new Set(nodes.map(node => node.id));
-        const result = await layoutGroup({ nodes: nodes, edges: graph.edges.filter(edge => ids.has(edge.source) && ids.has(edge.target)) }, compact, aspect);
-        const items = result.placements.map(placement => ({ ...placement, y: placement.y + (compact ? 0 : portSize), compact: compact }));
-        return { items: items, width: Math.max(...items.map(item => item.x + item.width)), height: Math.max(...items.map(item => item.y + item.height + extents(item).bottom)) };
+    const drawNested = (layout, layers) => {
+        const floorNames = new Map(graph.floors.map(floor => [`floor-${floor.id}`, floor.name]));
+        const roomNames = new Map(graph.floors.flatMap(floor => floor.rooms.map(item => [`room-${item.id}`, item.name])));
+        // ELK gives each box relative to its parent, and each line relative to the innermost box holding both its ends.
+        const origins = new Map([['root', { x: 0, y: 0 }]]);
+        const chain = new Map();
+        (layout.children ?? []).forEach(floor => {
+            drawFrame(floorNames.get(floor.id) ?? 'Unplaced', floor.x, floor.y, floor.width, floor.height, layers.boxes);
+            origins.set(floor.id, { x: floor.x, y: floor.y });
+            (floor.children ?? []).forEach(child => {
+                const x = floor.x + child.x;
+                const y = floor.y + child.y;
+                chain.set(child.id, ['root', floor.id]);
+                if (roomNames.has(child.id)) {
+                    origins.set(child.id, { x: x, y: y });
+                    (child.children ?? []).forEach(item => chain.set(item.id, ['root', floor.id, child.id]));
+                    drawRoom(roomNames.get(child.id), x, y, child.width, child.height, layers.boxes);
+                    (child.children ?? []).forEach(item => drawNode(nodesById.get(item.id), x + item.x, y + item.y, item.width, item.height, layers.nodes, false));
+                } else {
+                    drawNode(nodesById.get(child.id), x, y, child.width, child.height, layers.nodes, false);
+                }
+            });
+        });
+        (layout.edges ?? []).forEach(layoutEdge => {
+            const edge = graph.edges.find(candidate => candidate.id === layoutEdge.id);
+            const from = chain.get(edge.source);
+            const to = chain.get(edge.target);
+            const shared = from.filter((containerId, index) => to[index] === containerId);
+            const origin = origins.get(shared[shared.length - 1]);
+            const shift = point => ({ x: point.x + origin.x, y: point.y + origin.y });
+            (layoutEdge.sections ?? []).forEach(section => drawEdge(edge, [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(shift), layers.edges));
+        });
     };
 
-    // Turns laid-out devices into boxes inside a room, shrunk by the scale so they fit.
-    const place = (content, scale, left, top) => content.items.map(item => ({ ...item, nativeWidth: item.width, nativeHeight: item.height, x: left + item.x * scale, y: top + item.y * scale, width: item.width * scale, height: item.height * scale, scale: scale }));
-
-    // Rooms exactly as saved on the floor plan, floors side by side. Devices shrink to fit, all by the same amount so every room matches.
-    const buildFrames = async mode => {
+    // Floor Plan view: rooms exactly as saved, floors side by side. Each room's devices are a small tree of name-only chips, all shrunk by the same amount so every room matches.
+    // Cables between rooms aren't drawn one by one; each pair of connected rooms gets a single trunk arc showing how many cables run between them.
+    const drawFloorPlan = async (layers, bounds, id) => {
         const scales = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25];
-        const fits = (content, scale, availWidth, availHeight) => content.width * scale <= availWidth + 0.5 && content.height * scale <= availHeight + 0.5;
         const plans = [];
+        const groupFor = async nodes => {
+            const ids = new Set(nodes.map(node => node.id));
+            return nodes.length ? layoutGroup({ nodes: nodes, edges: graph.edges.filter(edge => ids.has(edge.source) && ids.has(edge.target)) }, true, null) : null;
+        };
         for (const floor of graph.floors) {
-            for (const room of floor.rooms) {
-                const nodes = graph.nodes.filter(node => node.room === room.id);
-                const availWidth = room.width * gridCell - roomPadding * 2;
-                const availHeight = room.height * gridCell - roomHeader - roomPadding;
-                const content = nodes.length ? await contentFor(mode, nodes, availWidth / availHeight) : null;
-                plans.push({ floor: floor, room: room, nodes: nodes, availWidth: availWidth, availHeight: availHeight, content: content });
+            for (const item of floor.rooms) {
+                const nodes = graph.nodes.filter(node => node.room === item.id);
+                const availWidth = item.width * gridCell - roomPadding * 2;
+                const availHeight = item.height * gridCell - roomHeader - roomPadding;
+                const ids = new Set(nodes.map(node => node.id));
+                const result = nodes.length ? await layoutGroup({ nodes: nodes, edges: graph.edges.filter(edge => ids.has(edge.source) && ids.has(edge.target)) }, true, availWidth / availHeight) : null;
+                plans.push({ floor: floor, room: item, key: item.id, nodes: nodes, availWidth: availWidth, availHeight: availHeight, result: result });
             }
         }
         const unplaced = graph.nodes.filter(node => !roomsById.has(node.room));
-        const unplacedContent = unplaced.length ? await contentFor(mode, unplaced, 2) : null;
+        const unplacedResult = await groupFor(unplaced);
+        if (id !== renderId) {
+            return false;
+        }
+        const scale = Math.min(1, ...plans.filter(plan => plan.result).map(plan => scales.find(candidate => plan.result.width * candidate <= plan.availWidth + 0.5 && plan.result.height * candidate <= plan.availHeight + 0.5) ?? scales[scales.length - 1]));
 
-        // The largest scale at which every room's devices fit.
-        const needed = plan => {
-            if (!plan.nodes.length) {
-                return 1;
-            }
-            return scales.find(scale => fits(plan.content, scale, plan.availWidth, plan.availHeight)) ?? scales[scales.length - 1];
+        // Cables between rooms, grouped by the pair of rooms they join.
+        const roomKey = node => roomsById.has(node.room) ? node.room : '';
+        const byPair = new Map();
+        graph.edges.filter(edge => roomKey(nodesById.get(edge.source)) !== roomKey(nodesById.get(edge.target))).forEach(edge => {
+            const keys = [roomKey(nodesById.get(edge.source)), roomKey(nodesById.get(edge.target))].sort();
+            const key = keys.join('|');
+            byPair.set(key, { keys: keys, edges: [...(byPair.get(key)?.edges ?? []), edge] });
+        });
+        const trunks = [...byPair.values()];
+        const top = 40 + trunks.length * 14;
+
+        // Floors side by side, then the unplaced devices, below the space the arcs need.
+        const rects = new Map();
+        const centres = new Map();
+        let ox = groupPadding;
+        const drawContent = (result, left, top) => {
+            const transform = `translate(${left}, ${top}) scale(${scale})`;
+            drawGroup(result, { edges: create('g', { transform: transform }, layers.edges), nodes: create('g', { transform: transform }, layers.nodes) }, true);
+            result.placements.forEach(placement => centres.set(placement.node.id, { x: left + (placement.x + placement.width / 2) * scale, y: top + (placement.y + placement.height / 2) * scale }));
         };
-        const scale = Math.min(1, ...plans.map(needed));
-        lineScale = scale;
-
-        const frames = [];
-        for (const floor of graph.floors) {
-            const rooms = plans.filter(plan => plan.floor === floor).map(plan => {
-                return { name: plan.room.name, x: plan.room.x * gridCell, y: plan.room.y * gridCell, width: plan.room.width * gridCell, height: plan.room.height * gridCell, items: plan.content ? place(plan.content, scale, roomPadding, roomHeader) : [] };
-            });
-            if (rooms.length) {
-                frames.push({ title: floor.name, rooms: rooms });
+        graph.floors.forEach(floor => {
+            const floorPlans = plans.filter(plan => plan.floor === floor);
+            if (!floorPlans.length) {
+                return;
             }
-        }
-        if (unplaced.length) {
-            const content = unplacedContent;
-            const width = roundUp(content.width * scale + roomPadding * 2, step);
-            frames.push({ title: 'Unplaced', rooms: [{ name: '', x: 0, y: 0, width: width, height: roundUp(content.height * scale + roomPadding * 2 + (mode === 'floorplan' ? 0 : portSize * scale), step), items: place(content, scale, roomPadding, roomPadding) }] });
-        }
-        return frames;
-    };
-
-    // Routes lines on a 4px grid. Every cable gets its own track: cables may cross but never run along each other.
-    // A cable stays inside its own rooms, leaves a room only through a border that doesn't touch another room, crosses the floor straight out to the corridor around the floors, and travels there to the other room.
-    const createRouter = (width, height, obstacles, rooms, frames) => {
-        const cols = Math.ceil((width + margin * 2) / step) + 1;
-        const rows = Math.ceil((height + margin * 2) / step) + 1;
-        const cellCount = cols * rows;
-        const blocked = new Uint8Array(cellCount);
-        const usedH = new Uint8Array(cellCount);
-        const usedV = new Uint8Array(cellCount);
-        const nearH = new Uint8Array(cellCount);
-        const nearV = new Uint8Array(cellCount);
-        const roomOf = new Int16Array(cellCount);
-        const borderOf = new Int16Array(cellCount);
-        const borderAxis = new Uint8Array(cellCount);
-        const inFrame = new Uint8Array(cellCount);
-        const nearFrame = new Uint8Array(cellCount);
-        const header = new Uint8Array(cellCount);
-        const stateCount = cellCount * 16;
-        const cost = new Float32Array(stateCount);
-        const seen = new Uint32Array(stateCount);
-        const parent = new Int32Array(stateCount);
-        const vectors = [{ x: 0, y: -1 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }];
-        const kinds = { room: 1, border: 2, wall: 3, gap: 4, corridor: 5 };
-        let stamp = 0;
-        const colOf = x => Math.round((x + margin) / step);
-        const rowOf = y => Math.round((y + margin) / step);
-        const gridOf = box => ({ firstCol: colOf(box.x), lastCol: colOf(box.x + box.width), firstRow: rowOf(box.y), lastRow: rowOf(box.y + box.height) });
-        obstacles.forEach(box => {
-            const firstCol = Math.max(0, Math.floor((box.x + margin) / step));
-            const lastCol = Math.min(cols - 1, Math.ceil((box.x + box.width + margin) / step));
-            const firstRow = Math.max(0, Math.floor((box.y + margin) / step));
-            const lastRow = Math.min(rows - 1, Math.ceil((box.y + box.height + margin) / step));
-            for (let row = firstRow; row <= lastRow; row++) {
-                for (let col = firstCol; col <= lastCol; col++) {
-                    blocked[row * cols + col] = 1;
-                }
-            }
-        });
-
-        // Floor outlines, and a thin band outside them that cables avoid so they don't hug the outline.
-        frames.forEach(frame => {
-            const grid = gridOf(frame);
-            for (let row = Math.max(0, grid.firstRow - 2); row <= Math.min(rows - 1, grid.lastRow + 2); row++) {
-                for (let col = Math.max(0, grid.firstCol - 2); col <= Math.min(cols - 1, grid.lastCol + 2); col++) {
-                    const inside = row >= grid.firstRow && row <= grid.lastRow && col >= grid.firstCol && col <= grid.lastCol;
-                    if (inside) {
-                        inFrame[row * cols + col] = 1;
-                    } else {
-                        nearFrame[row * cols + col] = 1;
-                    }
-                }
-            }
-        });
-
-        // Room interiors, and their borders: a border is only a doorway where it doesn't touch another room. Corners and shared walls are solid.
-        const borderCount = new Uint8Array(cellCount);
-        rooms.forEach((room, index) => {
-            const grid = gridOf(room);
-            for (let row = grid.firstRow; row <= grid.lastRow; row++) {
-                for (let col = grid.firstCol; col <= grid.lastCol; col++) {
-                    const cell = row * cols + col;
-                    const onRow = row === grid.firstRow || row === grid.lastRow;
-                    const onCol = col === grid.firstCol || col === grid.lastCol;
-                    if (!onRow && !onCol) {
-                        roomOf[cell] = index + 1;
-                        header[cell] = row - grid.firstRow <= roomHeader / step ? 1 : 0;
-                        continue;
-                    }
-                    borderCount[cell]++;
-                    borderOf[cell] = onRow && onCol ? -1 : index + 1;
-                    borderAxis[cell] = onRow ? 1 : 2;
-                }
-            }
-        });
-        for (let cell = 0; cell < cellCount; cell++) {
-            if (borderCount[cell] > 1 || (borderCount[cell] && roomOf[cell])) {
-                borderOf[cell] = -1;
-                roomOf[cell] = 0;
-            }
-        }
-        const kindOf = cell => roomOf[cell] ? kinds.room : borderOf[cell] > 0 ? kinds.border : borderOf[cell] < 0 ? kinds.wall : inFrame[cell] ? kinds.gap : kinds.corridor;
-
-        // A border is only a doorway if it sits on the outside of the floor: straight out from it, the corridor is no further than the floor's title band.
-        const reach = Math.ceil(titleHeight / step) + 2;
-        const doorways = [];
-        for (let cell = 0; cell < cellCount; cell++) {
-            if (borderOf[cell] <= 0) {
-                continue;
-            }
-            const offset = borderAxis[cell] === 1 ? (roomOf[cell + cols] === borderOf[cell] ? -cols : cols) : (roomOf[cell + 1] === borderOf[cell] ? -1 : 1);
-            let walk = cell + offset;
-            let length = 0;
-            while (walk >= 0 && walk < cellCount && kindOf(walk) === kinds.gap && length <= reach) {
-                walk += offset;
-                length++;
-            }
-            doorways.push({ cell: cell, open: length <= reach && walk >= 0 && walk < cellCount && kindOf(walk) === kinds.corridor });
-        }
-        doorways.filter(doorway => !doorway.open).forEach(doorway => {
-            borderOf[doorway.cell] = -1;
-        });
-
-        // Whether a cable may step from one cell to the next, and the gap mode it is in afterwards: 1 heading out of a floor, 2 heading into one.
-        const transition = (cell, dir, mode, next, nextDir, sourceRoom, targetRoom, free) => {
-            const from = kindOf(cell);
-            const to = kindOf(next);
-            if (free) {
-                return to === kinds.wall ? -1 : 0;
-            }
-            if ((from === kinds.border || from === kinds.gap) && nextDir !== dir) {
-                return -1;
-            }
-            const allowed = room => room === sourceRoom + 1 || room === targetRoom + 1;
-            switch (to) {
-                case kinds.room:
-                    return allowed(roomOf[next]) && (from === kinds.room || borderOf[cell] === roomOf[next]) ? 0 : -1;
-                case kinds.border:
-                    if (sourceRoom === targetRoom || !allowed(borderOf[next]) || (borderAxis[next] === 1) !== (nextDir === 0 || nextDir === 2)) {
-                        return -1;
-                    }
-                    return from === kinds.room || from === kinds.corridor || (from === kinds.gap && mode === 2) ? 0 : -1;
-                case kinds.gap:
-                    return from === kinds.border ? 1 : from === kinds.gap ? mode : from === kinds.corridor ? 2 : -1;
-                case kinds.corridor:
-                    return from === kinds.corridor || from === kinds.border || (from === kinds.gap && mode === 1) ? 0 : -1;
-                default:
-                    return -1;
-            }
-        };
-
-        // Level 0 keeps every rule. Level 1 lets cables share tracks if there is no other way. Level 2 also ignores rooms.
-        const route = (starts, goals, sourceRoom, targetRoom, level) => {
-            stamp++;
-            const goalCells = new Map(goals.map(goal => [rowOf(goal.stub.y) * cols + colOf(goal.stub.x), goal]));
-            const goalList = [...goalCells.keys()].map(cell => ({ col: cell % cols, row: Math.floor(cell / cols) }));
-            const heap = [];
-            const push = (priority, state) => {
-                heap.push({ priority: priority, state: state });
-                let index = heap.length - 1;
-                while (index > 0) {
-                    const up = (index - 1) >> 1;
-                    if (heap[up].priority <= heap[index].priority) {
-                        break;
-                    }
-                    [heap[up], heap[index]] = [heap[index], heap[up]];
-                    index = up;
-                }
-            };
-            const pop = () => {
-                const top = heap[0];
-                const last = heap.pop();
-                if (heap.length) {
-                    heap[0] = last;
-                    let index = 0;
-                    for (;;) {
-                        const left = index * 2 + 1;
-                        const right = left + 1;
-                        let smallest = index;
-                        if (left < heap.length && heap[left].priority < heap[smallest].priority) {
-                            smallest = left;
-                        }
-                        if (right < heap.length && heap[right].priority < heap[smallest].priority) {
-                            smallest = right;
-                        }
-                        if (smallest === index) {
-                            break;
-                        }
-                        [heap[smallest], heap[index]] = [heap[index], heap[smallest]];
-                        index = smallest;
-                    }
-                }
-                return top;
-            };
-            const weight = level === 0 ? 1 : 1.3;
-            // Distance to the box around all the goals: cheap, and never more than the real distance.
-            const goalBox = { minCol: Math.min(...goalList.map(goal => goal.col)), maxCol: Math.max(...goalList.map(goal => goal.col)), minRow: Math.min(...goalList.map(goal => goal.row)), maxRow: Math.max(...goalList.map(goal => goal.row)) };
-            const estimate = cell => {
-                const col = cell % cols;
-                const row = (cell - col) / cols;
-                const dx = col < goalBox.minCol ? goalBox.minCol - col : col > goalBox.maxCol ? col - goalBox.maxCol : 0;
-                const dy = row < goalBox.minRow ? goalBox.minRow - row : row > goalBox.maxRow ? row - goalBox.maxRow : 0;
-                return weight * (dx + dy);
-            };
-            // Several cables can share a single port, so right next to a lone start or goal they may touch.
-            const shared = new Set();
-            [starts.length === 1 ? starts[0] : null, goals.length === 1 ? goals[0] : null].filter(anchor => anchor).forEach(anchor => {
-                const col = colOf(anchor.stub.x);
-                const row = rowOf(anchor.stub.y);
-                for (let y = row - 2; y <= row + 2; y++) {
-                    for (let x = col - 2; x <= col + 2; x++) {
-                        shared.add(y * cols + x);
-                    }
+            const width = Math.max(...floorPlans.map(plan => (plan.room.x + plan.room.width) * gridCell));
+            const height = Math.max(...floorPlans.map(plan => (plan.room.y + plan.room.height) * gridCell));
+            drawFrame(floor.name, ox - groupPadding, top, width + groupPadding * 2, titleHeight + height + groupPadding, layers.boxes);
+            floorPlans.forEach(plan => {
+                const rect = { x: ox + plan.room.x * gridCell, y: top + titleHeight + plan.room.y * gridCell, width: plan.room.width * gridCell, height: plan.room.height * gridCell };
+                rects.set(plan.key, rect);
+                drawRoom(plan.room.name, rect.x, rect.y, rect.width, rect.height, layers.boxes);
+                if (plan.result) {
+                    drawContent(plan.result, rect.x + roomPadding, rect.y + roomHeader);
                 }
             });
-            const startByState = new Map();
-            const startCells = new Set();
-            starts.forEach(start => {
-                const cell = rowOf(start.stub.y) * cols + colOf(start.stub.x);
-                if (level === 0 && starts.length > 1 && (start.dir === 1 || start.dir === 3 ? usedH[cell] : usedV[cell])) {
-                    return;
-                }
-                const state = (cell * 4 + start.dir) * 4;
-                startCells.add(cell);
-                cost[state] = start.penalty ?? 0;
-                seen[state] = stamp;
-                parent[state] = -1;
-                startByState.set(state, start);
-                push(cost[state] + estimate(cell), state);
-            });
-            let pops = 0;
-            while (heap.length && pops < (level === 0 ? 600000 : 1500000)) {
-                pops++;
-                const { priority, state } = pop();
-                const mode = state & 3;
-                const dir = (state >> 2) & 3;
-                const cell = state >> 4;
-                if (priority - estimate(cell) > cost[state] + 0.001) {
-                    continue;
-                }
-                if (goalCells.has(cell)) {
-                    const cells = [];
-                    let walk = state;
-                    let root = state;
-                    while (walk !== -1) {
-                        cells.push(walk >> 4);
-                        root = walk;
-                        walk = parent[walk];
-                    }
-                    cells.reverse();
-                    const points = cells.map(item => ({ x: (item % cols) * step - margin, y: Math.floor(item / cols) * step - margin }));
-                    // Claim the track and the tracks either side so the next cable keeps a gap.
-                    for (let i = 1; i < cells.length; i++) {
-                        const horizontal = points[i].y === points[i - 1].y;
-                        [cells[i - 1], cells[i]].forEach(index => {
-                            const room = kindOf(index) === kinds.room;
-                            [-2, -1, 0, 1, 2].map(offset => ({ offset: offset, track: index + offset * (horizontal ? cols : 1) })).filter(item => item.track >= 0 && item.track < cellCount).forEach(item => {
-                                (room && Math.abs(item.offset) === 2 ? (horizontal ? nearH : nearV) : (horizontal ? usedH : usedV))[item.track] = 1;
-                            });
-                        });
-                    }
-                    return { points: points, start: startByState.get(root), goal: goalCells.get(cell) };
-                }
-                for (const nextDir of [dir, (dir + 1) % 4, (dir + 3) % 4]) {
-                    const col = (cell % cols) + vectors[nextDir].x;
-                    const row = Math.floor(cell / cols) + vectors[nextDir].y;
-                    if (col < 0 || row < 0 || col >= cols || row >= rows) {
-                        continue;
-                    }
-                    const next = row * cols + col;
-                    const isGoal = goalCells.has(next);
-                    // Lines leave a device straight out and arrive straight in.
-                    if ((blocked[next] && !isGoal) || (isGoal && nextDir !== (goalCells.get(next).dir + 2) % 4) || (parent[state] === -1 && nextDir !== dir)) {
-                        continue;
-                    }
-                    const nextMode = isGoal ? 0 : transition(cell, dir, mode, next, nextDir, sourceRoom, targetRoom, level === 2);
-                    if (nextMode < 0) {
-                        continue;
-                    }
-                    const horizontal = nextDir === 1 || nextDir === 3;
-                    const turning = nextDir !== dir;
-                    const clash = !shared.has(next) && ((horizontal ? usedH[next] : usedV[next]) || (turning && !startCells.has(cell) && (horizontal ? usedH[cell] : usedV[cell])));
-                    if (clash && level === 0) {
-                        continue;
-                    }
-                    let added = (kindOf(next) === kinds.room ? 2 : 1) + (turning ? 6 : 0) + (nearFrame[next] ? 2 : 0) + (header[next] ? 2 : 0) + (clash ? 60 : 0) + (isGoal ? goalCells.get(next).penalty ?? 0 : 0);
-                    if (horizontal ? usedV[next] : usedH[next]) {
-                        added += 2;
-                    }
-                    if (horizontal ? nearH[next] : nearV[next]) {
-                        added += 3;
-                    }
-                    const nextState = ((next * 4 + nextDir) * 4) + nextMode;
-                    const total = cost[state] + added;
-                    if (seen[nextState] !== stamp || total < cost[nextState]) {
-                        seen[nextState] = stamp;
-                        cost[nextState] = total;
-                        parent[nextState] = state;
-                        push(total + estimate(next), nextState);
-                    }
-                }
-            }
-            return null;
+            bounds.height = Math.max(bounds.height, top + titleHeight + height + groupPadding);
+            ox += width + groupPadding * 2 + groupGap;
+        });
+        if (unplacedResult) {
+            const rect = { x: ox, y: top + titleHeight, width: unplacedResult.width * scale + roomPadding * 2, height: unplacedResult.height * scale + roomPadding * 2 };
+            rects.set('', rect);
+            drawFrame('Unplaced', ox - groupPadding, top, rect.width + groupPadding * 2, titleHeight + rect.height + groupPadding, layers.boxes);
+            drawContent(unplacedResult, rect.x + roomPadding, rect.y + roomPadding);
+            bounds.height = Math.max(bounds.height, top + titleHeight + rect.height + groupPadding);
+            ox += rect.width + groupPadding * 2 + groupGap;
+        }
+        bounds.width = ox - groupGap;
+
+        // One trunk per pair of connected rooms: an arc from each room's title bar up over the floors, thicker the more cables it carries.
+        const roomName = key => key ? roomsById.get(key).name : 'Unplaced';
+        const anchor = key => {
+            const rect = rects.get(key);
+            return { x: rect.x + rect.width / 2, y: rect.y + (key ? roomHeader / 2 : roomPadding / 2) };
         };
-        return { route: route };
-    };
-
-    // Where a line leaves or enters a device, with a short stub clear of the device so the router starts on a free grid point.
-    const withStub = anchor => {
-        const snap = value => Math.round(value / step) * step;
-        const stub = anchor.dir === 0 ? { x: snap(anchor.x), y: Math.floor((anchor.y - 2) / step) * step } : anchor.dir === 2 ? { x: snap(anchor.x), y: Math.ceil((anchor.y + 2) / step) * step } : anchor.dir === 1 ? { x: Math.ceil((anchor.x + 2) / step) * step, y: snap(anchor.y) } : { x: Math.floor((anchor.x - 2) / step) * step, y: snap(anchor.y) };
-        return { ...anchor, stub: stub };
-    };
-    // Connection points on every grid line along each side of a device without ports, so each cable can land on its own spot in line with where it comes from.
-    const spread = (length, start) => {
-        const count = Math.max(1, Math.floor((length - 12) / step) + 1);
-        const first = (length - (count - 1) * step) / 2;
-        // Snap onto the routing grid so lines meet the device dead straight.
-        return Array.from({ length: count }, (_, index) => Math.min(start + length - step, Math.max(start + step, Math.round((start + first + index * step) / step) * step)));
-    };
-    // Each side carries a cost so lines behave consistently: out of the bottom, in at the top, into the right of a stacked device. A rack is a hub, so any side will do.
-    const sideAnchors = (box, role) => {
-        const penalties = box.node.kind === 'rack' ? [0, 0, 0, 0] : role === 'source' ? [60, 30, 0, 30] : box.stacked ? [60, 0, 60, 60] : [0, 30, 60, 30];
-        return [...spread(box.width, box.x).flatMap(x => [{ x: x, y: box.y, dir: 0 }, { x: x, y: box.y + box.height, dir: 2 }]), ...spread(box.height, box.y).flatMap(y => [{ x: box.x + box.width, y: y, dir: 1 }, { x: box.x, y: y, dir: 3 }])].map(anchor => withStub({ ...anchor, penalty: penalties[anchor.dir] }));
-    };
-    // Lines the first and last straight runs up with the exact anchors, so a line never kinks to reach the routing grid.
-    const align = (start, path, goal) => {
-        const points = path.map(point => ({ ...point }));
-        const vertical = anchor => anchor.dir === 0 || anchor.dir === 2;
-        const axis = anchor => vertical(anchor) ? 'x' : 'y';
-        const straight = points.every(point => point[axis(start)] === points[0][axis(start)]);
-        if (straight && vertical(start) === vertical(goal) && start[axis(start)] !== goal[axis(start)]) {
-            // One straight run between two anchors that don't line up: put a single clean step half way.
-            const other = vertical(start) ? 'y' : 'x';
-            const middle = Math.round((start[other] + goal[other]) / 2);
-            const first = { [axis(start)]: start[axis(start)], [other]: middle };
-            const second = { [axis(start)]: goal[axis(start)], [other]: middle };
-            return [start, first, second, goal];
-        }
-        const key = axis(start);
-        for (let i = 0; i < points.length && points[i][key] === path[0][key]; i++) {
-            points[i][key] = start[key];
-        }
-        const goalKey = axis(goal);
-        for (let i = points.length - 1; i >= 0 && path[i][goalKey] === path[path.length - 1][goalKey]; i--) {
-            points[i][goalKey] = goal[goalKey];
-        }
-        return [start, ...points, goal];
-    };
-    const portAnchor = (box, portId) => {
-        const index = box.node.ports.findIndex(port => port.id === portId);
-        if (box.compact || index < 0) {
-            return null;
-        }
-        const top = uplinkPortIds.has(portId);
-        const scale = box.scale ?? 1;
-        return withStub({ x: box.x + (portX(index) + portSize / 2) * scale, y: top ? box.y - portSize * scale : box.y + box.height + portSize * scale, dir: top ? 0 : 2 });
-    };
-
-    // Routes every line, shortest first. Failures counts lines between rooms that could only be routed by bending the rules, so the caller can widen the corridors and try again.
-    const routeEdges = (edges, boxes, bounds, rooms, frames) => {
-        const obstacles = [...boxes.values()].map(box => {
-            const reach = extents(box);
-            return { x: box.x, y: box.y - reach.top, width: box.width, height: box.height + reach.top + reach.bottom };
+        // Wider arcs fly higher so they nest instead of crossing.
+        const ordered = trunks.map(trunk => ({ ...trunk, from: anchor(trunk.keys[0]), to: anchor(trunk.keys[1]) })).map(trunk => trunk.from.x <= trunk.to.x ? trunk : { ...trunk, from: trunk.to, to: trunk.from }).sort((a, b) => (a.to.x - a.from.x) - (b.to.x - b.from.x));
+        ordered.forEach((trunk, index) => {
+            const apex = top - 24 - index * 14;
+            const d = `M ${trunk.from.x} ${trunk.from.y} C ${trunk.from.x} ${apex}, ${trunk.to.x} ${apex}, ${trunk.to.x} ${trunk.to.y}`;
+            const group = create('g', { class: 'map-trunk', 'data-edges': trunk.edges.map(edge => edge.id).join(' ') }, layers.trunks);
+            create('path', { d: d, class: 'map-trunk-hit' }, group);
+            create('path', { d: d, class: 'map-trunk-line', style: `stroke-width: ${Math.min(8, 1.5 + trunk.edges.length)}px` }, group);
+            create('circle', { cx: trunk.from.x, cy: trunk.from.y, r: 3, class: 'map-trunk-end' }, group);
+            create('circle', { cx: trunk.to.x, cy: trunk.to.y, r: 3, class: 'map-trunk-end' }, group);
+            const middle = { x: (trunk.from.x + trunk.to.x) / 2, y: 0.125 * (trunk.from.y + trunk.to.y) + 0.75 * apex };
+            create('circle', { cx: middle.x, cy: middle.y, r: 9, class: 'map-trunk-badge' }, group);
+            create('text', { x: middle.x, y: middle.y + 4, class: 'map-trunk-count' }, group).textContent = trunk.edges.length;
+            group.addEventListener('click', event => {
+                event.stopPropagation();
+                const describe = edge => `${nodesById.get(edge.source).label} → ${nodesById.get(edge.target).label}`;
+                showDetails(`${roomName(trunk.keys[0])} ↔ ${roomName(trunk.keys[1])} (${trunk.edges.length} ${trunk.edges.length === 1 ? 'Cable' : 'Cables'})`, trunk.edges.map(describe).join('\n'));
+                focusEdges(trunk.edges);
+            });
         });
-        const router = createRouter(bounds.width, bounds.height, obstacles, rooms, frames);
-        const centre = box => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
-        const routable = edges.filter(edge => boxes.has(edge.source) && boxes.has(edge.target));
-        const distance = edge => Math.abs(centre(boxes.get(edge.source)).x - centre(boxes.get(edge.target)).x) + Math.abs(centre(boxes.get(edge.source)).y - centre(boxes.get(edge.target)).y);
-        routable.sort((a, b) => distance(a) - distance(b));
-        let failures = 0;
-        const routes = routable.map((edge, lane) => {
-            const from = boxes.get(edge.source);
-            const to = boxes.get(edge.target);
-            const starts = portAnchor(from, edge.sourcePort) ? [portAnchor(from, edge.sourcePort)] : sideAnchors(from, 'source');
-            const goals = portAnchor(to, edge.targetPort) ? [portAnchor(to, edge.targetPort)] : sideAnchors(to, 'target');
-            let found = router.route(starts, goals, from.room, to.room, 0);
-            if (!found) {
-                found = router.route(starts, goals, from.room, to.room, 1);
-                // Only a lack of tracks between rooms is fixed by wider corridors; a room with no doorway isn't.
-                failures += found && from.room !== to.room ? 1 : 0;
-                found = found ?? router.route(starts, goals, from.room, to.room, 2);
-            }
-            if (!found) {
-                return { edge: edge, points: elbow(from, to, lane) };
-            }
-            return { edge: edge, points: align(found.start, found.points, found.goal) };
-        });
-        return { routes: routes, failures: failures };
-    };
-
-    // Plain elbow between two boxes, used if the router can't find a way through.
-    const elbow = (a, b, lane) => {
-        const ax = a.x + a.width / 2;
-        const ay = a.y + a.height / 2;
-        const bx = b.x + b.width / 2;
-        const by = b.y + b.height / 2;
-        if (Math.abs(by - ay) < chipHeight) {
-            const laneY = Math.min(a.y, b.y) - 4 - (lane % 4) * 4;
-            return [{ x: ax, y: a.y }, { x: ax, y: laneY }, { x: bx, y: laneY }, { x: bx, y: b.y }];
-        }
-        const startY = by > ay ? a.y + a.height : a.y;
-        const endY = by > ay ? b.y : b.y + b.height;
-        const midY = (startY + endY) / 2 + (lane % 3 - 1) * 3;
-        return [{ x: ax, y: startY }, { x: ax, y: midY }, { x: bx, y: midY }, { x: bx, y: endY }];
+        return true;
     };
 
     let renderId = 0;
@@ -776,61 +514,31 @@
         }
         const svg = create('svg', { class: 'map-svg' });
         const viewport = create('g', {}, svg);
-        const layers = { boxes: create('g', {}, viewport), edges: create('g', {}, viewport), nodes: create('g', {}, viewport) };
+        const layers = { boxes: create('g', {}, viewport), trunks: create('g', {}, viewport), edges: create('g', {}, viewport), nodes: create('g', {}, viewport) };
         const bounds = { width: 0, height: 0 };
 
-        lineScale = 1;
         if (mode === 'unifi' || !graph.floors.length) {
             // The network on its own, laid out and routed by ELK.
             const result = await layoutGroup({ nodes: graph.nodes, edges: graph.edges });
             if (id !== renderId) {
                 return;
             }
-            drawGroup(result, layers);
+            drawGroup(result, layers, false);
             bounds.width = result.width;
             bounds.height = result.height;
-        } else {
-            // Rooms at their saved floor plan positions with the devices inside them.
-            const frames = await buildFrames(mode);
+        } else if (mode === 'all') {
+            // The network grouped into floors and rooms.
+            const layout = await layoutNested();
             if (id !== renderId) {
                 return;
             }
-            // Lay the floors out with corridors around them, widening the corridors until every cable between rooms fits on its own track.
-            let gap = corridor;
-            for (let attempt = 0; ; attempt++) {
-                Object.values(layers).forEach(layer => layer.replaceChildren());
-                const boxes = new Map();
-                const roomRects = [];
-                const frameRects = [];
-                let ox = gap;
-                bounds.height = 0;
-                frames.forEach(frame => {
-                    const width = Math.max(...frame.rooms.map(room => room.x + room.width));
-                    const height = Math.max(...frame.rooms.map(room => room.y + room.height));
-                    const frameRect = { x: ox - groupPadding, y: gap, width: width + groupPadding * 2, height: titleHeight + height + groupPadding };
-                    frameRects.push(frameRect);
-                    drawFrame(frame.title, frameRect.x, frameRect.y, frameRect.width, frameRect.height, layers.boxes);
-                    frame.rooms.forEach(room => {
-                        const rect = { x: ox + room.x, y: gap + titleHeight + room.y, width: room.width, height: room.height };
-                        const index = roomRects.push(rect) - 1;
-                        if (room.name) {
-                            drawRoom(room.name, rect.x, rect.y, rect.width, rect.height, layers.boxes);
-                        }
-                        room.items.forEach(item => boxes.set(item.node.id, { ...item, x: rect.x + item.x, y: rect.y + item.y, room: index }));
-                    });
-                    bounds.height = Math.max(bounds.height, frameRect.y + frameRect.height + gap);
-                    ox += width + groupPadding * 2 + gap;
-                });
-                bounds.width = ox - groupPadding;
-                const result = routeEdges(graph.edges, boxes, bounds, roomRects, frameRects);
-                if (result.failures === 0 || attempt === 3) {
-                    boxes.forEach(box => drawNode(box.node, box.x, box.y, box.nativeWidth, box.nativeHeight, layers.nodes, box.compact, box.scale));
-                    result.routes.forEach(routed => drawEdge(routed.edge, routed.points, layers.edges));
-                    break;
-                }
-                gap += 40;
-            }
+            drawNested(layout, layers);
+            bounds.width = layout.width;
+            bounds.height = layout.height;
+        } else if (!await drawFloorPlan(layers, bounds, id)) {
+            return;
         }
+        currentSvg = svg;
 
         // Pan and zoom.
         const view = { scale: 1, x: 0, y: 0 };
@@ -859,20 +567,28 @@
 
         let drag = null;
         svg.addEventListener('pointerdown', event => {
-            if (event.target.closest('.map-node, .map-edge')) {
+            if (event.target.closest('.map-node, .map-edge, .map-trunk')) {
                 return;
             }
-            drag = { x: event.clientX, y: event.clientY, viewX: view.x, viewY: view.y };
+            drag = { x: event.clientX, y: event.clientY, viewX: view.x, viewY: view.y, moved: false };
             svg.setPointerCapture(event.pointerId);
         });
         svg.addEventListener('pointermove', event => {
             if (drag) {
+                drag.moved = drag.moved || Math.abs(event.clientX - drag.x) + Math.abs(event.clientY - drag.y) > 4;
                 view.x = drag.viewX + event.clientX - drag.x;
                 view.y = drag.viewY + event.clientY - drag.y;
                 apply();
             }
         });
-        svg.addEventListener('pointerup', () => drag = null);
+        svg.addEventListener('pointerup', () => {
+            // A click on empty space, rather than a drag, clears the highlight.
+            if (drag && !drag.moved) {
+                clearFocus();
+                details.textContent = defaultDetails;
+            }
+            drag = null;
+        });
         svg.addEventListener('dblclick', fit);
     };
 

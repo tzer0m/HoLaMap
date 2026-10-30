@@ -680,3 +680,53 @@ body {
     color: #fff;
     text-decoration: none;
 }
+
+.details p {
+    white-space: pre-line;
+}
+
+.map-svg.focusing .map-node:not(.related),
+.map-svg.focusing .map-edge:not(.related),
+.map-svg.focusing .map-trunk:not(.related) {
+    opacity: 0.15;
+}
+
+.map-trunk {
+    cursor: pointer;
+}
+
+.map-trunk-line {
+    fill: none;
+    stroke: #9aa3b5;
+    stroke-linecap: round;
+    opacity: 0.55;
+}
+
+.map-trunk-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 16px;
+}
+
+.map-trunk:hover .map-trunk-line,
+.map-trunk.related .map-trunk-line {
+    opacity: 0.9;
+}
+
+.map-trunk-badge {
+    fill: #1d2228;
+    stroke: #9aa3b5;
+    stroke-width: 1.5px;
+}
+
+.map-trunk-count {
+    fill: #e6e6e6;
+    font-size: 11px;
+    font-weight: 700;
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+.map-trunk-end {
+    fill: #9aa3b5;
+}
