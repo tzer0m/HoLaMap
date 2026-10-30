@@ -569,6 +569,10 @@ body {
     font-weight: 600;
 }
 
+.map-room-plate {
+    fill: #1b1f27;
+}
+
 .map-floor-box {
     fill: none;
     stroke: #3a4054;
@@ -580,6 +584,10 @@ body {
     fill: #fff;
     font-size: 14px;
     font-weight: 700;
+}
+
+.map-floor-plate {
+    fill: #000;
 }
 
 .rack-layout {
@@ -729,4 +737,8 @@ body {
 
 .map-trunk-end {
     fill: #9aa3b5;
+}
+
+.map-labels {
+    pointer-events: none;
 }

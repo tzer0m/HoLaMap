@@ -197,14 +197,25 @@
         });
     };
 
+    // Room and floor names go on a layer above the cables, on a plate in the background colour so a cable passing behind never hides them.
+    let labelLayer = null;
+    const drawTitle = (text, x, y, size, plateClass, textClass, parent) => {
+        if (!text) {
+            return;
+        }
+        measure.font = `${size === 14 ? 700 : 600} ${size}px ${fontFamily}`;
+        const width = measure.measureText(text).width;
+        create('rect', { x: x - 4, y: y - size, width: width + 8, height: size + 6, rx: 3, class: plateClass }, labelLayer ?? parent);
+        create('text', { x: x, y: y, class: textClass }, labelLayer ?? parent).textContent = text;
+    };
     const drawRoom = (name, x, y, width, height, parent) => {
         create('rect', { x: x, y: y, width: width, height: height, rx: 6, class: 'map-room-box' }, parent);
-        create('text', { x: x + 8, y: y + 17, class: 'map-room-title' }, parent).textContent = name;
+        drawTitle(name, x + 8, y + 17, 12, 'map-room-plate', 'map-room-title', parent);
     };
 
     const drawFrame = (title, x, y, width, height, parent) => {
         create('rect', { x: x, y: y, width: width, height: height, rx: 8, class: 'map-floor-box' }, parent);
-        create('text', { x: x + groupPadding, y: y + 20, class: 'map-floor-title' }, parent).textContent = title;
+        drawTitle(title, x + groupPadding, y + 20, 14, 'map-floor-plate', 'map-floor-title', parent);
     };
 
     // A device drawn as just its name, used on the Floor Plan view.
@@ -212,6 +223,48 @@
 
     // Lays out a set of devices with ELK and routes their lines. Client devices at the end of a chain are stacked in a column under their parent instead of spreading sideways.
     // Compact lays devices out as name-only chips; aspect asks ELK to pack separate groups to roughly that width-to-height ratio.
+    // On chips the exit point along the edge doesn't matter, so where ELK routed a cable with a sideways jog, slide its exit along the chip so it drops straight down instead.
+    // All of a chip's exits move together, keeping at least 8px between them; a jog stays where the straight line would run through another box.
+    const straighten = (layout, group, layoutById, stackItemsByEdge) => {
+        const edgesById = new Map(group.edges.map(edge => [edge.id, edge]));
+        const same = (a, b) => Math.abs(a - b) < 0.5;
+        const exits = new Map();
+        (layout.edges ?? []).forEach(layoutEdge => {
+            const edge = edgesById.get(layoutEdge.id);
+            const sections = layoutEdge.sections ?? [];
+            if (!edge || sections.length !== 1) {
+                return;
+            }
+            const section = sections[0];
+            const bends = section.bendPoints ?? [];
+            const source = layoutById.get(edge.source);
+            const stackId = stackItemsByEdge.get(edge.id)?.stack.id;
+            let wanted = null;
+            if (bends.length === 2 && same(section.startPoint.x, bends[0].x) && same(bends[0].y, bends[1].y) && same(bends[1].x, section.endPoint.x) && source) {
+                const x = section.endPoint.x;
+                const clear = !layout.children.some(child => child.id !== edge.source && child.id !== edge.target && child.id !== stackId && x > child.x - 4 && x < child.x + child.width + 4 && child.y < section.endPoint.y && child.y + child.height > section.startPoint.y);
+                wanted = x >= source.x + 4 && x <= source.x + source.width - 4 && clear ? x : null;
+            }
+            exits.set(edge.source, [...(exits.get(edge.source) ?? []), { section: section, wanted: wanted }]);
+        });
+        exits.forEach(list => {
+            // Try moving every cable that wants to; drop the ones that would crowd a neighbour until the rest fit.
+            let moving = list.filter(item => item.wanted !== null);
+            const spaced = () => {
+                const xs = list.map(item => moving.includes(item) ? item.wanted : item.section.startPoint.x).sort((a, b) => a - b);
+                return xs.every((x, index) => index === 0 || x - xs[index - 1] >= 8);
+            };
+            while (moving.length && !spaced()) {
+                const worst = moving.reduce((best, item) => Math.abs(item.wanted - item.section.startPoint.x) > Math.abs(best.wanted - best.section.startPoint.x) ? item : best);
+                moving = moving.filter(item => item !== worst);
+            }
+            moving.forEach(item => {
+                item.section.startPoint.x = item.wanted;
+                item.section.bendPoints = [];
+            });
+        });
+    };
+
     const layoutGroup = async (group, compact, aspect) => {
         const sizeFor = node => compact ? chipSize(node) : sizeOf(node);
         const stackEdgesByParent = new Map();
@@ -311,6 +364,9 @@
         }
         const { layout, stacks, stackItemsByEdge } = pass;
         const layoutById = new Map(layout.children.map(child => [child.id, child]));
+        if (compact) {
+            straighten(layout, group, layoutById, stackItemsByEdge);
+        }
         const placements = [];
         layout.children.forEach(child => {
             const stack = stacks.find(candidate => candidate.id === child.id);
@@ -362,9 +418,21 @@
 
     // All view: floors contain rooms, rooms contain devices, and ELK lays out and routes the whole thing at once. Not to scale.
     const layoutNested = async () => {
-        const groupOptions = { 'elk.algorithm': 'layered', 'elk.direction': 'DOWN', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.layered.spacing.nodeNodeBetweenLayers': '50', 'elk.layered.spacing.edgeNodeBetweenLayers': '20', 'elk.layered.spacing.edgeEdgeBetweenLayers': '10', 'elk.spacing.nodeNode': '30', 'elk.spacing.edgeEdge': '10', 'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF' };
+        const groupOptions = { 'elk.algorithm': 'layered', 'elk.direction': 'DOWN', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.layered.mergeHierarchyEdges': 'false', 'elk.layered.spacing.nodeNodeBetweenLayers': '50', 'elk.layered.spacing.edgeNodeBetweenLayers': '20', 'elk.layered.spacing.edgeEdgeBetweenLayers': '10', 'elk.spacing.nodeNode': '30', 'elk.spacing.edgeEdge': '10', 'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF' };
+        // Devices without ports, like a rack, get a connection point per cable so ELK can spread the cables out instead of bunching them into one spot.
         const device = node => {
             const size = sizeOf(node);
+            if (!node.ports.length) {
+                const into = graph.edges.filter(edge => edge.target === node.id && !edge.targetPort);
+                const outOf = graph.edges.filter(edge => edge.source === node.id && !edge.sourcePort);
+                return {
+                    id: node.id,
+                    width: size.width,
+                    height: size.height,
+                    layoutOptions: { 'elk.portConstraints': 'FIXED_SIDE', 'elk.nodeSize.constraints': 'PORTS MINIMUM_SIZE', 'elk.nodeSize.minimum': `(${size.width}, ${size.height})`, 'elk.spacing.portPort': '10' },
+                    ports: [...into.map(edge => ({ id: `${edge.id}-to`, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } })), ...outOf.map(edge => ({ id: `${edge.id}-from`, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'SOUTH' } }))]
+                };
+            }
             return {
                 id: node.id,
                 width: size.width,
@@ -391,7 +459,7 @@
             id: 'root',
             layoutOptions: groupOptions,
             children: floors,
-            edges: graph.edges.map(edge => ({ id: edge.id, sources: [edge.sourcePort || `${edge.source}-out`], targets: [edge.targetPort || `${edge.target}-in`] }))
+            edges: graph.edges.map(edge => ({ id: edge.id, sources: [edge.sourcePort || (nodesById.get(edge.source).ports.length ? `${edge.source}-out` : `${edge.id}-from`)], targets: [edge.targetPort || (nodesById.get(edge.target).ports.length ? `${edge.target}-in` : `${edge.id}-to`)] }))
         });
         return layout;
     };
@@ -547,7 +615,8 @@
         }
         const svg = create('svg', { class: 'map-svg' });
         const viewport = create('g', {}, svg);
-        const layers = { boxes: create('g', {}, viewport), trunks: create('g', {}, viewport), edges: create('g', {}, viewport), nodes: create('g', {}, viewport) };
+        const layers = { boxes: create('g', {}, viewport), trunks: create('g', {}, viewport), edges: create('g', {}, viewport), nodes: create('g', {}, viewport), labels: create('g', { class: 'map-labels' }, viewport) };
+        labelLayer = layers.labels;
         const bounds = { width: 0, height: 0 };
 
         if (mode === 'unifi' || !graph.floors.length) {
