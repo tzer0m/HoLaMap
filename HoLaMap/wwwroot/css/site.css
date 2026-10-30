@@ -907,6 +907,11 @@ body {
     stroke: #14171d;
 }
 
+.rackmap-port.rear .rackmap-port-box {
+    stroke: #8a90b0;
+    stroke-dasharray: 2 2;
+}
+
 .rackmap-port-label {
     fill: #fff;
     font-size: 8px;

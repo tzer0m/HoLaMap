@@ -109,7 +109,7 @@ window.RackMap = (function () {
 
         // Patch panels are drawn like devices with a socket per port. A cable on the front and one on the back of the same port carry a link between those two ends, so that link is drawn through the panel instead of straight across.
         // With only the front patched, the link from that port to somewhere outside the rack is taken to run out of the back.
-        const patchNodes = (rack.panels ?? []).filter(panel => panel.kind === 'patch').map(panel => ({ id: panel.id, label: panel.name, kind: 'patch', patch: panel, detail: `${panel.ports} Port Patch Panel`, online: true, rackU: panel.rackU, rackColumn: panel.rackColumn, rackWidth: panel.rackWidth, rackHeight: panel.rackHeight, ports: Array.from({ length: panel.ports }, (unused, index) => ({ id: `${panel.id}-${index + 1}`, index: index + 1, style: 'patch', detail: `${panel.name} Port ${index + 1}` })) }));
+        const patchNodes = (rack.panels ?? []).filter(panel => panel.kind === 'patch').map(panel => ({ id: panel.id, label: panel.name, kind: 'patch', patch: panel, detail: `${panel.ports} Port Patch Panel`, online: true, rackU: panel.rackU, rackColumn: panel.rackColumn, rackWidth: panel.rackWidth, rackHeight: panel.rackHeight, ports: [...Array.from({ length: panel.ports }, (unused, index) => ({ id: `${panel.id}-${index + 1}`, index: index + 1, style: 'patch', detail: `${panel.name} Front Port ${index + 1}` })), ...Array.from({ length: panel.ports }, (unused, index) => ({ id: `${panel.id}-${index + 1}-r`, index: index + 1, style: 'patch', rear: true, detail: `${panel.name} Rear Port ${index + 1}` }))] }));
         patchNodes.forEach(node => {
             nodesById.set(node.id, node);
             node.ports.forEach(port => portsById.set(port.id, { ...port, node: node }));
@@ -119,7 +119,7 @@ window.RackMap = (function () {
         const rackOf = id => nodesById.get(id)?.rack === rackId || patchNodes.some(node => node.id === id);
         const matches = (edge, end, patch) => edge[end] === patch.node && (!patch.port || !edge[`${end}Port`] || edge[`${end}Port`] === patch.port);
         const routed = new Set();
-        const patchEdges = patchNodes.flatMap(node => node.ports.flatMap(port => {
+        const patchEdges = patchNodes.flatMap(node => node.ports.filter(port => !port.rear).flatMap(port => {
             const front = node.patch.patches.find(patch => patch.number === port.index && patch.side === 'front');
             let back = node.patch.patches.find(patch => patch.number === port.index && patch.side === 'back');
             let carried = front && back ? raw.edges.filter(edge => (matches(edge, 'source', front) && matches(edge, 'target', back)) || (matches(edge, 'source', back) && matches(edge, 'target', front))) : [];
@@ -133,7 +133,7 @@ window.RackMap = (function () {
             const style = { style: base?.style ?? 'patch', poE: base?.poE ?? false, online: base?.online ?? true, detail: base ? base.detail : 'Patch Cable' };
             return [
                 ...(front ? [{ ...style, id: `${port.id}-front`, source: front.node, sourcePort: front.port, target: node.id, targetPort: port.id }] : []),
-                ...(back ? [{ ...style, id: `${port.id}-back`, source: node.id, sourcePort: port.id, target: back.node, targetPort: back.port, back: true }] : [])
+                ...(back ? [{ ...style, id: `${port.id}-back`, source: node.id, sourcePort: `${port.id}-r`, target: back.node, targetPort: back.port, back: true }] : [])
             ];
         }));
         const edges = [...raw.edges.filter(edge => !routed.has(edge.id)), ...patchEdges].filter(edge => edge.source !== edge.target && (inRack.has(edge.source) || inRack.has(edge.target)));
@@ -153,6 +153,22 @@ window.RackMap = (function () {
             const sockets = node.ports.length ? node.ports.map(port => ({ ...port, node: node })) : edges.filter(edge => edge.source === node.id || edge.target === node.id).map(edge => ({ id: `${edge.id}-${edge.source === node.id ? 'from' : 'to'}`, index: '', style: edge.style, detail: `${node.label} Network Port`, node: node }));
             const width = node.rackWidth * columnWidth - inset * 2;
             const boxHeight = node.rackHeight * unitHeight - inset * 2;
+            // A patch panel has its front ports in rows of up to 24 with the rear ports in rows underneath, each row nudged half a port along so a cable dropping from one row passes between the ports of the next.
+            if (node.patch) {
+                const perPatchRow = Math.min(node.patch.ports, 24);
+                const sideRows = Math.ceil(node.patch.ports / perPatchRow);
+                const patchLeft = Math.ceil(textWidth(node.label, 12, true)) + 20;
+                const patchRows = sideRows * 2;
+                const box = { node: node, width: width, height: boxHeight, rows: patchRows, sockets: sockets, labelY: 2 + ((patchRows - 1) * portPitch + portSize) / 2 + 4, need: 4 + (patchRows - 1) * portPitch + portSize };
+                sockets.forEach(socket => {
+                    const number = socket.index - 1;
+                    const row = Math.floor(number / perPatchRow) + (socket.rear ? sideRows : 0);
+                    const end = { socket: socket, box: box, x: patchLeft + (number % perPatchRow) * portPitch + (row % 2 ? portPitch / 2 : 0), y: 2 + row * portPitch, row: row, cables: [] };
+                    socket.end = end;
+                    ends.push(end);
+                });
+                return box;
+            }
             const perRow = Math.max(1, Math.floor((width - 12) / portPitch));
             const besideLabel = Math.max(1, Math.floor((width - textWidth(node.label, 12, true) - 24) / portPitch));
             const rowsBeside = Math.max(1, Math.floor((boxHeight - 2) / portPitch));
@@ -213,8 +229,8 @@ window.RackMap = (function () {
         const channelOf = (end, up) => up ? topOf(end.box) : bottomOf(end.box);
         const centreU = end => end.box.node.rackU + end.box.node.rackHeight / 2;
         // A port in the top row of two exits upwards and one in the bottom row downwards; a single row picks the side the cable is heading.
-        // A patch panel port with cables on both sides sends them out opposite ways so they don't share a drop.
-        const pickUp = (end, wantUp) => end.taken !== undefined && end.box.node.patch ? !end.taken : end.box.rows === 2 && !end.box.node.patch ? end.row === 0 : wantUp;
+        // Patch panel rear ports always drop downwards, away from the front ports.
+        const pickUp = (end, wantUp) => end.box.node.patch ? !end.socket.rear && wantUp : end.box.rows === 2 ? end.row === 0 : wantUp;
         const take = (end, up) => {
             end.taken = up;
             return up;
@@ -287,16 +303,51 @@ window.RackMap = (function () {
                 run.to = to;
                 return run;
             });
-            return assignTracks(items);
-        });
-        // Track 0 goes next to the device most of the channel's cables drop from, so the drops don't cross each other's runs.
-        const downwards = channels.map(runs => {
-            const fromBelow = runs.filter(run => run.kind === 'out' ? run.cable.up : run.kind === 'lane' ? (run.end === run.cable.from ? run.cable.fromUp : run.cable.toUp) : run.cable.fromUp).length;
-            return fromBelow * 2 < runs.length;
+            // Cables dropping in from the device above take the top of the channel and ones rising from below take the bottom, each with the shortest run nearest its device, so no drop crosses another cable's run.
+            // Cables joining two devices across the channel sit in the middle.
+            const risesFrom = run => run.kind === 'out' ? run.cable.up : run.kind === 'lane' ? (run.end === run.cable.from ? run.cable.fromUp : run.cable.toUp) : null;
+            const above = items.filter(run => risesFrom(run) === false);
+            const middle = items.filter(run => risesFrom(run) === null);
+            const below = items.filter(run => risesFrom(run) === true);
+            const aboveCount = assignTracks(above);
+            // Each cable across the channel gets its own track, ordered so that as few drops as possible cut through another cable's run.
+            middle.forEach(run => {
+                const ends = [run.cable.from, run.cable.to];
+                run.top = ends.map(end => (end === run.cable.from ? run.cable.fromUp : run.cable.toUp) ? null : portCentre(end).x).find(x => x !== null) ?? run.from;
+                run.bottom = ends.map(end => (end === run.cable.from ? run.cable.fromUp : run.cable.toUp) ? portCentre(end).x : null).find(x => x !== null) ?? run.to;
+            });
+            const inside = (x, run) => x > run.from && x < run.to;
+            const cost = (upper, lower) => (inside(lower.top, upper) ? 1 : 0) + (inside(upper.bottom, lower) ? 1 : 0);
+            const ordered = [];
+            middle.forEach(run => {
+                let best = 0;
+                let bestCost = Infinity;
+                for (let at = 0; at <= ordered.length; at++) {
+                    const total = ordered.slice(0, at).reduce((sum, other) => sum + cost(other, run), 0) + ordered.slice(at).reduce((sum, other) => sum + cost(run, other), 0);
+                    if (total < bestCost) {
+                        best = at;
+                        bestCost = total;
+                    }
+                }
+                ordered.splice(best, 0, run);
+            });
+            ordered.forEach((run, index) => run.track = index);
+            const middleCount = ordered.length;
+            const belowCount = assignTracks(below);
+            const total = aboveCount + middleCount + belowCount;
+            above.forEach(run => run.slot = run.track);
+            middle.forEach(run => run.slot = aboveCount + run.track);
+            below.forEach(run => run.slot = total - 1 - run.track);
+            return total;
         });
 
         // Vertical positions: each channel is as tall as the cables running through it.
         const channelHeight = channelTracks.map(count => channelGap + count * trackGap);
+        // A unit grows when a device in it needs more room for its ports, like a 48 port patch panel with its rear ports.
+        const unitHeights = Array.from({ length: height + 1 }, () => unitHeight);
+        boxes.filter(box => box.need > box.height).forEach(box => {
+            unitHeights[topOf(box)] = Math.max(unitHeights[topOf(box)], unitHeight + box.need - box.height);
+        });
         const channelTop = [];
         const unitTop = [];
         let y = frame;
@@ -305,13 +356,13 @@ window.RackMap = (function () {
             y += channelHeight[b];
             if (b > 0) {
                 unitTop[b] = y;
-                y += unitHeight;
+                y += unitHeights[b];
             }
         }
         const frameBottom = y + frame;
-        const trackY = (channel, track) => downwards[channel] ? channelTop[channel] + channelGap / 2 + trackGap / 2 + track * trackGap : channelTop[channel] + channelHeight[channel] - channelGap / 2 - trackGap / 2 - track * trackGap;
+        const trackY = (channel, slot) => channelTop[channel] + channelGap / 2 + trackGap / 2 + slot * trackGap;
         const boxTop = box => unitTop[topOf(box)] + inset;
-        const boxBottom = box => unitTop[box.node.rackU] + unitHeight - inset;
+        const boxBottom = box => unitTop[box.node.rackU] + unitHeights[box.node.rackU] - inset;
         boxes.forEach(box => {
             box.x = deviceLeft + box.node.rackColumn * columnWidth + inset;
             box.y = boxTop(box);
@@ -345,8 +396,8 @@ window.RackMap = (function () {
             create('line', { x1: frame, y1: middle, x2: frameRight - frame, y2: middle, class: 'rackmap-divider' }, svg);
         }
         for (let unit = 1; unit <= height; unit++) {
-            create('rect', { x: deviceLeft, y: unitTop[unit], width: deviceRight - deviceLeft, height: unitHeight, class: 'rackmap-unit' }, svg);
-            create('text', { x: frame + railWidth - 8, y: unitTop[unit] + unitHeight / 2 + 4, class: 'rackmap-u' }, svg).textContent = unit;
+            create('rect', { x: deviceLeft, y: unitTop[unit], width: deviceRight - deviceLeft, height: unitHeights[unit], class: 'rackmap-unit' }, svg);
+            create('text', { x: frame + railWidth - 8, y: unitTop[unit] + unitHeights[unit] / 2 + 4, class: 'rackmap-u' }, svg).textContent = unit;
         }
 
         const deviceLayer = create('g', {}, svg);
@@ -381,7 +432,7 @@ window.RackMap = (function () {
             const x = deviceLeft + panel.rackColumn * columnWidth + inset;
             const top = unitTop[panel.rackU + panel.rackHeight - 1] + inset;
             const width = panel.rackWidth * columnWidth - inset * 2;
-            const panelHeight = unitTop[panel.rackU] + unitHeight - inset - top;
+            const panelHeight = unitTop[panel.rackU] + unitHeights[panel.rackU] - inset - top;
             const name = panel.kind === 'brush' ? 'Brush Panel' : 'Blank Panel';
             const group = create('g', { class: `rackmap-panel ${panel.kind}`, transform: `translate(${x}, ${top})` }, deviceLayer);
             create('rect', { width: width, height: panelHeight, rx: 4, class: 'rackmap-panel-box' }, group);
@@ -417,7 +468,7 @@ window.RackMap = (function () {
             });
             box.sockets.forEach(socket => {
                 const end = socket.end;
-                const square = create('g', { class: 'rackmap-port', transform: `translate(${end.x}, ${end.y})` }, group);
+                const square = create('g', { class: 'rackmap-port' + (socket.rear ? ' rear' : ''), transform: `translate(${end.x}, ${end.y})` }, group);
                 end.cables.forEach(cable => square.setAttribute('data-edge', cable.edge.id));
                 create('rect', { width: portSize, height: portSize, rx: 2, fill: end.cables.length ? colours[box.node.patch ? end.cables[0].edge.style : socket.style] ?? '#7b8794' : '#3a414d', class: 'rackmap-port-box' }, square);
                 const number = create('text', { x: portSize / 2, y: portSize / 2 + 3, class: 'rackmap-port-label' + (darkText.includes(box.node.patch ? end.cables[0]?.edge.style ?? 'patch' : socket.style) && end.cables.length ? ' dark' : '') }, square);
@@ -434,7 +485,7 @@ window.RackMap = (function () {
             const clean = tidy(points);
             const group = create('g', { class: 'rackmap-cable' + (cable.edge.online ? '' : ' offline') + (cable.edge.back ? ' back' : ''), 'data-edge': cable.edge.id }, cableLayer);
             create('path', { d: roundedPath(clean), class: 'rackmap-cable-hit' }, group);
-            create('path', { d: cable.edge.poE ? zigzagPath(clean) : roundedPath(clean), class: 'rackmap-cable-line', stroke: colours[cable.edge.style] ?? '#7b8794' }, group);
+            create('path', { d: cable.edge.poE && !cable.edge.back ? zigzagPath(clean) : roundedPath(clean), class: 'rackmap-cable-line', stroke: colours[cable.edge.style] ?? '#7b8794' }, group);
             group.addEventListener('click', event => {
                 event.stopPropagation();
                 focus([cable], endsOf(cable), describe(cable));
@@ -445,7 +496,7 @@ window.RackMap = (function () {
         cables.forEach(cable => {
             if (cable.external) {
                 const end = cable.inside;
-                const trackAt = trackY(cable.channel, cable.run.track);
+                const trackAt = trackY(cable.channel, cable.run.slot);
                 const exit = exitPoint(end, cable.up);
                 const labelX = frameRight + labelGap;
                 const group = drawCable(cable, [exit, { x: exit.x, y: trackAt }, { x: labelX - 6, y: trackAt }]);
@@ -459,14 +510,14 @@ window.RackMap = (function () {
                 return;
             }
             if (cable.direct) {
-                const trackAt = trackY(cable.channel, cable.run.track);
+                const trackAt = trackY(cable.channel, cable.run.slot);
                 const fromExit = exitPoint(cable.from, cable.fromUp);
                 const toExit = exitPoint(cable.to, cable.toUp);
                 drawCable(cable, [fromExit, { x: fromExit.x, y: trackAt }, { x: toExit.x, y: trackAt }, toExit]);
                 return;
             }
-            const fromY = trackY(cable.channels[0], cable.runs[0].track);
-            const toY = trackY(cable.channels[1], cable.runs[1].track);
+            const fromY = trackY(cable.channels[0], cable.runs[0].slot);
+            const toY = trackY(cable.channels[1], cable.runs[1].slot);
             const fromExit = exitPoint(cable.from, cable.fromUp);
             const toExit = exitPoint(cable.to, cable.toUp);
             const x = laneX(cable.lane);
