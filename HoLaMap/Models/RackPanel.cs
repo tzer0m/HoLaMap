@@ -26,6 +26,16 @@ namespace HoLaMap.Models
         public RackPanelKind Kind { get; set; }
 
         /// <summary>
+        /// Gets or sets the name shown for a patch panel.
+        /// </summary>
+        public string? Name { get; set; }
+
+        /// <summary>
+        /// Gets or sets how many ports a patch panel has: 12, 24 or 48, or 0 for other panels.
+        /// </summary>
+        public int PortCount { get; set; }
+
+        /// <summary>
         /// Gets or sets the lowest rack unit the panel occupies, counting from 1 at the bottom.
         /// </summary>
         public int RackU { get; set; } = 1;
@@ -44,5 +54,10 @@ namespace HoLaMap.Models
         /// Gets or sets how many rack units tall the panel is.
         /// </summary>
         public int RackHeight { get; set; } = 1;
+
+        /// <summary>
+        /// Gets or sets the cables plugged into a patch panel's ports.
+        /// </summary>
+        public List<PatchConnection> Connections { get; set; } = [];
     }
 }

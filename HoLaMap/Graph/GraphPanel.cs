@@ -6,9 +6,29 @@ namespace HoLaMap.Graph
     public class GraphPanel
     {
         /// <summary>
-        /// The kind of panel: blank or brush.
+        /// The panel ID.
+        /// </summary>
+        public string Id { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The kind of panel: blank, brush or patch.
         /// </summary>
         public string Kind { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The name shown for a patch panel.
+        /// </summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
+        /// How many ports a patch panel has, or 0 for other panels.
+        /// </summary>
+        public int Ports { get; set; }
+
+        /// <summary>
+        /// The cables plugged into a patch panel's ports.
+        /// </summary>
+        public List<GraphPatch> Patches { get; set; } = [];
 
         /// <summary>
         /// The lowest rack unit the panel occupies, counting from 1 at the bottom.

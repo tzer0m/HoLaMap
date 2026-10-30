@@ -1,8 +1,8 @@
 // Draws one rack to scale with the ports on each device's front, the cables between them, and the cables leaving the rack with a label saying where each one goes.
 window.RackMap = (function () {
     const svgNs = 'http://www.w3.org/2000/svg';
-    const colours = { 'port-wan': '#1e88c8', 'port-1000': '#4a8a1c', 'port-100': '#e6c229', 'port-10': '#e67e22', 'port-down': '#7b8794' };
-    const darkText = ['port-100', 'port-down'];
+    const colours = { 'patch': '#b0b4bc', 'port-wan': '#1e88c8', 'port-1000': '#4a8a1c', 'port-100': '#e6c229', 'port-10': '#e67e22', 'port-down': '#7b8794' };
+    const darkText = ['patch', 'port-100', 'port-down'];
     const unitHeight = 44;
     const columnWidth = 150;
     const columns = 4;
@@ -106,8 +106,37 @@ window.RackMap = (function () {
         const roomsById = new Map(raw.floors.flatMap(floor => floor.rooms.map(room => [room.id, room])));
         const racksById = new Map(raw.racks.map(item => [item.id, item]));
         const devices = raw.nodes.filter(node => node.rack === rackId && node.rackU > 0);
+
+        // Patch panels are drawn like devices with a socket per port. A cable on the front and one on the back of the same port carry a link between those two ends, so that link is drawn through the panel instead of straight across.
+        // With only the front patched, the link from that port to somewhere outside the rack is taken to run out of the back.
+        const patchNodes = (rack.panels ?? []).filter(panel => panel.kind === 'patch').map(panel => ({ id: panel.id, label: panel.name, kind: 'patch', patch: panel, detail: `${panel.ports} Port Patch Panel`, online: true, rackU: panel.rackU, rackColumn: panel.rackColumn, rackWidth: panel.rackWidth, rackHeight: panel.rackHeight, ports: Array.from({ length: panel.ports }, (unused, index) => ({ id: `${panel.id}-${index + 1}`, index: index + 1, style: 'patch', detail: `${panel.name} Port ${index + 1}` })) }));
+        patchNodes.forEach(node => {
+            nodesById.set(node.id, node);
+            node.ports.forEach(port => portsById.set(port.id, { ...port, node: node }));
+        });
+        devices.push(...patchNodes);
         const inRack = new Set(devices.map(node => node.id));
-        const edges = raw.edges.filter(edge => edge.source !== edge.target && (inRack.has(edge.source) || inRack.has(edge.target)));
+        const rackOf = id => nodesById.get(id)?.rack === rackId || patchNodes.some(node => node.id === id);
+        const matches = (edge, end, patch) => edge[end] === patch.node && (!patch.port || !edge[`${end}Port`] || edge[`${end}Port`] === patch.port);
+        const routed = new Set();
+        const patchEdges = patchNodes.flatMap(node => node.ports.flatMap(port => {
+            const front = node.patch.patches.find(patch => patch.number === port.index && patch.side === 'front');
+            let back = node.patch.patches.find(patch => patch.number === port.index && patch.side === 'back');
+            let carried = front && back ? raw.edges.filter(edge => (matches(edge, 'source', front) && matches(edge, 'target', back)) || (matches(edge, 'source', back) && matches(edge, 'target', front))) : [];
+            if (front && !back) {
+                carried = raw.edges.filter(edge => (matches(edge, 'source', front) && !rackOf(edge.target)) || (matches(edge, 'target', front) && !rackOf(edge.source)));
+                const far = carried[0];
+                back = far ? (matches(far, 'source', front) ? { node: far.target, port: far.targetPort } : { node: far.source, port: far.sourcePort }) : null;
+            }
+            carried.forEach(edge => routed.add(edge.id));
+            const base = carried[0];
+            const style = { style: base?.style ?? 'patch', poE: base?.poE ?? false, online: base?.online ?? true, detail: base ? base.detail : 'Patch Cable' };
+            return [
+                ...(front ? [{ ...style, id: `${port.id}-front`, source: front.node, sourcePort: front.port, target: node.id, targetPort: port.id }] : []),
+                ...(back ? [{ ...style, id: `${port.id}-back`, source: node.id, sourcePort: port.id, target: back.node, targetPort: back.port, back: true }] : [])
+            ];
+        }));
+        const edges = [...raw.edges.filter(edge => !routed.has(edge.id)), ...patchEdges].filter(edge => edge.source !== edge.target && (inRack.has(edge.source) || inRack.has(edge.target)));
         const height = rack.heightU;
 
         // Where a device ends up: a box per device and a square per port, in rack coordinates before the cable channels are added.
@@ -126,7 +155,7 @@ window.RackMap = (function () {
             const boxHeight = node.rackHeight * unitHeight - inset * 2;
             const perRow = Math.max(1, Math.floor((width - 12) / portPitch));
             const besideLabel = Math.max(1, Math.floor((width - textWidth(node.label, 12, true) - 24) / portPitch));
-                        const rowsBeside = Math.max(1, Math.floor((boxHeight - 2) / portPitch));
+            const rowsBeside = Math.max(1, Math.floor((boxHeight - 2) / portPitch));
             // Ports sit to the right of the name, in as many rows as the face allows, or under the name on a narrow device.
             const labelWidth = textWidth(node.label, 12, true);
             let rows = Math.ceil(sockets.length / besideLabel);
@@ -142,12 +171,13 @@ window.RackMap = (function () {
             if (!sockets.length) {
                 labelY = Math.min(boxHeight, unitHeight - inset * 2) / 2 + 4;
             }
-            // Two rows are numbered odd on top and even below, like the front of a switch.
+            // Two rows are numbered odd on top and even below, like the front of a switch. Patch panels count along the top row first.
             const perColumn = Math.max(1, rows);
+            const oddEven = rows === 2 && !node.patch;
             const box = { node: node, width: width, height: boxHeight, rows: rows, sockets: sockets, labelY: labelY };
             sockets.forEach((socket, index) => {
-                const column = rows === 2 ? Math.floor(index / 2) : index % Math.ceil(sockets.length / perColumn);
-                const row = rows === 2 ? index % 2 : Math.floor(index / Math.ceil(sockets.length / perColumn));
+                const column = oddEven ? Math.floor(index / 2) : index % Math.ceil(sockets.length / perColumn);
+                const row = oddEven ? index % 2 : Math.floor(index / Math.ceil(sockets.length / perColumn));
                 const end = { socket: socket, box: box, x: left + column * portPitch, y: top + row * portPitch, row: row, cables: [] };
                 socket.end = end;
                 ends.push(end);
@@ -183,22 +213,27 @@ window.RackMap = (function () {
         const channelOf = (end, up) => up ? topOf(end.box) : bottomOf(end.box);
         const centreU = end => end.box.node.rackU + end.box.node.rackHeight / 2;
         // A port in the top row of two exits upwards and one in the bottom row downwards; a single row picks the side the cable is heading.
-        const pickUp = (end, wantUp) => end.box.rows === 2 ? end.row === 0 : wantUp;
-        cables.forEach(cable => {
+        // A patch panel port with cables on both sides sends them out opposite ways so they don't share a drop.
+        const pickUp = (end, wantUp) => end.taken !== undefined && end.box.node.patch ? !end.taken : end.box.rows === 2 && !end.box.node.patch ? end.row === 0 : wantUp;
+        const take = (end, up) => {
+            end.taken = up;
+            return up;
+        };
+        [...cables].sort((a, b) => a.external - b.external).forEach(cable => {
             if (cable.external) {
                 const end = cable.inside;
                 const above = channels[topOf(end.box)].length;
                 const below = channels[bottomOf(end.box)].length;
-                end.up = pickUp(end, above <= below);
-                cable.channel = channelOf(end, end.up);
+                cable.up = take(end, pickUp(end, above <= below));
+                cable.channel = channelOf(end, cable.up);
                 cable.run = { cable: cable, kind: 'out' };
                 channels[cable.channel].push(cable.run);
                 return;
             }
             const sourceAbove = centreU(cable.from) < centreU(cable.to);
             const sameLevel = centreU(cable.from) === centreU(cable.to);
-            cable.fromUp = pickUp(cable.from, sameLevel || sourceAbove);
-            cable.toUp = pickUp(cable.to, sameLevel || !sourceAbove);
+            cable.fromUp = take(cable.from, pickUp(cable.from, sameLevel || sourceAbove));
+            cable.toUp = take(cable.to, pickUp(cable.to, sameLevel || !sourceAbove));
             const fromChannel = channelOf(cable.from, cable.fromUp);
             const toChannel = channelOf(cable.to, cable.toUp);
             if (fromChannel === toChannel) {
@@ -256,7 +291,7 @@ window.RackMap = (function () {
         });
         // Track 0 goes next to the device most of the channel's cables drop from, so the drops don't cross each other's runs.
         const downwards = channels.map(runs => {
-            const fromBelow = runs.filter(run => run.kind === 'out' ? run.cable.inside.up : run.kind === 'lane' ? (run.end === run.cable.from ? run.cable.fromUp : run.cable.toUp) : run.cable.fromUp).length;
+            const fromBelow = runs.filter(run => run.kind === 'out' ? run.cable.up : run.kind === 'lane' ? (run.end === run.cable.from ? run.cable.fromUp : run.cable.toUp) : run.cable.fromUp).length;
             return fromBelow * 2 < runs.length;
         });
 
@@ -342,7 +377,7 @@ window.RackMap = (function () {
         const endsOf = cable => [cable.from, cable.to].filter(end => end).map(end => end.box.node.id);
 
         // Blank and brush panels sit behind the cables like the devices, but have no ports.
-        (rack.panels ?? []).forEach(panel => {
+        (rack.panels ?? []).filter(panel => panel.kind !== 'patch').forEach(panel => {
             const x = deviceLeft + panel.rackColumn * columnWidth + inset;
             const top = unitTop[panel.rackU + panel.rackHeight - 1] + inset;
             const width = panel.rackWidth * columnWidth - inset * 2;
@@ -384,8 +419,8 @@ window.RackMap = (function () {
                 const end = socket.end;
                 const square = create('g', { class: 'rackmap-port', transform: `translate(${end.x}, ${end.y})` }, group);
                 end.cables.forEach(cable => square.setAttribute('data-edge', cable.edge.id));
-                create('rect', { width: portSize, height: portSize, rx: 2, fill: end.cables.length ? colours[socket.style] ?? '#7b8794' : '#3a414d', class: 'rackmap-port-box' }, square);
-                const number = create('text', { x: portSize / 2, y: portSize / 2 + 3, class: 'rackmap-port-label' + (darkText.includes(socket.style) && end.cables.length ? ' dark' : '') }, square);
+                create('rect', { width: portSize, height: portSize, rx: 2, fill: end.cables.length ? colours[box.node.patch ? end.cables[0].edge.style : socket.style] ?? '#7b8794' : '#3a414d', class: 'rackmap-port-box' }, square);
+                const number = create('text', { x: portSize / 2, y: portSize / 2 + 3, class: 'rackmap-port-label' + (darkText.includes(box.node.patch ? end.cables[0]?.edge.style ?? 'patch' : socket.style) && end.cables.length ? ' dark' : '') }, square);
                 number.textContent = socket.index;
                 create('title', {}, square).textContent = socket.detail;
                 square.addEventListener('click', event => {
@@ -397,7 +432,7 @@ window.RackMap = (function () {
 
         const drawCable = (cable, points) => {
             const clean = tidy(points);
-            const group = create('g', { class: 'rackmap-cable' + (cable.edge.online ? '' : ' offline'), 'data-edge': cable.edge.id }, cableLayer);
+            const group = create('g', { class: 'rackmap-cable' + (cable.edge.online ? '' : ' offline') + (cable.edge.back ? ' back' : ''), 'data-edge': cable.edge.id }, cableLayer);
             create('path', { d: roundedPath(clean), class: 'rackmap-cable-hit' }, group);
             create('path', { d: cable.edge.poE ? zigzagPath(clean) : roundedPath(clean), class: 'rackmap-cable-line', stroke: colours[cable.edge.style] ?? '#7b8794' }, group);
             group.addEventListener('click', event => {
@@ -411,7 +446,7 @@ window.RackMap = (function () {
             if (cable.external) {
                 const end = cable.inside;
                 const trackAt = trackY(cable.channel, cable.run.track);
-                const exit = exitPoint(end, end.up);
+                const exit = exitPoint(end, cable.up);
                 const labelX = frameRight + labelGap;
                 const group = drawCable(cable, [exit, { x: exit.x, y: trackAt }, { x: labelX - 6, y: trackAt }]);
                 create('circle', { cx: labelX - 6, cy: trackAt, r: 3, fill: colours[cable.edge.style] ?? '#7b8794' }, group);

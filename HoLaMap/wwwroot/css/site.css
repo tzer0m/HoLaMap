@@ -655,14 +655,45 @@ body {
     color: #c4c9d4;
 }
 
+.rack-panel-patch {
+    background: #2c2f35;
+    color: #e6e6e6;
+}
+
 .rack-device.selected {
     outline: 2px solid #4a8a1c;
+}
+
+.rack-side {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 320px;
+}
+
+.rack-tabs {
+    margin-bottom: 0;
+    gap: 4px;
+}
+
+.rack-tabs a {
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+}
+
+.rack-tabs a.active {
+    border-color: #4a5068;
+    background: #1b1f27;
 }
 
 .rack-forms {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    padding: 16px;
+    border: 1px solid #4a5068;
+    border-radius: 0 6px 6px 6px;
+    background: #1b1f27;
 }
 
 .rack-forms h2 {
@@ -893,6 +924,15 @@ body {
     stroke-width: 2.5;
 }
 
+.rackmap-cable.back .rackmap-cable-line {
+    stroke-dasharray: 6 3;
+}
+
+.rackmap-device.patch .rackmap-device-box {
+    fill: #2c2f35;
+    stroke: #8a90b0;
+}
+
 .rackmap-cable-hit {
     fill: none;
     stroke: transparent;
@@ -920,7 +960,32 @@ body {
     opacity: 0.15;
 }
 
+.rack-cables {
+    margin-top: 32px;
+}
+
 .rack-cables h2 {
     margin: 0 0 8px;
     font-size: 1.1rem;
+}
+
+.patch-table {
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.patch-table th,
+.patch-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid #2a2f3a;
+    text-align: left;
+}
+
+.link-button {
+    padding: 0 4px;
+    border: none;
+    background: none;
+    color: #e67e22;
+    font: inherit;
+    cursor: pointer;
 }

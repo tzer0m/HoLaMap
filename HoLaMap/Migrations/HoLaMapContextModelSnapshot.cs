@@ -226,6 +226,42 @@ namespace HoLaMap.Migrations
                     b.ToTable("Networks");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.PatchConnection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DeviceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PortId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RackPanelId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Side")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId");
+
+                    b.HasIndex("PortId");
+
+                    b.HasIndex("RackPanelId", "Number", "Side")
+                        .IsUnique();
+
+                    b.ToTable("PatchConnections");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.Port", b =>
                 {
                     b.Property<int>("Id")
@@ -312,6 +348,12 @@ namespace HoLaMap.Migrations
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text");
+
+                    b.Property<int>("PortCount")
+                        .HasColumnType("integer");
 
                     b.Property<int>("RackColumn")
                         .HasColumnType("integer");
@@ -443,6 +485,32 @@ namespace HoLaMap.Migrations
                     b.Navigation("ToPort");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.PatchConnection", b =>
+                {
+                    b.HasOne("HoLaMap.Models.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("HoLaMap.Models.Port", "Port")
+                        .WithMany()
+                        .HasForeignKey("PortId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("HoLaMap.Models.RackPanel", "RackPanel")
+                        .WithMany("Connections")
+                        .HasForeignKey("RackPanelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+
+                    b.Navigation("Port");
+
+                    b.Navigation("RackPanel");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.Port", b =>
                 {
                     b.HasOne("HoLaMap.Models.Device", "Device")
@@ -504,6 +572,11 @@ namespace HoLaMap.Migrations
                     b.Navigation("Devices");
 
                     b.Navigation("Panels");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.RackPanel", b =>
+                {
+                    b.Navigation("Connections");
                 });
 
             modelBuilder.Entity("HoLaMap.Models.Room", b =>

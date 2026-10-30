@@ -5,6 +5,7 @@
     ViewData["Title"] = Model.Rack.Name;
     Device? editing = Model.Editing;
     RackPanel? panel = Model.EditingPanel;
+    string tab = Model.ActiveTab;
 }
 
 <header class="page-header">
@@ -37,157 +38,263 @@
             @foreach (RackPanel item in Model.Panels)
             {
                 int row = Model.Rack.HeightU - (item.RackU + item.RackHeight - 1) + 1;
-                <a class="rack-device rack-panel rack-panel-@item.Kind.ToString().ToLowerInvariant()@(item.Id == panel?.Id ? " selected" : "")" style="grid-column: @(item.RackColumn + 1) / span @item.RackWidth; grid-row: @row / span @item.RackHeight" asp-page="Details" asp-route-id="@Model.Rack.Id" asp-route-panel="@item.Id" title="@item.Kind Panel">@item.Kind Panel</a>
+                <a class="rack-device rack-panel rack-panel-@item.Kind.ToString().ToLowerInvariant()@(item.Id == panel?.Id ? " selected" : "")" style="grid-column: @(item.RackColumn + 1) / span @item.RackWidth; grid-row: @row / span @item.RackHeight" asp-page="Details" asp-route-id="@Model.Rack.Id" asp-route-panel="@item.Id" title="@(item.Name ?? $"{item.Kind} Panel")">@(item.Name ?? $"{item.Kind} Panel")</a>
             }
         </div>
     </div>
-    <div class="rack-forms">
-        <form method="post" asp-page-handler="Place" asp-route-id="@Model.Rack.Id" class="form">
-            <h2>@(editing == null ? "Add Device" : "Edit Device")</h2>
-            @if (editing == null)
+    <div class="rack-side">
+        <nav class="floor-tabs rack-tabs">
+            <a class="@(tab == "device" ? "active" : "")" asp-page="Details" asp-route-id="@Model.Rack.Id" asp-route-edit="@editing?.Id" asp-route-tab="device">@(editing == null ? "Add Device" : "Edit Device")</a>
+            <a class="@(tab == "panel" ? "active" : "")" asp-page="Details" asp-route-id="@Model.Rack.Id" asp-route-panel="@panel?.Id" asp-route-tab="panel">@(panel == null ? "Add Panel" : "Edit Panel")</a>
+            @if (panel?.Kind == RackPanelKind.Patch)
             {
-                <label>
-                    Device
-                    <select name="deviceId">
-                        @foreach (Device candidate in Model.Candidates)
+                <a class="@(tab == "patch" ? "active" : "")" asp-page="Details" asp-route-id="@Model.Rack.Id" asp-route-panel="@panel.Id" asp-route-tab="patch">Patch Ports</a>
+            }
+            <a class="@(tab == "rack" ? "active" : "")" asp-page="Details" asp-route-id="@Model.Rack.Id" asp-route-tab="rack">Rack Settings</a>
+        </nav>
+        <div class="rack-forms">
+            @if (tab == "device")
+            {
+                <form method="post" asp-page-handler="Place" asp-route-id="@Model.Rack.Id" class="form">
+                    @if (editing == null)
+                    {
+                        <label>
+                            Device
+                            <select name="deviceId">
+                                @foreach (Device candidate in Model.Candidates)
+                                {
+                                    <option value="@candidate.Id">@candidate.Name@(candidate.Rack == null ? "" : $" ({candidate.Rack.Name})")</option>
+                                }
+                            </select>
+                        </label>
+                    }
+                    else
+                    {
+                        <input type="hidden" name="deviceId" value="@editing.Id" />
+                        <strong>@editing.Name</strong>
+                    }
+                    <label>
+                        Lowest U
+                        <input name="u" type="number" min="1" max="@Model.Rack.HeightU" value="@(editing?.RackU ?? 1)" />
+                    </label>
+                    <label>
+                        Height in U
+                        <input name="height" type="number" min="1" max="@Model.Rack.HeightU" value="@(editing?.RackHeight ?? 1)" />
+                    </label>
+                    <label>
+                        Width
+                        <select name="width">
+                            <option value="4" selected="@((editing?.RackWidth ?? 4) == 4)">Full</option>
+                            <option value="2" selected="@(editing?.RackWidth == 2)">Half</option>
+                            <option value="1" selected="@(editing?.RackWidth == 1)">Quarter</option>
+                        </select>
+                    </label>
+                    <label>
+                        Column
+                        <select name="column">
+                            @for (int column = 0; column < 4; column++)
+                            {
+                                <option value="@column" selected="@((editing?.RackColumn ?? 0) == column)">Column @(column + 1)</option>
+                            }
+                        </select>
+                    </label>
+                    <div class="form-actions">
+                        <button type="submit" class="button">Save</button>
+                        @if (editing != null)
                         {
-                            <option value="@candidate.Id">@candidate.Name@(candidate.Rack == null ? "" : $" ({candidate.Rack.Name})")</option>
+                            <a asp-page="Details" asp-route-id="@Model.Rack.Id">Cancel</a>
                         }
-                    </select>
-                </label>
+                    </div>
+                </form>
+                if (editing != null)
+                {
+                    <form method="post" asp-page-handler="Remove" asp-route-id="@Model.Rack.Id" class="form">
+                        <input type="hidden" name="deviceId" value="@editing.Id" />
+                        <button type="submit" class="button button-danger">Remove From Rack</button>
+                    </form>
+                }
+            }
+            else if (tab == "panel")
+            {
+                <form method="post" asp-page-handler="PlacePanel" asp-route-id="@Model.Rack.Id" class="form">
+                    @if (panel != null)
+                    {
+                        <input type="hidden" name="panelId" value="@panel.Id" />
+                    }
+                    <label>
+                        Type
+                        <select name="kind">
+                            <option value="Blank" selected="@(panel?.Kind != RackPanelKind.Brush)">Blank</option>
+                            <option value="Brush" selected="@(panel?.Kind == RackPanelKind.Brush)">Brush</option>
+                            <option value="Patch" selected="@(panel?.Kind == RackPanelKind.Patch)">Patch</option>
+                        </select>
+                    </label>
+                    <label>
+                        Name (Patch Only)
+                        <input name="name" value="@panel?.Name" placeholder="Patch Panel" />
+                    </label>
+                    <label>
+                        Ports (Patch Only)
+                        <select name="ports">
+                            @foreach (int count in new[] { 12, 24, 48 })
+                            {
+                                <option value="@count" selected="@((panel?.PortCount is > 0 ? panel.PortCount : 24) == count)">@count</option>
+                            }
+                        </select>
+                    </label>
+                    <label>
+                        Lowest U
+                        <input name="u" type="number" min="1" max="@Model.Rack.HeightU" value="@(panel?.RackU ?? 1)" />
+                    </label>
+                    <label>
+                        Height in U
+                        <input name="height" type="number" min="1" max="@Model.Rack.HeightU" value="@(panel?.RackHeight ?? 1)" />
+                    </label>
+                    <label>
+                        Width
+                        <select name="width">
+                            <option value="4" selected="@((panel?.RackWidth ?? 4) == 4)">Full</option>
+                            <option value="2" selected="@(panel?.RackWidth == 2)">Half</option>
+                            <option value="1" selected="@(panel?.RackWidth == 1)">Quarter</option>
+                        </select>
+                    </label>
+                    <label>
+                        Column
+                        <select name="column">
+                            @for (int column = 0; column < 4; column++)
+                            {
+                                <option value="@column" selected="@((panel?.RackColumn ?? 0) == column)">Column @(column + 1)</option>
+                            }
+                        </select>
+                    </label>
+                    <div class="form-actions">
+                        <button type="submit" class="button">Save Panel</button>
+                        @if (panel != null)
+                        {
+                            <a asp-page="Details" asp-route-id="@Model.Rack.Id" asp-route-tab="panel">Cancel</a>
+                        }
+                    </div>
+                </form>
+                if (panel != null)
+                {
+                    <form method="post" asp-page-handler="RemovePanel" asp-route-id="@Model.Rack.Id" class="form">
+                        <input type="hidden" name="panelId" value="@panel.Id" />
+                        <button type="submit" class="button button-danger">Remove Panel</button>
+                    </form>
+                }
+            }
+            else if (tab == "patch" && panel != null)
+            {
+                <form method="post" asp-page-handler="Patch" asp-route-id="@Model.Rack.Id" class="form">
+                    <input type="hidden" name="panelId" value="@panel.Id" />
+                    <label>
+                        Port
+                        <select name="number">
+                            @for (int number = 1; number <= panel.PortCount; number++)
+                            {
+                                <option value="@number">Port @number</option>
+                            }
+                        </select>
+                    </label>
+                    <label>
+                        Side
+                        <select name="side">
+                            <option value="Front">Front</option>
+                            <option value="Back">Back</option>
+                        </select>
+                    </label>
+                    <label>
+                        Connects To
+                        <select name="target">
+                            @foreach (IGrouping<string?, SelectListItem> group in Model.PatchTargets.GroupBy(option => option.Group?.Name))
+                            {
+                                <optgroup label="@group.Key">
+                                    @foreach (SelectListItem option in group)
+                                    {
+                                        <option value="@option.Value">@option.Text</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </label>
+                    <div class="form-actions">
+                        <button type="submit" class="button">Patch</button>
+                    </div>
+                    @if (panel.Connections.Count == 0)
+                    {
+                        <p class="empty">Nothing patched yet.</p>
+                    }
+                    else
+                    {
+                        <table class="patch-table">
+                            <thead>
+                                <tr>
+                                    <th>Port</th>
+                                    <th>Front</th>
+                                    <th>Back</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (IGrouping<int, PatchConnection> port in panel.Connections.GroupBy(connection => connection.Number).OrderBy(group => group.Key))
+                                {
+                                    <tr>
+                                        <td>@port.Key</td>
+                                        @foreach (PatchSide side in new[] { PatchSide.Front, PatchSide.Back })
+                                        {
+                                            PatchConnection? connection = port.FirstOrDefault(item => item.Side == side);
+                                            <td>
+                                                @if (connection != null)
+                                                {
+                                                    <span>@connection.Device.Name@(connection.Port == null ? "" : $" Port {connection.Port.Index}")</span>
+                                                    <button type="submit" class="link-button" formaction="@Url.Page("Details", "Unpatch", new { id = Model.Rack.Id, panelId = panel.Id, connectionId = connection.Id })" title="Unplug">✕</button>
+                                                }
+                                            </td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </form>
             }
             else
             {
-                <input type="hidden" name="deviceId" value="@editing.Id" />
-                <strong>@editing.Name</strong>
-            }
-            <label>
-                Lowest U
-                <input name="u" type="number" min="1" max="@Model.Rack.HeightU" value="@(editing?.RackU ?? 1)" />
-            </label>
-            <label>
-                Height in U
-                <input name="height" type="number" min="1" max="@Model.Rack.HeightU" value="@(editing?.RackHeight ?? 1)" />
-            </label>
-            <label>
-                Width
-                <select name="width">
-                    <option value="4" selected="@((editing?.RackWidth ?? 4) == 4)">Full</option>
-                    <option value="2" selected="@(editing?.RackWidth == 2)">Half</option>
-                    <option value="1" selected="@(editing?.RackWidth == 1)">Quarter</option>
-                </select>
-            </label>
-            <label>
-                Column
-                <select name="column">
-                    @for (int column = 0; column < 4; column++)
-                    {
-                        <option value="@column" selected="@((editing?.RackColumn ?? 0) == column)">Column @(column + 1)</option>
-                    }
-                </select>
-            </label>
-            <div class="form-actions">
-                <button type="submit" class="button">Save</button>
-                @if (editing != null)
-                {
-                    <a asp-page="Details" asp-route-id="@Model.Rack.Id">Cancel</a>
-                }
-            </div>
-        </form>
-        @if (editing != null)
-        {
-            <form method="post" asp-page-handler="Remove" asp-route-id="@Model.Rack.Id" class="form">
-                <input type="hidden" name="deviceId" value="@editing.Id" />
-                <button type="submit" class="button button-danger">Remove From Rack</button>
-            </form>
-        }
-        <form method="post" asp-page-handler="PlacePanel" asp-route-id="@Model.Rack.Id" class="form">
-            <h2>@(panel == null ? "Add Panel" : "Edit Panel")</h2>
-            @if (panel != null)
-            {
-                <input type="hidden" name="panelId" value="@panel.Id" />
-            }
-            <label>
-                Type
-                <select name="kind">
-                    <option value="Blank" selected="@(panel?.Kind != RackPanelKind.Brush)">Blank</option>
-                    <option value="Brush" selected="@(panel?.Kind == RackPanelKind.Brush)">Brush</option>
-                </select>
-            </label>
-            <label>
-                Lowest U
-                <input name="u" type="number" min="1" max="@Model.Rack.HeightU" value="@(panel?.RackU ?? 1)" />
-            </label>
-            <label>
-                Height in U
-                <input name="height" type="number" min="1" max="@Model.Rack.HeightU" value="@(panel?.RackHeight ?? 1)" />
-            </label>
-            <label>
-                Width
-                <select name="width">
-                    <option value="4" selected="@((panel?.RackWidth ?? 4) == 4)">Full</option>
-                    <option value="2" selected="@(panel?.RackWidth == 2)">Half</option>
-                    <option value="1" selected="@(panel?.RackWidth == 1)">Quarter</option>
-                </select>
-            </label>
-            <label>
-                Column
-                <select name="column">
-                    @for (int column = 0; column < 4; column++)
-                    {
-                        <option value="@column" selected="@((panel?.RackColumn ?? 0) == column)">Column @(column + 1)</option>
-                    }
-                </select>
-            </label>
-            <div class="form-actions">
-                <button type="submit" class="button">Save Panel</button>
-                @if (panel != null)
-                {
-                    <a asp-page="Details" asp-route-id="@Model.Rack.Id">Cancel</a>
-                }
-            </div>
-        </form>
-        @if (panel != null)
-        {
-            <form method="post" asp-page-handler="RemovePanel" asp-route-id="@Model.Rack.Id" class="form">
-                <input type="hidden" name="panelId" value="@panel.Id" />
-                <button type="submit" class="button button-danger">Remove Panel</button>
-            </form>
-        }
-        <form method="post" asp-page-handler="SaveRack" asp-route-id="@Model.Rack.Id" class="form">
-            <h2>Rack Settings</h2>
-            <label>
-                Name
-                <input name="name" value="@Model.Rack.Name" required />
-            </label>
-            <label>
-                Room
-                <select name="roomId">
-                    @foreach (IGrouping<string?, SelectListItem> group in Model.RoomOptions.GroupBy(option => option.Group?.Name))
-                    {
-                        <optgroup label="@group.Key">
-                            @foreach (SelectListItem option in group)
+                <form method="post" asp-page-handler="SaveRack" asp-route-id="@Model.Rack.Id" class="form">
+                    <label>
+                        Name
+                        <input name="name" value="@Model.Rack.Name" required />
+                    </label>
+                    <label>
+                        Room
+                        <select name="roomId">
+                            @foreach (IGrouping<string?, SelectListItem> group in Model.RoomOptions.GroupBy(option => option.Group?.Name))
                             {
-                                <option value="@option.Value" selected="@(option.Value == Model.Rack.RoomId.ToString())">@option.Text</option>
+                                <optgroup label="@group.Key">
+                                    @foreach (SelectListItem option in group)
+                                    {
+                                        <option value="@option.Value" selected="@(option.Value == Model.Rack.RoomId.ToString())">@option.Text</option>
+                                    }
+                                </optgroup>
                             }
-                        </optgroup>
-                    }
-                </select>
-            </label>
-            <label>
-                Height in U
-                <input name="heightU" type="number" min="1" value="@Model.Rack.HeightU" />
-            </label>
-            <div class="form-actions">
-                <button type="submit" class="button">Save Rack</button>
-            </div>
-        </form>
+                        </select>
+                    </label>
+                    <label>
+                        Height in U
+                        <input name="heightU" type="number" min="1" value="@Model.Rack.HeightU" />
+                    </label>
+                    <div class="form-actions">
+                        <button type="submit" class="button">Save Rack</button>
+                    </div>
+                </form>
+            }
+        </div>
     </div>
-    <section class="rack-cables">
-        <h2>Cables</h2>
-        <div class="rackmap" data-rack-map="k@(Model.Rack.Id)" data-graph-url="@Url.Page("/Index", "Graph")"></div>
-    </section>
 </div>
+
+<section class="rack-cables">
+    <h2>Cables</h2>
+    <div class="rackmap" data-rack-map="k@(Model.Rack.Id)" data-graph-url="@Url.Page("/Index", "Graph")"></div>
+</section>
 
 @section Scripts {
     <script src="~/js/rackmap.js" asp-append-version="true"></script>

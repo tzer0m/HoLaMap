@@ -13,6 +13,11 @@ namespace HoLaMap.Models
         /// <summary>
         /// A brush panel that cables pass through.
         /// </summary>
-        Brush
+        Brush,
+
+        /// <summary>
+        /// A patch panel with an RJ45 socket on the front and back of each port.
+        /// </summary>
+        Patch
     }
 }

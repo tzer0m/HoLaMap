@@ -60,6 +60,11 @@ namespace HoLaMap.Data
         public DbSet<RackPanel> RackPanels => Set<RackPanel>();
 
         /// <summary>
+        /// Gets the cables plugged into patch panel ports.
+        /// </summary>
+        public DbSet<PatchConnection> PatchConnections => Set<PatchConnection>();
+
+        /// <summary>
         /// Configures keys, indexes and relationships.
         /// </summary>
         /// <param name="modelBuilder">The model builder.</param>
@@ -84,6 +89,11 @@ namespace HoLaMap.Data
             modelBuilder.Entity<Device>().HasOne(device => device.Rack).WithMany(rack => rack.Devices).HasForeignKey(device => device.RackId).OnDelete(DeleteBehavior.SetNull);
             modelBuilder.Entity<RackPanel>().HasOne(panel => panel.Rack).WithMany(rack => rack.Panels).HasForeignKey(panel => panel.RackId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<RackPanel>().Property(panel => panel.Kind).HasConversion<string>();
+            modelBuilder.Entity<PatchConnection>().HasOne(connection => connection.RackPanel).WithMany(panel => panel.Connections).HasForeignKey(connection => connection.RackPanelId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<PatchConnection>().HasOne(connection => connection.Device).WithMany().HasForeignKey(connection => connection.DeviceId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<PatchConnection>().HasOne(connection => connection.Port).WithMany().HasForeignKey(connection => connection.PortId).OnDelete(DeleteBehavior.SetNull);
+            modelBuilder.Entity<PatchConnection>().HasIndex(connection => new { connection.RackPanelId, connection.Number, connection.Side }).IsUnique();
+            modelBuilder.Entity<PatchConnection>().Property(connection => connection.Side).HasConversion<string>();
             modelBuilder.Entity<Device>().HasOne(device => device.Room).WithMany(room => room.Devices).HasForeignKey(device => device.RoomId).OnDelete(DeleteBehavior.SetNull);
         }
     }
