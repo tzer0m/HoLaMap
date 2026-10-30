@@ -197,7 +197,7 @@ window.RackMap = (function () {
             const sockets = node.ports.length ? node.ports.map(port => ({ ...port, node: node })) : edges.filter(edge => edge.source === node.id || edge.target === node.id).map(edge => ({ id: `${edge.id}-${edge.source === node.id ? 'from' : 'to'}`, index: '', style: edge.style, detail: `${node.label} Network Port`, node: node }));
             const width = node.rackWidth * columnWidth - inset * 2;
             const boxHeight = node.rackHeight * unitHeight - inset * 2;
-            // A patch panel has its front ports in rows of up to 24 with the rear ports in rows underneath, each row nudged half a port along so a cable dropping from one row passes between the ports of the next.
+            // A patch panel has a column per port with its front and rear sockets stacked, in rows of up to 24 ports. Which socket goes on top is settled once the cables are known.
             if (node.patch) {
                 const perPatchRow = Math.min(node.patch.ports, 24);
                 const sideRows = Math.ceil(node.patch.ports / perPatchRow);
@@ -206,8 +206,8 @@ window.RackMap = (function () {
                 const box = { node: node, width: width, height: boxHeight, rows: patchRows, sockets: sockets, labelY: 2 + ((patchRows - 1) * portPitch + portSize) / 2 + 4, need: 4 + (patchRows - 1) * portPitch + portSize };
                 sockets.forEach(socket => {
                     const number = socket.index - 1;
-                    const row = Math.floor(number / perPatchRow) + (socket.rear ? sideRows : 0);
-                    const end = { socket: socket, box: box, x: patchLeft + (number % perPatchRow) * portPitch + (row % 2 ? portPitch / 2 : 0), y: 2 + row * portPitch, row: row, cables: [] };
+                    const row = Math.floor(number / perPatchRow) * 2 + (socket.rear ? 1 : 0);
+                    const end = { socket: socket, box: box, x: patchLeft + (number % perPatchRow) * portPitch, y: 2 + row * portPitch, row: row, cables: [] };
                     socket.end = end;
                     ends.push(end);
                 });
@@ -247,13 +247,12 @@ window.RackMap = (function () {
         const endFor = (nodeId, portId, edge, side) => ends.find(end => end.socket.id === portId) ?? ends.find(end => end.socket.id === `${edge.id}-${side}`) ?? ends.find(end => end.box.node.id === nodeId);
 
         // Each cable leaves its port up or down into the channel along the device's top or bottom edge. Channel b sits between unit b and unit b + 1.
-        const channels = Array.from({ length: height + 1 }, () => []);
         const cables = edges.map(edge => {
             const fromInside = inRack.has(edge.source);
             const toInside = inRack.has(edge.target);
             const from = fromInside ? endFor(edge.source, edge.sourcePort, edge, 'from') : null;
             const to = toInside ? endFor(edge.target, edge.targetPort, edge, 'to') : null;
-            const cable = { edge: edge, from: from, to: to, external: !(from && to) };
+            const cable = { edge: edge, from: from, to: to, external: !(from && to), sideKey: { side: edge.id } };
             if (cable.external) {
                 const inside = from ?? to;
                 const otherId = from ? edge.target : edge.source;
@@ -268,153 +267,296 @@ window.RackMap = (function () {
             return cable;
         });
 
-        const topOf = box => box.node.rackU + box.node.rackHeight - 1;
-        const bottomOf = box => box.node.rackU - 1;
-        const channelOf = (end, up) => up ? topOf(end.box) : bottomOf(end.box);
-        const centreU = end => end.box.node.rackU + end.box.node.rackHeight / 2;
-        // A port in the top row of two exits upwards and one in the bottom row downwards; a single row picks the side the cable is heading.
-        // Patch panel rear ports always drop downwards, away from the front ports.
-        const pickUp = (end, wantUp) => end.box.node.patch ? !end.socket.rear && wantUp : end.box.rows === 2 ? end.row === 0 : wantUp;
-        const take = (end, up) => {
-            end.taken = up;
-            return up;
-        };
-        [...cables].sort((a, b) => a.external - b.external).forEach(cable => {
-            if (cable.external) {
-                const end = cable.inside;
-                const above = channels[topOf(end.box)].length;
-                const below = channels[bottomOf(end.box)].length;
-                cable.up = take(end, pickUp(end, above <= below));
-                cable.channel = channelOf(end, cable.up);
-                cable.run = { cable: cable, kind: 'out' };
-                channels[cable.channel].push(cable.run);
-                return;
-            }
-            const sourceAbove = centreU(cable.from) < centreU(cable.to);
-            const sameLevel = centreU(cable.from) === centreU(cable.to);
-            cable.fromUp = take(cable.from, pickUp(cable.from, sameLevel || sourceAbove));
-            cable.toUp = take(cable.to, pickUp(cable.to, sameLevel || !sourceAbove));
-            const fromChannel = channelOf(cable.from, cable.fromUp);
-            const toChannel = channelOf(cable.to, cable.toUp);
-            if (fromChannel === toChannel) {
-                cable.direct = true;
-                cable.run = { cable: cable, kind: 'direct' };
-                channels[fromChannel].push(cable.run);
-                cable.channel = fromChannel;
-            } else {
-                cable.runs = [{ cable: cable, kind: 'lane', end: cable.from }, { cable: cable, kind: 'lane', end: cable.to }];
-                channels[fromChannel].push(cable.runs[0]);
-                channels[toChannel].push(cable.runs[1]);
-                cable.channels = [fromChannel, toChannel];
-            }
-        });
+        // Lays the rack out for one set of choices. A choice flips a free cable to leave its port the other way, or swaps which socket of a patch panel port goes on top.
+        const plan = choice => {
+            const channels = Array.from({ length: height + 1 }, () => []);
+            cables.forEach(cable => {
+                cable.direct = false;
+                cable.run = null;
+                cable.runs = null;
+                cable.channels = null;
+            });
+            // On each patch panel port, the socket whose cable heads up goes on top and the other below, so neither cable has to cross the port. With no preference the front goes on top.
+            const middleU = box => box.node.rackU + box.node.rackHeight / 2;
+            const heading = end => end.cables.map(cable => {
+                const other = cable.from === end ? cable.to : cable.from;
+                return cable.external || !other || other.box === end.box ? null : middleU(other.box) > middleU(end.box);
+            }).find(up => up !== null) ?? null;
+            // Jumpers between two sockets on the same panel run in a gap between its two rows of sockets, each on its own track, so they never leave the panel.
+            boxes.filter(box => box.node.patch).forEach(box => {
+                const jumpers = cables.filter(cable => !cable.external && cable.from.box === box && cable.to.box === box);
+                jumpers.forEach(cable => cable.jumper = true);
+                const jumperItems = jumpers.map(cable => ({ cable: cable, from: Math.min(cable.from.x, cable.to.x), to: Math.max(cable.from.x, cable.to.x) }));
+                const jumperTracks = assignTracks(jumperItems);
+                jumperItems.forEach(item => item.cable.jumperTrack = item.track);
+                const gap = jumperTracks ? 8 + jumperTracks * 5 : portPitch - portSize;
+                const rowY = row => 2 + Math.floor(row / 2) * (portSize * 2 + gap + 4) + (row % 2) * (portSize + gap);
+                box.jumperY = (row, track) => rowY(row - row % 2) + portSize + 4 + 2 + track * 5;
+                const byNumber = new Map();
+                ends.filter(end => end.box === box).forEach(end => byNumber.set(end.socket.index, [...(byNumber.get(end.socket.index) ?? []), end]));
+                const pairs = [...byNumber.values()].map(pair => ({ front: pair.find(end => !end.socket.rear), rear: pair.find(end => end.socket.rear) }));
+                pairs.sort((a, b) => (heading(a.front) === null && heading(a.rear) === null) - (heading(b.front) === null && heading(b.rear) === null));
+                pairs.forEach(({ front, rear }) => {
+                    const frontUp = heading(front);
+                    const rearUp = heading(rear);
+                    const frontOnTop = (frontUp !== null ? frontUp : rearUp !== null ? !rearUp : true) !== choice.has(front.socket.id);
+                    const baseRow = front.row - front.row % 2;
+                    front.row = baseRow + (frontOnTop ? 0 : 1);
+                    rear.row = baseRow + (frontOnTop ? 1 : 0);
+                    front.y = rowY(front.row);
+                    rear.y = rowY(rear.row);
+                });
+                const lastRow = Math.max(...pairs.flatMap(pair => [pair.front.row, pair.rear.row]));
+                box.need = rowY(lastRow) + portSize + 4;
+                box.labelY = box.need / 2 + 4;
+            });
 
-        // Horizontal positions: U numbers on the left rail, then the cable manager lanes, then the devices.
-        const portCentre = end => ({ x: deviceLeft + end.box.node.rackColumn * columnWidth + inset + end.x + portSize / 2 });
-        const internal = cables.filter(cable => !cable.external && !cable.direct);
-        // Lanes are worked out after the channel heights, so lay out the channels with lane cables running to a placeholder left edge.
-        const laneSpan = cable => [cable.channels[0], cable.channels[1]].sort((a, b) => a - b);
-        const laneItems = internal.map(cable => {
-            const [low, high] = laneSpan(cable);
-            return { cable: cable, from: low, to: high };
-        });
-        const laneCount = assignTracks(laneItems);
-        laneItems.forEach(item => {
-            item.cable.lane = item.track;
-        });
-        const laneWidth = laneCount ? laneCount * laneGap + 8 : 0;
-        const deviceLeft = frame + railWidth + laneWidth;
-        const deviceRight = deviceLeft + columns * columnWidth;
-        const frameRight = deviceRight + frame;
-        const laneX = lane => deviceLeft - 8 - lane * laneGap;
-
-        // Tracks within each channel, so no two cables share a horizontal run.
-        const channelTracks = channels.map(runs => {
-            const items = runs.map(run => {
-                const cable = run.cable;
-                let from;
-                let to;
-                if (run.kind === 'out') {
-                    from = portCentre(cable.inside).x;
-                    to = frameRight + labelGap;
-                } else if (run.kind === 'direct') {
-                    [from, to] = [portCentre(cable.from).x, portCentre(cable.to).x].sort((a, b) => a - b);
-                } else {
-                    from = laneX(cable.lane);
-                    to = portCentre(run.end).x;
+            const topOf = box => box.node.rackU + box.node.rackHeight - 1;
+            const bottomOf = box => box.node.rackU - 1;
+            const channelOf = (end, up) => up ? topOf(end.box) : bottomOf(end.box);
+            const centreU = end => end.box.node.rackU + end.box.node.rackHeight / 2;
+            // A port in the top row of two exits upwards and one in the bottom row downwards; a single row picks the side the cable is heading.
+            // A patch panel socket on top leaves upwards and one underneath leaves downwards.
+            const pickUp = (end, wantUp) => end.box.node.patch ? end.row % 2 === 0 : end.box.rows === 2 ? end.row === 0 : wantUp;
+            const take = (end, up) => {
+                end.taken = up;
+                return up;
+            };
+            [...cables].filter(cable => !cable.jumper).sort((a, b) => a.external - b.external).forEach(cable => {
+                if (cable.external) {
+                    const end = cable.inside;
+                    const above = channels[topOf(end.box)].length;
+                    const below = channels[bottomOf(end.box)].length;
+                    cable.up = take(end, pickUp(end, (above <= below) !== choice.has(cable)));
+                    cable.channel = channelOf(end, cable.up);
+                    cable.run = { cable: cable, kind: 'out' };
+                    channels[cable.channel].push(cable.run);
+                    return;
                 }
-                run.from = from;
-                run.to = to;
-                return run;
+                const sourceAbove = centreU(cable.from) < centreU(cable.to);
+                const sameLevel = centreU(cable.from) === centreU(cable.to);
+                cable.fromUp = take(cable.from, pickUp(cable.from, (sameLevel || sourceAbove) !== choice.has(cable)));
+                cable.toUp = take(cable.to, pickUp(cable.to, (sameLevel || !sourceAbove) !== choice.has(cable)));
+                const fromChannel = channelOf(cable.from, cable.fromUp);
+                const toChannel = channelOf(cable.to, cable.toUp);
+                if (fromChannel === toChannel) {
+                    cable.direct = true;
+                    cable.run = { cable: cable, kind: 'direct' };
+                    channels[fromChannel].push(cable.run);
+                    cable.channel = fromChannel;
+                } else {
+                    cable.runs = [{ cable: cable, kind: 'lane', end: cable.from }, { cable: cable, kind: 'lane', end: cable.to }];
+                    channels[fromChannel].push(cable.runs[0]);
+                    channels[toChannel].push(cable.runs[1]);
+                    cable.channels = [fromChannel, toChannel];
+                }
             });
-            // Cables dropping in from the device above take the top of the channel and ones rising from below take the bottom, each with the shortest run nearest its device, so no drop crosses another cable's run.
-            // Cables joining two devices across the channel sit in the middle.
-            const risesFrom = run => run.kind === 'out' ? run.cable.up : run.kind === 'lane' ? (run.end === run.cable.from ? run.cable.fromUp : run.cable.toUp) : null;
-            const above = items.filter(run => risesFrom(run) === false);
-            const middle = items.filter(run => risesFrom(run) === null);
-            const below = items.filter(run => risesFrom(run) === true);
-            const aboveCount = assignTracks(above);
-            // Each cable across the channel gets its own track, ordered so that as few drops as possible cut through another cable's run.
-            middle.forEach(run => {
-                const ends = [run.cable.from, run.cable.to];
-                run.top = ends.map(end => (end === run.cable.from ? run.cable.fromUp : run.cable.toUp) ? null : portCentre(end).x).find(x => x !== null) ?? run.from;
-                run.bottom = ends.map(end => (end === run.cable.from ? run.cable.fromUp : run.cable.toUp) ? portCentre(end).x : null).find(x => x !== null) ?? run.to;
+
+            // Horizontal positions: U numbers on the left rail, a cable manager down each side, and the devices between them.
+            // A cable between two units takes the manager nearer its ports, unless a choice sends it round the other side.
+            const portCentre = end => ({ x: deviceLeft + end.box.node.rackColumn * columnWidth + inset + end.x + portSize / 2 });
+            const internal = cables.filter(cable => !cable.external && !cable.direct && !cable.jumper);
+            // Lanes are worked out after the channel heights, so lay out the channels with lane cables running to a placeholder left edge.
+            const laneSpan = cable => [cable.channels[0], cable.channels[1]].sort((a, b) => a - b);
+            const across = end => end.box.node.rackColumn * columnWidth + inset + end.x;
+            internal.forEach(cable => {
+                cable.right = (across(cable.from) + across(cable.to)) / 2 > columns * columnWidth / 2 !== choice.has(cable.sideKey);
             });
-            const inside = (x, run) => x > run.from && x < run.to;
-            const cost = (upper, lower) => (inside(lower.top, upper) ? 1 : 0) + (inside(upper.bottom, lower) ? 1 : 0);
-            const ordered = [];
-            middle.forEach(run => {
-                let best = 0;
-                let bestCost = Infinity;
-                for (let at = 0; at <= ordered.length; at++) {
-                    const total = ordered.slice(0, at).reduce((sum, other) => sum + cost(other, run), 0) + ordered.slice(at).reduce((sum, other) => sum + cost(run, other), 0);
-                    if (total < bestCost) {
-                        best = at;
-                        bestCost = total;
+            const laneItems = internal.map(cable => {
+                const [low, high] = laneSpan(cable);
+                return { cable: cable, from: low, to: high };
+            });
+            const leftCount = assignTracks(laneItems.filter(item => !item.cable.right));
+            const rightCount = assignTracks(laneItems.filter(item => item.cable.right));
+            laneItems.forEach(item => {
+                item.cable.lane = item.track;
+            });
+            const laneWidth = leftCount ? leftCount * laneGap + 8 : 0;
+            const rightLaneWidth = rightCount ? rightCount * laneGap + 8 : 0;
+            const deviceLeft = frame + railWidth + laneWidth;
+            const deviceRight = deviceLeft + columns * columnWidth;
+            const frameRight = deviceRight + rightLaneWidth + frame;
+            const laneX = cable => cable.right ? deviceRight + 8 + cable.lane * laneGap : deviceLeft - 8 - cable.lane * laneGap;
+
+            // Tracks within each channel, so no two cables share a horizontal run.
+            const channelTracks = channels.map(runs => {
+                const items = runs.map(run => {
+                    const cable = run.cable;
+                    let from;
+                    let to;
+                    if (run.kind === 'out') {
+                        from = portCentre(cable.inside).x;
+                        to = frameRight + labelGap;
+                    } else if (run.kind === 'direct') {
+                        [from, to] = [portCentre(cable.from).x, portCentre(cable.to).x].sort((a, b) => a - b);
+                    } else {
+                        [from, to] = [laneX(cable), portCentre(run.end).x].sort((a, b) => a - b);
+                    }
+                    run.from = from;
+                    run.to = to;
+                    return run;
+                });
+                // Cables dropping in from the device above take the top of the channel and ones rising from below take the bottom, each with the shortest run nearest its device, so no drop crosses another cable's run.
+                // Cables joining two devices across the channel sit in the middle.
+                const risesFrom = run => run.kind === 'out' ? run.cable.up : run.kind === 'lane' ? (run.end === run.cable.from ? run.cable.fromUp : run.cable.toUp) : null;
+                const above = items.filter(run => risesFrom(run) === false);
+                const middle = items.filter(run => risesFrom(run) === null);
+                const below = items.filter(run => risesFrom(run) === true);
+                const aboveCount = assignTracks(above);
+                // Each cable across the channel gets its own track, ordered so that as few drops as possible cut through another cable's run.
+                middle.forEach(run => {
+                    const ends = [run.cable.from, run.cable.to];
+                    run.top = ends.map(end => (end === run.cable.from ? run.cable.fromUp : run.cable.toUp) ? null : portCentre(end).x).find(x => x !== null) ?? run.from;
+                    run.bottom = ends.map(end => (end === run.cable.from ? run.cable.fromUp : run.cable.toUp) ? portCentre(end).x : null).find(x => x !== null) ?? run.to;
+                });
+                const inside = (x, run) => x > run.from && x < run.to;
+                const cost = (upper, lower) => (inside(lower.top, upper) ? 1 : 0) + (inside(upper.bottom, lower) ? 1 : 0);
+                const ordered = [];
+                middle.forEach(run => {
+                    let best = 0;
+                    let bestCost = Infinity;
+                    for (let at = 0; at <= ordered.length; at++) {
+                        const total = ordered.slice(0, at).reduce((sum, other) => sum + cost(other, run), 0) + ordered.slice(at).reduce((sum, other) => sum + cost(run, other), 0);
+                        if (total < bestCost) {
+                            best = at;
+                            bestCost = total;
+                        }
+                    }
+                    ordered.splice(best, 0, run);
+                });
+                ordered.forEach((run, index) => run.track = index);
+                const middleCount = ordered.length;
+                const belowCount = assignTracks(below);
+                const total = aboveCount + middleCount + belowCount;
+                above.forEach(run => run.slot = run.track);
+                middle.forEach(run => run.slot = aboveCount + run.track);
+                below.forEach(run => run.slot = total - 1 - run.track);
+                return total;
+            });
+
+            // Vertical positions: each channel is as tall as the cables running through it.
+            const channelHeight = channelTracks.map(count => channelGap + count * trackGap);
+            // A unit grows when a device in it needs more room for its ports, like a 48 port patch panel with its rear ports.
+            const unitHeights = Array.from({ length: height + 1 }, () => unitHeight);
+            boxes.filter(box => box.need > box.height).forEach(box => {
+                unitHeights[topOf(box)] = Math.max(unitHeights[topOf(box)], unitHeight + box.need - box.height);
+            });
+            const channelTop = [];
+            const unitTop = [];
+            let y = frame;
+            for (let b = height; b >= 0; b--) {
+                channelTop[b] = y;
+                y += channelHeight[b];
+                if (b > 0) {
+                    unitTop[b] = y;
+                    y += unitHeights[b];
+                }
+            }
+            const frameBottom = y + frame;
+            const trackY = (channel, slot) => channelTop[channel] + channelGap / 2 + trackGap / 2 + slot * trackGap;
+            const boxTop = box => unitTop[topOf(box)] + inset;
+            const boxBottom = box => unitTop[box.node.rackU] + unitHeights[box.node.rackU] - inset;
+            boxes.forEach(box => {
+                box.x = deviceLeft + box.node.rackColumn * columnWidth + inset;
+                box.y = boxTop(box);
+                box.drawHeight = boxBottom(box) - box.y;
+            });
+            // Ports stay on the device's top face even when the device stretches over channels inside its span.
+            const portPoint = end => ({ x: end.box.x + end.x + portSize / 2, y: end.box.y + end.y + portSize / 2 });
+            const exitPoint = (end, up) => ({ x: portPoint(end).x, y: up ? end.box.y + end.y : end.box.y + end.y + portSize });
+            // The path of every cable, start to finish.
+            cables.forEach(cable => {
+                if (cable.jumper) {
+                    const box = cable.from.box;
+                    const trackAt = box.y + box.jumperY(cable.from.row, cable.jumperTrack);
+                    const edgeOf = end => ({ x: box.x + end.x + portSize / 2, y: box.y + end.y + (end.row % 2 === 0 ? portSize : 0) });
+                    const start = edgeOf(cable.from);
+                    const finish = edgeOf(cable.to);
+                    cable.points = [start, { x: start.x, y: trackAt }, { x: finish.x, y: trackAt }, finish];
+                } else if (cable.external) {
+                    const trackAt = trackY(cable.channel, cable.run.slot);
+                    const exit = exitPoint(cable.inside, cable.up);
+                    cable.points = [exit, { x: exit.x, y: trackAt }, { x: frameRight + labelGap - 6, y: trackAt }];
+                } else if (cable.direct) {
+                    const trackAt = trackY(cable.channel, cable.run.slot);
+                    const fromExit = exitPoint(cable.from, cable.fromUp);
+                    const toExit = exitPoint(cable.to, cable.toUp);
+                    cable.points = [fromExit, { x: fromExit.x, y: trackAt }, { x: toExit.x, y: trackAt }, toExit];
+                } else {
+                    const fromY = trackY(cable.channels[0], cable.runs[0].slot);
+                    const toY = trackY(cable.channels[1], cable.runs[1].slot);
+                    const fromExit = exitPoint(cable.from, cable.fromUp);
+                    const toExit = exitPoint(cable.to, cable.toUp);
+                    const x = laneX(cable);
+                    cable.points = [fromExit, { x: fromExit.x, y: fromY }, { x: x, y: fromY }, { x: x, y: toY }, { x: toExit.x, y: toY }, toExit];
+                }
+            });
+            return { deviceLeft: deviceLeft, deviceRight: deviceRight, frameRight: frameRight, frameBottom: frameBottom, laneWidth: laneWidth, rightLaneWidth: rightLaneWidth, channelTop: channelTop, channelHeight: channelHeight, unitTop: unitTop, unitHeights: unitHeights };
+        };
+
+        // Counts how messy a layout is: cables running along each other count heavily, cables crossing count once, and every cable's length counts a little so cables don't take the long way round to dodge a crossing.
+        const score = layout => {
+            const segments = cables.flatMap(cable => {
+                const points = tidy(cable.points);
+                return points.slice(1).map((point, index) => ({ cable: cable, a: points[index], b: point }));
+            });
+            const horizontal = segments.filter(segment => segment.a.y === segment.b.y).map(segment => ({ cable: segment.cable, y: segment.a.y, low: Math.min(segment.a.x, segment.b.x), high: Math.max(segment.a.x, segment.b.x) }));
+            const vertical = segments.filter(segment => segment.a.x === segment.b.x && segment.a.y !== segment.b.y).map(segment => ({ cable: segment.cable, x: segment.a.x, low: Math.min(segment.a.y, segment.b.y), high: Math.max(segment.a.y, segment.b.y) }));
+            let total = layout.frameBottom / 1000 + segments.reduce((sum, segment) => sum + Math.abs(segment.a.x - segment.b.x) + Math.abs(segment.a.y - segment.b.y), 0) / 300;
+            const alongside = (list, at) => {
+                for (let i = 0; i < list.length; i++) {
+                    for (let j = i + 1; j < list.length; j++) {
+                        if (list[i].cable !== list[j].cable && Math.abs(list[i][at] - list[j][at]) < 1 && Math.min(list[i].high, list[j].high) - Math.max(list[i].low, list[j].low) > 1) {
+                            total += 10;
+                        }
                     }
                 }
-                ordered.splice(best, 0, run);
-            });
-            ordered.forEach((run, index) => run.track = index);
-            const middleCount = ordered.length;
-            const belowCount = assignTracks(below);
-            const total = aboveCount + middleCount + belowCount;
-            above.forEach(run => run.slot = run.track);
-            middle.forEach(run => run.slot = aboveCount + run.track);
-            below.forEach(run => run.slot = total - 1 - run.track);
+            };
+            alongside(horizontal, 'y');
+            alongside(vertical, 'x');
+            horizontal.forEach(across => vertical.forEach(down => {
+                if (across.cable !== down.cable && down.x > across.low + 0.5 && down.x < across.high - 0.5 && across.y > down.low + 0.5 && across.y < down.high - 0.5) {
+                    total += 1;
+                }
+            }));
             return total;
-        });
+        };
 
-        // Vertical positions: each channel is as tall as the cables running through it.
-        const channelHeight = channelTracks.map(count => channelGap + count * trackGap);
-        // A unit grows when a device in it needs more room for its ports, like a 48 port patch panel with its rear ports.
-        const unitHeights = Array.from({ length: height + 1 }, () => unitHeight);
-        boxes.filter(box => box.need > box.height).forEach(box => {
-            unitHeights[topOf(box)] = Math.max(unitHeights[topOf(box)], unitHeight + box.need - box.height);
-        });
-        const channelTop = [];
-        const unitTop = [];
-        let y = frame;
-        for (let b = height; b >= 0; b--) {
-            channelTop[b] = y;
-            y += channelHeight[b];
-            if (b > 0) {
-                unitTop[b] = y;
-                y += unitHeights[b];
+        // Tries each choice in turn and keeps any that makes the layout tidier, until nothing more helps or time runs out.
+        const forced = end => end.box.node.patch || end.box.rows === 2;
+        const candidates = [
+            ...ends.filter(end => end.box.node.patch && !end.socket.rear && ends.some(other => other.box === end.box && other.socket.index === end.socket.index && other.cables.length)).map(end => end.socket.id),
+            ...cables.filter(cable => !cable.jumper && (cable.external ? !forced(cable.inside) : !forced(cable.from) || !forced(cable.to))),
+            ...cables.filter(cable => !cable.jumper && !cable.external).map(cable => cable.sideKey)
+        ];
+        let choice = new Set();
+        let best = score(plan(choice));
+        const started = performance.now();
+        for (let pass = 0; pass < 6 && performance.now() - started < 600; pass++) {
+            let improved = false;
+            candidates.forEach(candidate => {
+                if (performance.now() - started > 600) {
+                    return;
+                }
+                const trial = new Set(choice);
+                if (trial.has(candidate)) {
+                    trial.delete(candidate);
+                } else {
+                    trial.add(candidate);
+                }
+                const trialScore = score(plan(trial));
+                if (trialScore < best - 0.0001) {
+                    choice = trial;
+                    best = trialScore;
+                    improved = true;
+                }
+            });
+            if (!improved) {
+                break;
             }
         }
-        const frameBottom = y + frame;
-        const trackY = (channel, slot) => channelTop[channel] + channelGap / 2 + trackGap / 2 + slot * trackGap;
-        const boxTop = box => unitTop[topOf(box)] + inset;
-        const boxBottom = box => unitTop[box.node.rackU] + unitHeights[box.node.rackU] - inset;
-        boxes.forEach(box => {
-            box.x = deviceLeft + box.node.rackColumn * columnWidth + inset;
-            box.y = boxTop(box);
-            box.drawHeight = boxBottom(box) - box.y;
-        });
-        // Ports stay on the device's top face even when the device stretches over channels inside its span.
-        const portPoint = end => ({ x: end.box.x + end.x + portSize / 2, y: end.box.y + end.y + portSize / 2 });
-        const exitPoint = (end, up) => ({ x: portPoint(end).x, y: up ? end.box.y + end.y : end.box.y + end.y + portSize });
+        const { deviceLeft, deviceRight, frameRight, frameBottom, laneWidth, rightLaneWidth, channelTop, channelHeight, unitTop, unitHeights } = plan(choice);
+
 
         // Labels go to the right of the rack, so measure them to size the drawing.
         const externals = cables.filter(cable => cable.external);
@@ -433,6 +575,9 @@ window.RackMap = (function () {
         create('rect', { x: frame, y: frame, width: frameRight - frame * 2, height: frameBottom - frame * 2, rx: 4, class: 'rackmap-inside' }, svg);
         if (laneWidth) {
             create('rect', { x: frame + railWidth, y: frame, width: laneWidth - 4, height: frameBottom - frame * 2, class: 'rackmap-manager' }, svg);
+        }
+        if (rightLaneWidth) {
+            create('rect', { x: deviceRight + 4, y: frame, width: rightLaneWidth - 4, height: frameBottom - frame * 2, class: 'rackmap-manager' }, svg);
         }
         // A divider through the middle of each gap between units, drawn first so the devices and cables sit on top of it.
         for (let b = 0; b <= height; b++) {
@@ -538,34 +683,17 @@ window.RackMap = (function () {
         };
 
         cables.forEach(cable => {
+            const group = drawCable(cable, cable.points);
             if (cable.external) {
-                const end = cable.inside;
-                const trackAt = trackY(cable.channel, cable.run.slot);
-                const exit = exitPoint(end, cable.up);
-                const labelX = frameRight + labelGap;
-                const group = drawCable(cable, [exit, { x: exit.x, y: trackAt }, { x: labelX - 6, y: trackAt }]);
-                create('circle', { cx: labelX - 6, cy: trackAt, r: 3, fill: colours[cable.edge.style] ?? '#7b8794' }, group);
-                const label = create('text', { x: labelX, y: trackAt + 4, class: 'rackmap-out-label', 'data-edge': cable.edge.id }, labelLayer);
+                const last = cable.points[cable.points.length - 1];
+                create('circle', { cx: last.x, cy: last.y, r: 3, fill: colours[cable.edge.style] ?? '#7b8794' }, group);
+                const label = create('text', { x: last.x + 6, y: last.y + 4, class: 'rackmap-out-label', 'data-edge': cable.edge.id }, labelLayer);
                 label.textContent = cable.text;
                 label.addEventListener('click', event => {
                     event.stopPropagation();
                     focus([cable], endsOf(cable), describe(cable));
                 });
-                return;
             }
-            if (cable.direct) {
-                const trackAt = trackY(cable.channel, cable.run.slot);
-                const fromExit = exitPoint(cable.from, cable.fromUp);
-                const toExit = exitPoint(cable.to, cable.toUp);
-                drawCable(cable, [fromExit, { x: fromExit.x, y: trackAt }, { x: toExit.x, y: trackAt }, toExit]);
-                return;
-            }
-            const fromY = trackY(cable.channels[0], cable.runs[0].slot);
-            const toY = trackY(cable.channels[1], cable.runs[1].slot);
-            const fromExit = exitPoint(cable.from, cable.fromUp);
-            const toExit = exitPoint(cable.to, cable.toUp);
-            const x = laneX(cable.lane);
-            drawCable(cable, [fromExit, { x: fromExit.x, y: fromY }, { x: x, y: fromY }, { x: x, y: toY }, { x: toExit.x, y: toY }, toExit]);
         });
 
         if (!devices.length) {

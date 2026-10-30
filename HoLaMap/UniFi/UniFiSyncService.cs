@@ -47,7 +47,7 @@ namespace HoLaMap.UniFi
                 SyncPorts(device, unifiDevice, resolver);
             }
 
-            // Connected clients.
+            // Connected clients. A merged device takes its name and IP only from its own MAC, so a container or VM using one of its extra MACs can't take it over.
             foreach (UniFiStation station in stations)
             {
                 Device device = GetOrAdd(devices, station.Mac);
@@ -55,10 +55,13 @@ namespace HoLaMap.UniFi
                 {
                     continue;
                 }
-                device.Name = station.Name ?? station.Hostname ?? device.Mac;
                 device.Kind = DeviceKind.Client;
-                device.Ip = station.Ip;
                 device.LastSeen = now;
+                if (device.Mac == NormaliseMac(station.Mac))
+                {
+                    device.Name = station.Name ?? station.Hostname ?? device.Mac;
+                    device.Ip = station.Ip;
+                }
             }
             await context.SaveChangesAsync(cancellationToken);
             await SyncLinksAsync(devices, unifiDevices, stations, now, cancellationToken);
