@@ -200,7 +200,7 @@
                         Side
                         <select name="side">
                             <option value="Front">Front</option>
-                            <option value="Back">Back</option>
+                            <option value="Back">Rear</option>
                         </select>
                     </label>
                     <label>
@@ -231,7 +231,7 @@
                                 <tr>
                                     <th>Port</th>
                                     <th>Front</th>
-                                    <th>Back</th>
+                                    <th>Rear</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -245,7 +245,7 @@
                                             <td>
                                                 @if (connection != null)
                                                 {
-                                                    <span>@connection.Device.Name@(connection.Port == null ? "" : $" Port {connection.Port.Index}")</span>
+                                                    <span>@(connection.Device == null ? $"{Model.Panels.FirstOrDefault(item => item.Id == connection.TargetPanelId)?.Name ?? "Patch Panel"} Port {connection.TargetNumber} {(connection.TargetSide == PatchSide.Back ? "Rear" : "Front")}" : $"{connection.Device.Name}{(connection.Port == null ? "" : $" Port {connection.Port.Index}")}")</span>
                                                     <button type="submit" class="link-button" formaction="@Url.Page("Details", "Unpatch", new { id = Model.Rack.Id, panelId = panel.Id, connectionId = connection.Id })" title="Unplug">✕</button>
                                                 }
                                             </td>

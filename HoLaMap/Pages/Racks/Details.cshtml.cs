@@ -186,7 +186,11 @@ namespace HoLaMap.Pages.Racks
             panel.Kind = kind;
             panel.Name = kind == RackPanelKind.Patch && !string.IsNullOrWhiteSpace(name) ? name.Trim() : null;
             panel.PortCount = kind == RackPanelKind.Patch ? ports : 0;
-            context.PatchConnections.RemoveRange(panel.Connections.Where(connection => connection.Number > panel.PortCount));
+            foreach (PatchConnection connection in panel.Connections.Where(connection => connection.Number > panel.PortCount).ToList())
+            {
+                await UnplugAsync(panel.Id, connection.Number, connection.Side);
+            }
+            context.PatchConnections.RemoveRange(await context.PatchConnections.Where(connection => connection.TargetPanelId == panel.Id && connection.TargetNumber > panel.PortCount).ToListAsync());
             panel.RackU = u;
             panel.RackColumn = column;
             panel.RackWidth = width;
@@ -206,30 +210,53 @@ namespace HoLaMap.Pages.Racks
         /// <param name="panelId">The patch panel.</param>
         /// <param name="number">The patch panel port number.</param>
         /// <param name="side">Which side of the port.</param>
-        /// <param name="target">The other end, as device:ID or port:ID.</param>
+        /// <param name="target">The other end, as device:ID, port:ID, or patch:PanelID:Number:Side for another patch panel port.</param>
         /// <returns>A redirect back to the patch panel.</returns>
         public async Task<IActionResult> OnPostPatchAsync(int id, int panelId, int number, PatchSide side, string? target)
         {
-            RackPanel? panel = await context.RackPanels.Include(item => item.Connections).FirstOrDefaultAsync(item => item.Id == panelId && item.RackId == id && item.Kind == RackPanelKind.Patch);
+            RackPanel? panel = await context.RackPanels.FirstOrDefaultAsync(item => item.Id == panelId && item.RackId == id && item.Kind == RackPanelKind.Patch);
             string[] parts = (target ?? string.Empty).Split(':');
-            if (panel == null || number < 1 || number > panel.PortCount || parts.Length != 2 || !int.TryParse(parts[1], out int targetId))
+            if (panel == null || number < 1 || number > panel.PortCount || parts.Length < 2 || !int.TryParse(parts[1], out int targetId))
             {
                 return RedirectToPage(new { id, panel = panelId });
             }
-            Port? port = parts[0] == "port" ? await context.Ports.FirstOrDefaultAsync(item => item.Id == targetId) : null;
-            int? deviceId = port?.DeviceId ?? (parts[0] == "device" && await context.Devices.AnyAsync(item => item.Id == targetId) ? targetId : null);
-            if (deviceId == null)
+            PatchConnection connection = new() { RackPanelId = panelId, Number = number, Side = side };
+            PatchConnection? mirror = null;
+            if (parts[0] == "patch")
             {
-                return RedirectToPage(new { id, panel = panelId });
+                // A cable between two patch panel ports is stored from both ends so each port knows what it's joined to.
+                RackPanel? other = await context.RackPanels.FirstOrDefaultAsync(item => item.Id == targetId && item.RackId == id && item.Kind == RackPanelKind.Patch);
+                if (other == null || parts.Length != 4 || !int.TryParse(parts[2], out int otherNumber) || otherNumber < 1 || otherNumber > other.PortCount || !Enum.TryParse(parts[3], out PatchSide otherSide) || (other.Id == panelId && otherNumber == number && otherSide == side))
+                {
+                    return RedirectToPage(new { id, panel = panelId });
+                }
+                connection.TargetPanelId = other.Id;
+                connection.TargetNumber = otherNumber;
+                connection.TargetSide = otherSide;
+                mirror = new PatchConnection { RackPanelId = other.Id, Number = otherNumber, Side = otherSide, TargetPanelId = panelId, TargetNumber = number, TargetSide = side };
             }
-            PatchConnection? connection = panel.Connections.FirstOrDefault(item => item.Number == number && item.Side == side);
-            if (connection == null)
+            else
             {
-                connection = new PatchConnection { RackPanelId = panelId, Number = number, Side = side };
-                context.PatchConnections.Add(connection);
+                Port? port = parts[0] == "port" ? await context.Ports.FirstOrDefaultAsync(item => item.Id == targetId) : null;
+                int? deviceId = port?.DeviceId ?? (parts[0] == "device" && await context.Devices.AnyAsync(item => item.Id == targetId) ? targetId : null);
+                if (deviceId == null)
+                {
+                    return RedirectToPage(new { id, panel = panelId });
+                }
+                connection.DeviceId = deviceId;
+                connection.PortId = port?.Id;
             }
-            connection.DeviceId = deviceId.Value;
-            connection.PortId = port?.Id;
+            await UnplugAsync(panelId, number, side);
+            if (mirror != null)
+            {
+                await UnplugAsync(mirror.RackPanelId, mirror.Number, mirror.Side);
+            }
+            await context.SaveChangesAsync();
+            context.PatchConnections.Add(connection);
+            if (mirror != null)
+            {
+                context.PatchConnections.Add(mirror);
+            }
             await context.SaveChangesAsync();
             return RedirectToPage(new { id, panel = panelId });
         }
@@ -246,7 +273,7 @@ namespace HoLaMap.Pages.Racks
             PatchConnection? connection = await context.PatchConnections.FirstOrDefaultAsync(item => item.Id == connectionId && item.RackPanelId == panelId && item.RackPanel.RackId == id);
             if (connection != null)
             {
-                context.PatchConnections.Remove(connection);
+                await UnplugAsync(connection.RackPanelId, connection.Number, connection.Side);
                 await context.SaveChangesAsync();
             }
             return RedirectToPage(new { id, panel = panelId });
@@ -314,6 +341,31 @@ namespace HoLaMap.Pages.Racks
         }
 
         /// <summary>
+        /// Marks the cable in one side of a patch panel port for removal, along with its other end if it joins two patch panel ports.
+        /// </summary>
+        /// <param name="panelId">The patch panel.</param>
+        /// <param name="number">The port number.</param>
+        /// <param name="side">The side of the port.</param>
+        /// <returns>A task that completes when the cable has been marked for removal.</returns>
+        private async Task UnplugAsync(int panelId, int number, PatchSide side)
+        {
+            PatchConnection? existing = await context.PatchConnections.FirstOrDefaultAsync(item => item.RackPanelId == panelId && item.Number == number && item.Side == side);
+            if (existing == null)
+            {
+                return;
+            }
+            context.PatchConnections.Remove(existing);
+            if (existing.TargetPanelId != null)
+            {
+                PatchConnection? mirror = await context.PatchConnections.FirstOrDefaultAsync(item => item.RackPanelId == existing.TargetPanelId && item.Number == existing.TargetNumber && item.Side == existing.TargetSide);
+                if (mirror != null)
+                {
+                    context.PatchConnections.Remove(mirror);
+                }
+            }
+        }
+
+        /// <summary>
         /// Loads the rack, its devices and the options for the forms.
         /// </summary>
         /// <param name="id">The rack ID.</param>
@@ -334,6 +386,15 @@ namespace HoLaMap.Pages.Racks
             EditingPanel = Panels.FirstOrDefault(panel => panel.Id == EditPanelId);
             if (EditingPanel?.Kind == RackPanelKind.Patch)
             {
+                foreach (RackPanel patchPanel in Panels.Where(item => item.Kind == RackPanelKind.Patch))
+                {
+                    SelectListGroup group = new() { Name = $"{patchPanel.Name ?? "Patch Panel"} (This Rack)" };
+                    for (int number = 1; number <= patchPanel.PortCount; number++)
+                    {
+                        PatchTargets.Add(new SelectListItem($"Port {number} Front", $"patch:{patchPanel.Id}:{number}:Front") { Group = group });
+                        PatchTargets.Add(new SelectListItem($"Port {number} Rear", $"patch:{patchPanel.Id}:{number}:Back") { Group = group });
+                    }
+                }
                 List<Device> targets = await context.Devices.Include(device => device.Ports).ToListAsync();
                 foreach (Device device in targets.OrderBy(device => device.Kind).ThenBy(device => device.Name))
                 {

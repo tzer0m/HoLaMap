@@ -1,7 +1,7 @@
 namespace HoLaMap.Models
 {
     /// <summary>
-    /// A cable plugged into one side of a patch panel port, running to a device or one of its ports.
+    /// A cable plugged into one side of a patch panel port, running to a device, one of its ports, or another patch panel port.
     /// </summary>
     public class PatchConnection
     {
@@ -31,14 +31,14 @@ namespace HoLaMap.Models
         public PatchSide Side { get; set; }
 
         /// <summary>
-        /// Gets or sets the identifier of the device at the other end.
+        /// Gets or sets the identifier of the device at the other end, or null if the cable goes to another patch panel port.
         /// </summary>
-        public int DeviceId { get; set; }
+        public int? DeviceId { get; set; }
 
         /// <summary>
-        /// Gets or sets the device at the other end.
+        /// Gets or sets the device at the other end, or null if the cable goes to another patch panel port.
         /// </summary>
-        public Device Device { get; set; } = null!;
+        public Device? Device { get; set; }
 
         /// <summary>
         /// Gets or sets the identifier of the port at the other end, if the device has ports.
@@ -49,5 +49,25 @@ namespace HoLaMap.Models
         /// Gets or sets the port at the other end, if the device has ports.
         /// </summary>
         public Port? Port { get; set; }
+
+        /// <summary>
+        /// Gets or sets the identifier of the patch panel at the other end, if the cable joins two patch panel ports.
+        /// </summary>
+        public int? TargetPanelId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the patch panel at the other end, if the cable joins two patch panel ports.
+        /// </summary>
+        public RackPanel? TargetPanel { get; set; }
+
+        /// <summary>
+        /// Gets or sets the port number at the other end, if the cable joins two patch panel ports.
+        /// </summary>
+        public int? TargetNumber { get; set; }
+
+        /// <summary>
+        /// Gets or sets the side of the port at the other end, if the cable joins two patch panel ports.
+        /// </summary>
+        public PatchSide? TargetSide { get; set; }
     }
 }

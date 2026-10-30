@@ -119,24 +119,68 @@ window.RackMap = (function () {
         const rackOf = id => nodesById.get(id)?.rack === rackId || patchNodes.some(node => node.id === id);
         const matches = (edge, end, patch) => edge[end] === patch.node && (!patch.port || !edge[`${end}Port`] || edge[`${end}Port`] === patch.port);
         const routed = new Set();
-        const patchEdges = patchNodes.flatMap(node => node.ports.filter(port => !port.rear).flatMap(port => {
-            const front = node.patch.patches.find(patch => patch.number === port.index && patch.side === 'front');
-            let back = node.patch.patches.find(patch => patch.number === port.index && patch.side === 'back');
-            let carried = front && back ? raw.edges.filter(edge => (matches(edge, 'source', front) && matches(edge, 'target', back)) || (matches(edge, 'source', back) && matches(edge, 'target', front))) : [];
-            if (front && !back) {
-                carried = raw.edges.filter(edge => (matches(edge, 'source', front) && !rackOf(edge.target)) || (matches(edge, 'target', front) && !rackOf(edge.source)));
-                const far = carried[0];
-                back = far ? (matches(far, 'source', front) ? { node: far.target, port: far.targetPort } : { node: far.source, port: far.sourcePort }) : null;
+        // Every patch panel port has a front and a rear socket. A socket holds a cable to a device, or a jumper to another socket on a patch panel.
+        const socketOf = (panel, number, side) => `${panel}-${number}${side === 'back' ? '-r' : ''}`;
+        const pairOf = socket => socket.endsWith('-r') ? socket.slice(0, -2) : `${socket}-r`;
+        const panelOf = socket => socket.substring(0, socket.indexOf('-'));
+        const devicesAt = new Map();
+        const jumpers = new Map();
+        patchNodes.forEach(node => node.patch.patches.forEach(patch => {
+            const socket = socketOf(node.id, patch.number, patch.side);
+            if (patch.panel) {
+                jumpers.set(socket, socketOf(patch.panel, patch.targetNumber, patch.targetSide));
+            } else {
+                devicesAt.set(socket, { node: patch.node, port: patch.port });
+            }
+        }));
+        // Follows a cable through the panel from one socket: across to the other side of its port, then along any jumper, until it reaches a device or a socket with nothing in it.
+        const walk = start => {
+            const path = [start];
+            let socket = pairOf(start);
+            while (path.length < 500) {
+                path.push(socket);
+                if (devicesAt.has(socket)) {
+                    return { path: path, far: devicesAt.get(socket), end: socket };
+                }
+                const next = jumpers.get(socket);
+                if (!next || path.includes(next)) {
+                    break;
+                }
+                path.push(next);
+                socket = pairOf(next);
+            }
+            return { path: path, far: null, end: socket };
+        };
+        // The link between the devices at either end of a route through the panel is drawn along that route instead of straight across.
+        // A route from a front socket that ends with nothing plugged in is taken to carry that device's link out of the rack from where the route stops.
+        const defaultStyle = { style: 'patch', poE: false, online: true, detail: 'Patch Cable' };
+        const styleOf = new Map();
+        const inferred = [];
+        const visited = new Set();
+        devicesAt.forEach((near, start) => {
+            if (visited.has(start)) {
+                return;
+            }
+            const route = walk(start);
+            route.path.forEach(socket => visited.add(socket));
+            let carried = route.far ? raw.edges.filter(edge => (matches(edge, 'source', near) && matches(edge, 'target', route.far)) || (matches(edge, 'source', route.far) && matches(edge, 'target', near))) : [];
+            if (!route.far && !start.endsWith('-r')) {
+                carried = raw.edges.filter(edge => (matches(edge, 'source', near) && !rackOf(edge.target)) || (matches(edge, 'target', near) && !rackOf(edge.source)));
             }
             carried.forEach(edge => routed.add(edge.id));
             const base = carried[0];
-            const style = { style: base?.style ?? 'patch', poE: base?.poE ?? false, online: base?.online ?? true, detail: base ? base.detail : 'Patch Cable' };
-            return [
-                ...(front ? [{ ...style, id: `${port.id}-front`, source: front.node, sourcePort: front.port, target: node.id, targetPort: port.id }] : []),
-                ...(back ? [{ ...style, id: `${port.id}-back`, source: node.id, sourcePort: `${port.id}-r`, target: back.node, targetPort: back.port, back: true }] : [])
-            ];
-        }));
-        const edges = [...raw.edges.filter(edge => !routed.has(edge.id)), ...patchEdges].filter(edge => edge.source !== edge.target && (inRack.has(edge.source) || inRack.has(edge.target)));
+            const style = base ? { style: base.style, poE: base.poE, online: base.online, detail: base.detail } : defaultStyle;
+            route.path.forEach(socket => styleOf.set(socket, style));
+            if (!route.far && base) {
+                inferred.push({ ...style, id: `${route.end}-inferred`, source: panelOf(route.end), sourcePort: route.end, target: matches(base, 'source', near) ? base.target : base.source, targetPort: matches(base, 'source', near) ? base.targetPort : base.sourcePort, back: route.end.endsWith('-r') });
+            }
+        });
+        const patchEdges = [
+            ...[...devicesAt].map(([socket, far]) => socket.endsWith('-r') ? { ...(styleOf.get(socket) ?? defaultStyle), id: `${socket}-cable`, source: panelOf(socket), sourcePort: socket, target: far.node, targetPort: far.port, back: true } : { ...(styleOf.get(socket) ?? defaultStyle), id: `${socket}-cable`, source: far.node, sourcePort: far.port, target: panelOf(socket), targetPort: socket }),
+            ...[...jumpers].filter(([from, to]) => from < to || !jumpers.has(to)).map(([from, to]) => ({ ...(styleOf.get(from) ?? defaultStyle), id: `${from}-jumper`, source: panelOf(from), sourcePort: from, target: panelOf(to), targetPort: to, back: from.endsWith('-r') && to.endsWith('-r') })),
+            ...inferred
+        ];
+        const edges = [...raw.edges.filter(edge => !routed.has(edge.id)), ...patchEdges].filter(edge => (edge.source !== edge.target || (edge.sourcePort && edge.targetPort && edge.sourcePort !== edge.targetPort)) && (inRack.has(edge.source) || inRack.has(edge.target)));
         const height = rack.heightU;
 
         // Where a device ends up: a box per device and a square per port, in rack coordinates before the cable channels are added.

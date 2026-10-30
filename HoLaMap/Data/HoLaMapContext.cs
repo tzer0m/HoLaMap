@@ -94,6 +94,8 @@ namespace HoLaMap.Data
             modelBuilder.Entity<PatchConnection>().HasOne(connection => connection.Port).WithMany().HasForeignKey(connection => connection.PortId).OnDelete(DeleteBehavior.SetNull);
             modelBuilder.Entity<PatchConnection>().HasIndex(connection => new { connection.RackPanelId, connection.Number, connection.Side }).IsUnique();
             modelBuilder.Entity<PatchConnection>().Property(connection => connection.Side).HasConversion<string>();
+            modelBuilder.Entity<PatchConnection>().HasOne(connection => connection.TargetPanel).WithMany().HasForeignKey(connection => connection.TargetPanelId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<PatchConnection>().Property(connection => connection.TargetSide).HasConversion<string>();
             modelBuilder.Entity<Device>().HasOne(device => device.Room).WithMany(room => room.Devices).HasForeignKey(device => device.RoomId).OnDelete(DeleteBehavior.SetNull);
         }
     }

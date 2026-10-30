@@ -234,7 +234,7 @@ namespace HoLaMap.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("DeviceId")
+                    b.Property<int?>("DeviceId")
                         .HasColumnType("integer");
 
                     b.Property<int>("Number")
@@ -250,11 +250,22 @@ namespace HoLaMap.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("TargetNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TargetPanelId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetSide")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DeviceId");
 
                     b.HasIndex("PortId");
+
+                    b.HasIndex("TargetPanelId");
 
                     b.HasIndex("RackPanelId", "Number", "Side")
                         .IsUnique();
@@ -490,8 +501,7 @@ namespace HoLaMap.Migrations
                     b.HasOne("HoLaMap.Models.Device", "Device")
                         .WithMany()
                         .HasForeignKey("DeviceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("HoLaMap.Models.Port", "Port")
                         .WithMany()
@@ -504,11 +514,18 @@ namespace HoLaMap.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("HoLaMap.Models.RackPanel", "TargetPanel")
+                        .WithMany()
+                        .HasForeignKey("TargetPanelId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.Navigation("Device");
 
                     b.Navigation("Port");
 
                     b.Navigation("RackPanel");
+
+                    b.Navigation("TargetPanel");
                 });
 
             modelBuilder.Entity("HoLaMap.Models.Port", b =>

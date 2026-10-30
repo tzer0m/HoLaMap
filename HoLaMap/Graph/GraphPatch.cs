@@ -16,7 +16,7 @@ namespace HoLaMap.Graph
         public string Side { get; set; } = string.Empty;
 
         /// <summary>
-        /// The ID of the device at the other end.
+        /// The ID of the device at the other end, or empty if the cable goes to another patch panel port.
         /// </summary>
         public string Node { get; set; } = string.Empty;
 
@@ -24,5 +24,20 @@ namespace HoLaMap.Graph
         /// The ID of the port at the other end, or empty if the cable goes to the device itself.
         /// </summary>
         public string Port { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The ID of the patch panel at the other end, or empty if the cable goes to a device.
+        /// </summary>
+        public string Panel { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The port number at the other end, if the cable joins two patch panel ports.
+        /// </summary>
+        public int TargetNumber { get; set; }
+
+        /// <summary>
+        /// The side of the port at the other end: front or back.
+        /// </summary>
+        public string TargetSide { get; set; } = string.Empty;
     }
 }
