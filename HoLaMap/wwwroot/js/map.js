@@ -622,7 +622,8 @@
         // Cables between rooms, grouped by the pair of rooms they join.
         const roomKey = node => roomsById.has(node.room) ? node.room : '';
         const byPair = new Map();
-        graph.edges.filter(edge => roomKey(nodesById.get(edge.source)) !== roomKey(nodesById.get(edge.target))).forEach(edge => {
+        // Only cables run between rooms. A Wi-Fi link to a device in another room isn't drawn here.
+        graph.edges.filter(edge => !edge.wireless && roomKey(nodesById.get(edge.source)) !== roomKey(nodesById.get(edge.target))).forEach(edge => {
             const keys = [roomKey(nodesById.get(edge.source)), roomKey(nodesById.get(edge.target))].sort();
             const key = keys.join('|');
             byPair.set(key, { keys: keys, edges: [...(byPair.get(key)?.edges ?? []), edge] });
