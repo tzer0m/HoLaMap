@@ -6,24 +6,31 @@
 
 <header class="page-header">
     <h1>Map</h1>
-    <ul class="legend">
-        <li><span class="swatch port-1000"></span>1 Gbps</li>
-        <li><span class="swatch port-100"></span>100 Mbps</li>
-        <li><span class="swatch port-10"></span>10 Mbps</li>
-        <li><span class="swatch port-wan"></span>WAN</li>
-        <li><span class="swatch port-down"></span>Down</li>
-        <li><svg class="swatch-zigzag" viewBox="0 0 18 10"><polyline points="0,5 3,2 6,8 9,2 12,8 15,2 18,5" /></svg>PoE</li>
-        <li><svg class="swatch-wave" viewBox="0 0 18 10"><path d="M 0 5 Q 2.5 0 5 5 Q 7.5 10 10 5 Q 12.5 0 15 5 Q 16.5 8 18 5" /></svg>Wi-Fi</li>
-        <li><svg class="swatch-zigbee" viewBox="0 0 18 10"><line x1="1" y1="5" x2="17" y2="5" /></svg>Zigbee</li>
-        <li><span class="swatch coordinator"></span>Coordinator</li>
-        <li><span class="swatch router"></span>Router</li>
-    </ul>
+    <div class="legend-rows">
+        <ul class="legend">
+            <li><span class="swatch port-1000"></span>1 Gbps</li>
+            <li><span class="swatch port-100"></span>100 Mbps</li>
+            <li><span class="swatch port-10"></span>10 Mbps</li>
+            <li><span class="swatch port-wan"></span>WAN</li>
+            <li><span class="swatch port-down"></span>Down</li>
+            <li><svg class="swatch-zigzag" viewBox="0 0 18 10"><polyline points="0,5 3,2 6,8 9,2 12,8 15,2 18,5" /></svg>PoE</li>
+            <li><svg class="swatch-wave" viewBox="0 0 18 10"><path d="M 0 5 Q 2.5 0 5 5 Q 7.5 10 10 5 Q 12.5 0 15 5 Q 16.5 8 18 5" /></svg>Wi-Fi</li>
+            <li><svg class="swatch-zigbee" viewBox="0 0 18 10"><line x1="1" y1="5" x2="17" y2="5" /></svg>Zigbee</li>
+        </ul>
+        <ul class="legend">
+            <li><span class="swatch box box-unifi"></span>UniFi</li>
+            <li><span class="swatch box box-client"></span>Client</li>
+            <li><span class="swatch box box-rack"></span>Rack</li>
+            <li><span class="swatch box box-coordinator"></span>Coordinator</li>
+            <li><span class="swatch box box-router"></span>Router</li>
+        </ul>
+    </div>
 </header>
 
 <nav id="view-tabs" class="floor-tabs">
     <button type="button" data-view="all">All</button>
-    <button type="button" data-view="unifi">UniFi</button>
     <button type="button" data-view="floorplan">Floor Plan</button>
+    <button type="button" data-view="network">Network</button>
     <button type="button" data-view="zigbee">Zigbee</button>
 </nav>
 

@@ -1051,14 +1051,41 @@ body:has(.map-layout) .details {
     stroke-linecap: round;
 }
 
-.swatch.coordinator {
-    background: #3d2f6b;
-    border: 1px solid #9b84d6;
+.legend-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
-.swatch.router {
+.swatch.box {
+    width: 18px;
+    border: 1.5px solid;
+    border-radius: 4px;
+}
+
+.swatch.box-unifi {
+    background: #2f5d94;
+    border-color: #6f9bd1;
+}
+
+.swatch.box-client {
+    background: #2f3640;
+    border-color: #8a90b0;
+}
+
+.swatch.box-rack {
+    background: #232427;
+    border-color: #b0b4bc;
+}
+
+.swatch.box-coordinator {
+    background: #3d2f6b;
+    border-color: #9b84d6;
+}
+
+.swatch.box-router {
     background: #1f4a5c;
-    border: 1px solid #5fa8c4;
+    border-color: #5fa8c4;
 }
 
 .swatch-wave {

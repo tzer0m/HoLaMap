@@ -1197,7 +1197,7 @@
         return true;
     };
 
-    // The UniFi view can show one network at a time, picked from the box at its top left. A device is on the network when its IP is in the network's subnet.
+    // The Network view can show one network at a time, picked from the box at its top left. A device is on the network when its IP is in the network's subnet.
     // A cable carries the network untagged when it's its port's native network, or tagged when the port allows it tagged and the far end is a switch, AP or gateway, or is itself on the network.
     // Switches and cables that lead to nothing on the network are left out.
     const vlanSelect = document.getElementById('vlan-select');
@@ -1304,11 +1304,11 @@
                 return;
             }
         }
-        useView(mode === 'unifi' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? { ...raw, nodes: zigbee.nodes, edges: zigbee.edges } : mode === 'all' ? withZigbee() : collapsed);
+        useView(mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? { ...raw, nodes: zigbee.nodes, edges: zigbee.edges } : mode === 'all' ? withZigbee() : collapsed);
         tabs.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.view === mode));
-        vlanSelect.hidden = mode !== 'unifi' || !raw.networks.length;
+        vlanSelect.hidden = mode !== 'network' || !raw.networks.length;
         details.textContent = defaultDetails;
-        if ((mode === 'unifi' || mode === 'zigbee') && !graph.nodes.length) {
+        if ((mode === 'network' || mode === 'zigbee') && !graph.nodes.length) {
             container.replaceChildren();
             container.textContent = mode === 'zigbee' ? 'No Zigbee devices yet. They come from Home Assistant once its URL and token are set.' : 'Nothing found on this network.';
             return;
@@ -1324,7 +1324,7 @@
         labelLayer = layers.labels;
         const bounds = { width: 0, height: 0 };
 
-        if (mode === 'unifi' || mode === 'zigbee' || !graph.floors.length) {
+        if (mode === 'network' || mode === 'zigbee' || !graph.floors.length) {
             // The network on its own, laid out and routed by ELK.
             const result = await layoutGroup({ nodes: graph.nodes, edges: graph.edges });
             if (id !== renderId) {
@@ -1401,14 +1401,14 @@
         svg.addEventListener('dblclick', fit);
     };
 
-    const modes = ['all', 'unifi', 'floorplan', 'zigbee'];
+    const modes = ['all', 'floorplan', 'network', 'zigbee'];
     let stored = null;
     try {
         stored = localStorage.getItem('holamap.view');
     } catch (error) {
         stored = null;
     }
-    let mode = modes.includes(stored) ? stored : 'all';
+    let mode = stored === 'unifi' ? 'network' : modes.includes(stored) ? stored : 'all';
     tabs.addEventListener('click', event => {
         const button = event.target.closest('button[data-view]');
         if (!button) {
@@ -1428,7 +1428,7 @@
         } catch (error) {
             // Storage is only a convenience for remembering the network.
         }
-        render('unifi');
+        render('network');
     });
     await render(mode);
 })();
