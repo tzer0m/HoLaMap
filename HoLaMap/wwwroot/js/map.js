@@ -881,7 +881,8 @@
     const clearFocus = () => focusOn(new Set(), new Set());
 
     // All view: floors contain rooms, rooms contain devices, and ELK lays out and routes the whole thing at once. Not to scale.
-    const layoutNested = async () => {
+    // The Zigbee view uses the same layout with just the floors, so the mesh stays one tree.
+    const layoutNested = async withRooms => {
         const groupOptions = { 'elk.algorithm': 'layered', 'elk.direction': 'DOWN', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.layered.mergeHierarchyEdges': 'false', 'elk.layered.spacing.nodeNodeBetweenLayers': '50', 'elk.layered.spacing.edgeNodeBetweenLayers': '20', 'elk.layered.spacing.edgeEdgeBetweenLayers': '10', 'elk.spacing.nodeNode': '30', 'elk.spacing.edgeEdge': '10', 'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF' };
         // Devices without ports, like a rack, get a connection point per cable so ELK can spread the cables out instead of bunching them into one spot.
         const device = (node, edges) => {
@@ -914,7 +915,7 @@
             const floors = graph.floors.map(floor => ({
                 id: `floor-${floor.id}`,
                 layoutOptions: { ...groupOptions, 'elk.padding': `[top=${titleHeight + 12},left=16,bottom=16,right=16]` },
-                children: floor.rooms.map(item => room(`room-${item.id}`, graph.nodes.filter(node => node.room === item.id))).filter(item => item.children.length)
+                children: withRooms ? floor.rooms.map(item => room(`room-${item.id}`, graph.nodes.filter(node => node.room === item.id))).filter(item => item.children.length) : graph.nodes.filter(node => floor.rooms.some(item => item.id === node.room)).map(node => device(node, edges))
             })).filter(floor => floor.children.length);
             const unplaced = graph.nodes.filter(node => !roomsById.has(node.room));
             if (unplaced.length) {
@@ -928,7 +929,8 @@
                 edges: edges.map(edge => ({ id: edge.id, sources: [edge.sourcePort || (nodesById.get(edge.source).ports.length ? `${edge.source}-out` : `${edge.id}-from`)], targets: [edge.targetPort || (nodesById.get(edge.target).ports.length ? `${edge.target}-in` : `${edge.id}-to`)] }))
             });
         };
-        if (!graph.edges.some(edge => edge.zigbee)) {
+        // The Zigbee view is all one tree already running downwards from the coordinator, so it needs no turning.
+        if (!withRooms || !graph.edges.some(edge => edge.zigbee)) {
             return run(graph.edges);
         }
         // A Zigbee link has no real direction, but ELK runs every line downwards and loops any line pointing back up the long way round.
@@ -1290,6 +1292,12 @@
         return { ...collapsed, nodes: [...collapsed.nodes, ...nodes], edges: [...collapsed.edges, ...edges, ...cable] };
     };
 
+    // The Zigbee view on its own. A coordinator without a room is put in its host's room so it lands on the right floor.
+    const zigbeeView = () => {
+        const host = zigbee.nodes.find(node => node.id === zigbee.edges.find(edge => !edge.zigbee)?.source);
+        return { ...raw, nodes: zigbee.nodes.map(node => node.kind === 'coordinator' && !roomsById.has(node.room) && host ? { ...node, room: host.room } : node), edges: zigbee.edges };
+    };
+
     let renderId = 0;
     const render = async mode => {
         const id = ++renderId;
@@ -1305,7 +1313,7 @@
                 return;
             }
         }
-        useView(mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? { ...raw, nodes: zigbee.nodes, edges: zigbee.edges } : mode === 'all' ? withZigbee() : withZigbee(false));
+        useView(mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? zigbeeView() : mode === 'all' ? withZigbee() : withZigbee(false));
         tabs.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.view === mode));
         vlanSelect.hidden = mode !== 'network' || !raw.networks.length;
         details.textContent = defaultDetails;
@@ -1325,7 +1333,7 @@
         labelLayer = layers.labels;
         const bounds = { width: 0, height: 0 };
 
-        if (mode === 'network' || mode === 'zigbee' || !graph.floors.length) {
+        if (mode === 'network' || !graph.floors.length) {
             // The network on its own, laid out and routed by ELK.
             const result = await layoutGroup({ nodes: graph.nodes, edges: graph.edges });
             if (id !== renderId) {
@@ -1334,9 +1342,9 @@
             drawGroup(result, layers, false);
             bounds.width = result.width;
             bounds.height = result.height;
-        } else if (mode === 'all') {
+        } else if (mode === 'all' || mode === 'zigbee') {
             // The network grouped into floors and rooms.
-            const layout = await layoutNested();
+            const layout = await layoutNested(mode === 'all');
             if (id !== renderId) {
                 return;
             }
