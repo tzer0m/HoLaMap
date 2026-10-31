@@ -1041,6 +1041,26 @@ body:has(.map-layout) .details {
     stroke-width: 2;
 }
 
+.swatch-zigbee {
+    width: 18px;
+    height: 10px;
+    fill: none;
+    stroke: #2bb5a8;
+    stroke-width: 2.5;
+    stroke-dasharray: 0.5 4;
+    stroke-linecap: round;
+}
+
+.swatch.coordinator {
+    background: #3d2f6b;
+    border: 1px solid #9b84d6;
+}
+
+.swatch.router {
+    background: #1f4a5c;
+    border: 1px solid #5fa8c4;
+}
+
 .swatch-wave {
     width: 18px;
     height: 10px;
