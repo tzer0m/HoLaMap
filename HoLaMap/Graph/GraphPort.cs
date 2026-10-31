@@ -24,5 +24,15 @@ namespace HoLaMap.Graph
         /// The tooltip and details for the port.
         /// </summary>
         public string Detail { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The network (VLAN) the port carries untagged.
+        /// </summary>
+        public string Network { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The networks (VLANs) the port carries tagged.
+        /// </summary>
+        public List<string> Tagged { get; set; } = [];
     }
 }

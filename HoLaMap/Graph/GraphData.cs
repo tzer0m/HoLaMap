@@ -24,5 +24,10 @@ namespace HoLaMap.Graph
         /// The racks.
         /// </summary>
         public List<GraphRack> Racks { get; set; } = [];
+
+        /// <summary>
+        /// The networks (VLANs).
+        /// </summary>
+        public List<GraphNetwork> Networks { get; set; } = [];
     }
 }

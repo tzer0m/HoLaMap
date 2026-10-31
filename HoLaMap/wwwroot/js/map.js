@@ -186,7 +186,7 @@
             create('path', { d: roundedPath(clean), class: 'map-halo' }, halo);
         }
         const d = roundedPath(clean);
-        const group = create('g', { class: 'map-edge' + (edge.online ? '' : ' offline'), 'data-edge': edge.id }, parent);
+        const group = create('g', { class: 'map-edge' + (edge.online ? '' : ' offline') + (edge.tagged ? ' tagged' : ''), 'data-edge': edge.id }, parent);
         create('path', { d: d, class: 'map-edge-hit' }, group);
         drawLine(edge, clean, 'map-edge-line', group, true);
         group.addEventListener('click', event => {
@@ -814,12 +814,81 @@
         return true;
     };
 
+    // The UniFi view can show one network at a time, picked from the box at its top left. A device is on the network when its IP is in the network's subnet.
+    // A cable carries the network untagged when it's its port's native network, or tagged when the port allows it tagged and the far end is a switch, AP or gateway, or is itself on the network.
+    // Switches and cables that lead to nothing on the network are left out.
+    const vlanSelect = document.getElementById('vlan-select');
+    const toNumber = ip => ip.split('.').reduce((total, part) => total * 256 + Number(part), 0);
+    const inSubnet = (ip, subnet) => {
+        const [base, bits] = subnet.split('/');
+        if (!ip || !base || !/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
+            return false;
+        }
+        const size = 2 ** (32 - Number(bits ?? 32));
+        return Math.floor(toNumber(ip) / size) === Math.floor(toNumber(base) / size);
+    };
+    const sameName = (a, b) => (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
+    const vlanView = name => {
+        const network = raw.networks.find(item => item.name === name);
+        if (!network) {
+            return { ...raw, nodes: [], edges: [] };
+        }
+        const members = new Set(raw.nodes.filter(node => inSubnet(node.ip, network.subnet)).map(node => node.id));
+        let edges = raw.edges.map(edge => {
+            const target = rawById.get(edge.target);
+            if (edge.wireless) {
+                return members.has(edge.target) ? edge : null;
+            }
+            const port = portsById.get(edge.sourcePort);
+            if (!port) {
+                return null;
+            }
+            if (sameName(port.network, name)) {
+                return edge;
+            }
+            return port.tagged.some(tagged => sameName(tagged, name)) && (isInfrastructure(target) || members.has(edge.target)) ? { ...edge, tagged: true } : null;
+        }).filter(edge => edge);
+        for (let pruned = true; pruned;) {
+            const degree = new Map();
+            edges.forEach(edge => [edge.source, edge.target].forEach(nodeId => degree.set(nodeId, (degree.get(nodeId) ?? 0) + 1)));
+            const before = edges.length;
+            edges = edges.filter(edge => [edge.source, edge.target].every(nodeId => members.has(nodeId) || degree.get(nodeId) > 1));
+            pruned = edges.length < before;
+        }
+        const shown = new Set([...members, ...edges.flatMap(edge => [edge.source, edge.target])]);
+        return { ...raw, nodes: raw.nodes.filter(node => shown.has(node.id)), edges: edges };
+    };
+    const allOption = document.createElement('option');
+    allOption.value = '';
+    allOption.textContent = 'All';
+    vlanSelect.append(allOption);
+    raw.networks.forEach(network => {
+        const option = document.createElement('option');
+        option.value = network.name;
+        option.textContent = network.vlanId ? `${network.name} (VLAN ${network.vlanId})` : network.name;
+        vlanSelect.append(option);
+    });
+    try {
+        const storedVlan = localStorage.getItem('holamap.vlan');
+        if (raw.networks.some(network => network.name === storedVlan)) {
+            vlanSelect.value = storedVlan;
+        }
+    } catch (error) {
+        // Storage is only a convenience for remembering the network.
+    }
+
     let renderId = 0;
     const render = async mode => {
         const id = ++renderId;
-        useView(mode === 'unifi' ? raw : collapsed);
+        useView(mode === 'unifi' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : collapsed);
         tabs.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.view === mode));
+        vlanSelect.hidden = mode !== 'unifi' || !raw.networks.length;
         details.textContent = defaultDetails;
+        if (mode === 'unifi' && !graph.nodes.length) {
+            container.replaceChildren();
+            container.textContent = 'Nothing found on this network.';
+            return;
+        }
         if (mode === 'floorplan' && !graph.floors.length) {
             container.replaceChildren();
             container.textContent = 'No floors yet. Add floors and rooms on the Floor Plan page.';
@@ -859,9 +928,11 @@
         const apply = () => viewport.setAttribute('transform', `translate(${view.x}, ${view.y}) scale(${view.scale})`);
         const fit = () => {
             const box = container.getBoundingClientRect();
-            view.scale = Math.min(box.width / (bounds.width + 40), box.height / (bounds.height + 40), 1.5);
+            // Leave room at the top for the network picker when it's showing.
+            const reserved = vlanSelect.hidden ? 0 : 44;
+            view.scale = Math.min(box.width / (bounds.width + 40), (box.height - reserved) / (bounds.height + 40), 1.5);
             view.x = (box.width - bounds.width * view.scale) / 2;
-            view.y = 20;
+            view.y = 20 + reserved;
             apply();
         };
         container.replaceChildren(svg);
@@ -926,6 +997,14 @@
             // Storage is only a convenience for remembering the view.
         }
         render(mode);
+    });
+    vlanSelect.addEventListener('change', () => {
+        try {
+            localStorage.setItem('holamap.vlan', vlanSelect.value);
+        } catch (error) {
+            // Storage is only a convenience for remembering the network.
+        }
+        render('unifi');
     });
     await render(mode);
 })();

@@ -24,7 +24,10 @@
 </nav>
 
 <div class="map-layout">
-    <div id="map" class="map" data-graph-url="@Url.Page("/Index", "Graph")"></div>
+    <div class="map-wrap">
+        <div id="map" class="map" data-graph-url="@Url.Page("/Index", "Graph")"></div>
+        <select id="vlan-select" class="vlan-select" title="Network" hidden></select>
+    </div>
     <aside id="details" class="details">Select a device or link to see its details.</aside>
 </div>
 

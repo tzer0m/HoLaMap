@@ -1061,3 +1061,25 @@ body:has(.map-layout) .details {
     stroke: #1b1f27;
     stroke-width: 8px;
 }
+
+.map-edge.tagged .map-edge-line {
+    stroke-dasharray: 6 4;
+}
+
+.map-wrap {
+    position: relative;
+    min-height: 0;
+}
+
+.vlan-select {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 1;
+    padding: 4px 8px;
+    border: 1px solid #4a5068;
+    border-radius: 4px;
+    background: #1a1d24;
+    color: #e6e6e6;
+    font: inherit;
+}

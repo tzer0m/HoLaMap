@@ -46,6 +46,11 @@ namespace HoLaMap.Graph
         public string Rack { get; set; } = string.Empty;
 
         /// <summary>
+        /// The device's IP address, or empty if it isn't known.
+        /// </summary>
+        public string Ip { get; set; } = string.Empty;
+
+        /// <summary>
         /// The lowest rack unit the device occupies, counting from 1 at the bottom, or 0 if it isn't in a rack.
         /// </summary>
         public int RackU { get; set; }

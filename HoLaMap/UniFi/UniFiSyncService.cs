@@ -136,7 +136,9 @@ namespace HoLaMap.UniFi
                 port.PoEPower = unifiPort.Up && unifiPort.PoePower > 0 ? unifiPort.PoePower : null;
                 port.Up = unifiPort.Up;
                 port.IsUplink = unifiPort.IsUplink;
-                port.NetworkName = resolver.Resolve(unifiPort, unifiDevice.PortOverrides.FirstOrDefault(portOverride => portOverride.PortIdx == unifiPort.PortIdx));
+                UniFiPortOverride? portOverride = unifiDevice.PortOverrides.FirstOrDefault(item => item.PortIdx == unifiPort.PortIdx);
+                port.NetworkName = resolver.Resolve(unifiPort, portOverride);
+                port.TaggedNetworks = resolver.ResolveTagged(unifiPort, portOverride, port.NetworkName);
             }
         }
 
