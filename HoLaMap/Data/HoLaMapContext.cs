@@ -86,6 +86,7 @@ namespace HoLaMap.Data
             modelBuilder.Entity<Room>().HasOne(room => room.Floor).WithMany(floor => floor.Rooms).HasForeignKey(room => room.FloorId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<Rack>().HasIndex(rack => new { rack.RoomId, rack.Name }).IsUnique();
             modelBuilder.Entity<Rack>().HasOne(rack => rack.Room).WithMany(room => room.Racks).HasForeignKey(rack => rack.RoomId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<Device>().HasOne(device => device.WirelessAp).WithMany().HasForeignKey(device => device.WirelessApId).OnDelete(DeleteBehavior.SetNull);
             modelBuilder.Entity<Device>().HasOne(device => device.Rack).WithMany(rack => rack.Devices).HasForeignKey(device => device.RackId).OnDelete(DeleteBehavior.SetNull);
             modelBuilder.Entity<RackPanel>().HasOne(panel => panel.Rack).WithMany(rack => rack.Panels).HasForeignKey(panel => panel.RackId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<RackPanel>().Property(panel => panel.Kind).HasConversion<string>();

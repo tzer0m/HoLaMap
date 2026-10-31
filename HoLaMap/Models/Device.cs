@@ -89,5 +89,40 @@ namespace HoLaMap.Models
         /// Gets or sets how many rack units tall the device is.
         /// </summary>
         public int RackHeight { get; set; } = 1;
+
+        /// <summary>
+        /// Gets or sets the identifier of the access point the device was last connected to over Wi-Fi, or null if it's wired.
+        /// </summary>
+        public int? WirelessApId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the access point the device was last connected to over Wi-Fi, or null if it's wired.
+        /// </summary>
+        public Device? WirelessAp { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Wi-Fi network the device was last on.
+        /// </summary>
+        public string? Ssid { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Wi-Fi band the device was last on, such as 5 GHz.
+        /// </summary>
+        public string? WifiBand { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Wi-Fi channel the device was last on.
+        /// </summary>
+        public int? WifiChannel { get; set; }
+
+        /// <summary>
+        /// Gets or sets the last Wi-Fi signal strength in dBm.
+        /// </summary>
+        public int? WifiSignal { get; set; }
+
+        /// <summary>
+        /// Gets or sets the last Wi-Fi link rate in Mbps.
+        /// </summary>
+        public int? WifiRate { get; set; }
     }
 }

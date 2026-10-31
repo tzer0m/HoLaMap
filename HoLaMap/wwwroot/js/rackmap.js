@@ -1,7 +1,7 @@
 // Draws one rack to scale with the ports on each device's front, the cables between them, and the cables leaving the rack with a label saying where each one goes.
 window.RackMap = (function () {
     const svgNs = 'http://www.w3.org/2000/svg';
-    const colours = { 'patch': '#b0b4bc', 'port-wan': '#1e88c8', 'port-1000': '#4a8a1c', 'port-100': '#e6c229', 'port-10': '#e67e22', 'port-down': '#7b8794' };
+    const colours = { 'patch': '#b0b4bc', 'port-wan': '#1e88c8', 'port-1000': '#4a8a1c', 'port-100': '#e6c229', 'port-10': '#e67e22', 'port-down': '#7b8794', 'wifi': '#9b6bd1' };
     const darkText = ['patch', 'port-100', 'port-down'];
     // Cables are drawn in a darker shade of their speed colour, and PoE cables in the full colour so they stand out.
     const darken = hex => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.substr(i, 2), 16) * 0.65).toString(16).padStart(2, '0')).join('');
@@ -83,6 +83,32 @@ window.RackMap = (function () {
         });
     };
 
+    // A gentle wave along each straight run, used for Wi-Fi connections.
+    const wavePath = points => {
+        const amplitude = 2.5;
+        const halfWave = 5;
+        let path = `M ${points[0].x} ${points[0].y}`;
+        for (let i = 1; i < points.length; i++) {
+            const from = points[i - 1];
+            const to = points[i];
+            const length = Math.hypot(to.x - from.x, to.y - from.y);
+            if (length === 0) {
+                continue;
+            }
+            const unitX = (to.x - from.x) / length;
+            const unitY = (to.y - from.y) / length;
+            const steps = Math.max(1, Math.round(length / halfWave));
+            const step = length / steps;
+            for (let s = 0; s < steps; s++) {
+                const side = s % 2 === 0 ? amplitude * 2 : -amplitude * 2;
+                const middle = (s + 0.5) * step;
+                const end = (s + 1) * step;
+                path += ` Q ${from.x + unitX * middle - unitY * side} ${from.y + unitY * middle + unitX * side} ${from.x + unitX * end} ${from.y + unitY * end}`;
+            }
+        }
+        return path;
+    };
+
     // A PoE splitter sits inline near the end of a cable. The cable carries PoE up to it and plain Ethernet after it.
     const splitAt = (points, distance) => {
         let remaining = distance;
@@ -108,6 +134,10 @@ window.RackMap = (function () {
     // Draws a cable's line, split at its PoE splitter when it has one: full colour with the zigzag up to the splitter, the plain darker shade after it.
     const drawLine = (edge, clean, lineClass, parent, splitterAtEnd) => {
         const split = edge.splitter && splitterAtEnd !== null ? splitAt(splitterAtEnd ? clean : [...clean].reverse(), Math.min(40, pathLength(clean) * 0.3)) : null;
+        if (edge.wireless) {
+            create('path', { d: wavePath(clean), class: `${lineClass} wireless`, stroke: colours.wifi }, parent);
+            return;
+        }
         if (!split) {
             create('path', { d: edge.poE && !edge.back ? zigzagPath(clean) : roundedPath(clean), class: lineClass, stroke: cableColour(edge) }, parent);
             return;

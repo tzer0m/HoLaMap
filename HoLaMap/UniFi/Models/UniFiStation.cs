@@ -48,5 +48,41 @@ namespace HoLaMap.UniFi.Models
         /// </summary>
         [JsonPropertyName("sw_port")]
         public int? SwPort { get; set; }
+
+        /// <summary>
+        /// Gets or sets the MAC address of the access point a wireless client is connected to.
+        /// </summary>
+        [JsonPropertyName("ap_mac")]
+        public string? ApMac { get; set; }
+
+        /// <summary>
+        /// Gets or sets the name of the Wi-Fi network a wireless client is on.
+        /// </summary>
+        [JsonPropertyName("essid")]
+        public string? Essid { get; set; }
+
+        /// <summary>
+        /// Gets or sets the radio a wireless client is on: ng for 2.4 GHz, na for 5 GHz or 6e for 6 GHz.
+        /// </summary>
+        [JsonPropertyName("radio")]
+        public string? Radio { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Wi-Fi channel.
+        /// </summary>
+        [JsonPropertyName("channel")]
+        public int? Channel { get; set; }
+
+        /// <summary>
+        /// Gets or sets the signal strength in dBm.
+        /// </summary>
+        [JsonPropertyName("signal")]
+        public int? Signal { get; set; }
+
+        /// <summary>
+        /// Gets or sets the rate the access point sends to the client at, in kbps.
+        /// </summary>
+        [JsonPropertyName("tx_rate")]
+        public int? TxRate { get; set; }
     }
 }

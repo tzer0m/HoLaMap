@@ -7,11 +7,10 @@
 - Racks: rack in a room, 4-column grid of U rows, Rack Details page with tabbed editor and cable map, rack popup on the map.
 - Blank, brush and patch panels (12/24/48 ports, front and rear sockets, jumpers between ports, routes drawn through the panel).
 - PoE splitters as a property on links, drawn inline with PoE before and plain Ethernet after.
+- Wi-Fi links from each client's current AP, shown for clients with a room (SSID, band, channel, signal, rate in the details).
 
 ## Next Up
-- Manual devices (unmanaged switch), then wireless links; both need links that start from a device.
 
 ## Later
-- Wireless links from APs to Wi-Fi clients (needs links that start from a device rather than a port).
 - Separate colours for 2.5 and 10 Gbps.
 - More layers: networks/VLANs, firewall zones and policies, services, public exposure, dependencies.

@@ -56,6 +56,11 @@ namespace HoLaMap.Graph
         public bool Splitter { get; set; }
 
         /// <summary>
+        /// Whether this is a Wi-Fi connection from an access point rather than a cable.
+        /// </summary>
+        public bool Wireless { get; set; }
+
+        /// <summary>
         /// Whether the downstream device was seen by the last few syncs.
         /// </summary>
         public bool Online { get; set; }

@@ -61,10 +61,28 @@ namespace HoLaMap.UniFi
                 {
                     device.Name = station.Name ?? station.Hostname ?? device.Mac;
                     device.Ip = station.Ip;
+                    SyncWireless(device, station, devices);
                 }
             }
             await context.SaveChangesAsync(cancellationToken);
             await SyncLinksAsync(devices, unifiDevices, stations, now, cancellationToken);
+        }
+
+        /// <summary>
+        /// Records which access point a wireless client is on and how good the connection is, or clears it for a wired client.
+        /// </summary>
+        /// <param name="device">The client device.</param>
+        /// <param name="station">The client as UniFi reports it.</param>
+        /// <param name="devices">Known devices by MAC.</param>
+        private static void SyncWireless(Device device, UniFiStation station, Dictionary<string, Device> devices)
+        {
+            Device? ap = !station.IsWired && station.ApMac != null && devices.TryGetValue(NormaliseMac(station.ApMac), out Device? found) ? found : null;
+            device.WirelessAp = ap;
+            device.Ssid = ap == null ? null : station.Essid;
+            device.WifiBand = ap == null ? null : station.Radio switch { "ng" => "2.4 GHz", "na" => "5 GHz", "6e" => "6 GHz", _ => station.Radio };
+            device.WifiChannel = ap == null ? null : station.Channel;
+            device.WifiSignal = ap == null ? null : station.Signal;
+            device.WifiRate = ap == null || station.TxRate == null ? null : station.TxRate / 1000;
         }
 
         /// <summary>

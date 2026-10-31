@@ -102,6 +102,24 @@ namespace HoLaMap.Migrations
                     b.Property<int?>("RoomId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Ssid")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WifiBand")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("WifiChannel")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("WifiRate")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("WifiSignal")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("WirelessApId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Mac")
@@ -110,6 +128,8 @@ namespace HoLaMap.Migrations
                     b.HasIndex("RackId");
 
                     b.HasIndex("RoomId");
+
+                    b.HasIndex("WirelessApId");
 
                     b.ToTable("Devices");
                 });
@@ -457,9 +477,16 @@ namespace HoLaMap.Migrations
                         .HasForeignKey("RoomId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("HoLaMap.Models.Device", "WirelessAp")
+                        .WithMany()
+                        .HasForeignKey("WirelessApId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Rack");
 
                     b.Navigation("Room");
+
+                    b.Navigation("WirelessAp");
                 });
 
             modelBuilder.Entity("HoLaMap.Models.DeviceMac", b =>
