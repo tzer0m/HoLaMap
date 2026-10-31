@@ -801,6 +801,18 @@ body:has(.map-layout) .details {
     fill: #9aa3b5;
 }
 
+.map-trunk.wifi .map-trunk-line {
+    stroke: #9b6bd1;
+}
+
+.map-trunk.wifi .map-trunk-badge {
+    stroke: #9b6bd1;
+}
+
+.map-trunk.wifi .map-trunk-end {
+    fill: #9b6bd1;
+}
+
 .map-labels {
     pointer-events: none;
 }
@@ -1035,4 +1047,17 @@ body:has(.map-layout) .details {
     fill: none;
     stroke: #9b6bd1;
     stroke-width: 1.5;
+}
+
+.map-halo {
+    fill: none;
+    stroke: #1b1f27;
+    stroke-width: 10px;
+    stroke-linejoin: round;
+}
+
+.map-halo-box {
+    fill: #1b1f27;
+    stroke: #1b1f27;
+    stroke-width: 8px;
 }

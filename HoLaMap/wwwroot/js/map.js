@@ -176,10 +176,14 @@
         details.append(heading, text);
     };
 
-    const drawEdge = (edge, points, parent) => {
+    // A halo is a wider copy of a cable or device in the room colour, drawn under everything else but over the arcs, so an arc passing behind disappears instead of crossing it.
+    const drawEdge = (edge, points, parent, halo) => {
         const clean = tidy(points);
         if (clean.length < 2) {
             return;
+        }
+        if (halo) {
+            create('path', { d: roundedPath(clean), class: 'map-halo' }, halo);
         }
         const d = roundedPath(clean);
         const group = create('g', { class: 'map-edge' + (edge.online ? '' : ' offline'), 'data-edge': edge.id }, parent);
@@ -386,7 +390,8 @@
 
         // On the Floor Plan, devices with no cables in the room are stacked in one column, the same distance apart as a stack under a switch.
         const connectedIds = new Set(group.edges.flatMap(edge => [edge.source, edge.target]));
-        const looseNodes = compact ? group.nodes.filter(node => !connectedIds.has(node.id)) : [];
+        // A rack goes at the top of the column, above the other devices.
+        const looseNodes = compact ? group.nodes.filter(node => !connectedIds.has(node.id)).sort((a, b) => (b.kind === 'rack') - (a.kind === 'rack')) : [];
         let looseY = 0;
         const loose = looseNodes.length > 1 ? {
             id: 'loose',
@@ -503,10 +508,15 @@
                     const centreY = stackLayout.y + stacked.item.y + stacked.item.height / 2;
                     points.push({ x: section.endPoint.x, y: centreY }, { x: stackLayout.x + stacked.stack.entryX, y: centreY });
                 }
-                drawEdge(edge, points, layers.edges);
+                drawEdge(edge, points, layers.edges, layers.halos);
             });
         });
-        result.placements.forEach(placement => drawNode(placement.node, placement.x, placement.y, placement.width, placement.height, layers.nodes, compact));
+        result.placements.forEach(placement => {
+            if (layers.halos) {
+                create('rect', { x: placement.x, y: placement.y, width: placement.width, height: placement.height, rx: 4, class: 'map-halo-box' }, layers.halos);
+            }
+            drawNode(placement.node, placement.x, placement.y, placement.width, placement.height, layers.nodes, compact);
+        });
     };
 
     // Highlights a device or link and everything connected to it, fading the rest. Pass nothing to clear.
@@ -635,16 +645,22 @@
         }
         const scale = Math.min(1, ...plans.filter(plan => plan.result).map(plan => scales.find(candidate => plan.result.width * candidate <= plan.availWidth + 0.5 && plan.result.height * candidate <= plan.availHeight + 0.5) ?? scales[scales.length - 1]));
 
-        // Cables between rooms, grouped by the pair of rooms they join.
+        // Cables between rooms, grouped by the pair of devices they join. A device in a rack is the rack here.
         const roomKey = node => roomsById.has(node.room) ? node.room : '';
         const byPair = new Map();
-        // Only cables run between rooms. A Wi-Fi link to a device in another room isn't drawn here.
+        // Only cables run between rooms. Wi-Fi to devices in other rooms gets one purple arc per AP and room instead.
         graph.edges.filter(edge => !edge.wireless && roomKey(nodesById.get(edge.source)) !== roomKey(nodesById.get(edge.target))).forEach(edge => {
-            const keys = [roomKey(nodesById.get(edge.source)), roomKey(nodesById.get(edge.target))].sort();
+            const keys = [edge.source, edge.target].sort();
             const key = keys.join('|');
             byPair.set(key, { keys: keys, edges: [...(byPair.get(key)?.edges ?? []), edge] });
         });
         const trunks = [...byPair.values()];
+        const wifiByRoom = new Map();
+        graph.edges.filter(edge => edge.wireless && roomKey(nodesById.get(edge.source)) !== roomKey(nodesById.get(edge.target))).forEach(edge => {
+            const key = `${edge.source}|${roomKey(nodesById.get(edge.target))}`;
+            wifiByRoom.set(key, { ap: edge.source, room: roomKey(nodesById.get(edge.target)), edges: [...(wifiByRoom.get(key)?.edges ?? []), edge] });
+        });
+        const wifiArcs = [...wifiByRoom.values()];
         const top = 40 + trunks.length * 14;
 
         // Floors side by side, then the unplaced devices, below the space the arcs need.
@@ -653,7 +669,7 @@
         let ox = groupPadding;
         const drawContent = (result, left, top) => {
             const transform = `translate(${left}, ${top}) scale(${scale})`;
-            drawGroup(result, { edges: create('g', { transform: transform }, layers.edges), nodes: create('g', { transform: transform }, layers.nodes) }, true);
+            drawGroup(result, { halos: create('g', { transform: transform }, layers.halos), edges: create('g', { transform: transform }, layers.edges), nodes: create('g', { transform: transform }, layers.nodes) }, true);
             result.placements.forEach(placement => centres.set(placement.node.id, { x: left + (placement.x + placement.width / 2) * scale, y: top + (placement.y + placement.height / 2) * scale, top: top + placement.y * scale, bottom: top + (placement.y + placement.height) * scale, left: left + placement.x * scale, right: left + (placement.x + placement.width) * scale }));
         };
         graph.floors.forEach(floor => {
@@ -691,25 +707,63 @@
             const rect = rects.get(key);
             return { x: rect.x + rect.width / 2, y: rect.y + (key ? roomHeader / 2 : roomPadding / 2) };
         };
-        // Wider arcs fly higher so they nest instead of crossing.
-        const ordered = trunks.map(trunk => ({ ...trunk, from: anchor(trunk.keys[0]), to: anchor(trunk.keys[1]) })).map(trunk => trunk.from.x <= trunk.to.x ? trunk : { ...trunk, from: trunk.to, to: trunk.from }).sort((a, b) => (a.to.x - a.from.x) - (b.to.x - b.from.x));
-        ordered.forEach((trunk, index) => {
-            const apex = top - 24 - index * 14;
-            const d = `M ${trunk.from.x} ${trunk.from.y} C ${trunk.from.x} ${apex}, ${trunk.to.x} ${apex}, ${trunk.to.x} ${trunk.to.y}`;
-            const group = create('g', { class: 'map-trunk', 'data-edges': trunk.edges.map(edge => edge.id).join(' ') }, layers.trunks);
+        const drawTrunk = (trunk, from, controlA, controlB, to) => {
+            const d = `M ${from.x} ${from.y} C ${controlA.x} ${controlA.y}, ${controlB.x} ${controlB.y}, ${to.x} ${to.y}`;
+            const group = create('g', { class: 'map-trunk' + (trunk.wifi ? ' wifi' : ''), 'data-edges': trunk.edges.map(edge => edge.id).join(' ') }, layers.trunks);
             create('path', { d: d, class: 'map-trunk-hit' }, group);
             create('path', { d: d, class: 'map-trunk-line', style: `stroke-width: ${Math.min(8, 1.5 + trunk.edges.length)}px` }, group);
-            create('circle', { cx: trunk.from.x, cy: trunk.from.y, r: 3, class: 'map-trunk-end' }, group);
-            create('circle', { cx: trunk.to.x, cy: trunk.to.y, r: 3, class: 'map-trunk-end' }, group);
-            const middle = { x: (trunk.from.x + trunk.to.x) / 2, y: 0.125 * (trunk.from.y + trunk.to.y) + 0.75 * apex };
+            create('circle', { cx: from.x, cy: from.y, r: 3, class: 'map-trunk-end' }, group);
+            create('circle', { cx: to.x, cy: to.y, r: 3, class: 'map-trunk-end' }, group);
+            const middle = { x: 0.125 * (from.x + to.x) + 0.375 * (controlA.x + controlB.x), y: 0.125 * (from.y + to.y) + 0.375 * (controlA.y + controlB.y) };
             create('circle', { cx: middle.x, cy: middle.y, r: 9, class: 'map-trunk-badge' }, group);
             create('text', { x: middle.x, y: middle.y + 4, class: 'map-trunk-count' }, group).textContent = trunk.edges.length;
             group.addEventListener('click', event => {
                 event.stopPropagation();
                 const describe = edge => `${nodesById.get(edge.source).label} → ${nodesById.get(edge.target).label}`;
-                showDetails(`${roomName(trunk.keys[0])} ↔ ${roomName(trunk.keys[1])} (${trunk.edges.length} ${trunk.edges.length === 1 ? 'Cable' : 'Cables'})`, trunk.edges.map(describe).join('\n'));
+                if (trunk.wifi) {
+                    showDetails(`${nodesById.get(trunk.wifi.ap).label} → ${roomName(trunk.wifi.room)} (${trunk.edges.length} Wi-Fi ${trunk.edges.length === 1 ? 'Device' : 'Devices'})`, trunk.edges.map(edge => `${nodesById.get(edge.target).label} · ${edge.detail}`).join('\n'));
+                } else {
+                    showDetails(`${nodesById.get(trunk.keys[0]).label} ↔ ${nodesById.get(trunk.keys[1]).label} (${trunk.edges.length} ${trunk.edges.length === 1 ? 'Cable' : 'Cables'})`, trunk.edges.map(describe).join('\n'));
+                }
                 focusEdges(trunk.edges);
             });
+        };
+
+        // Cable arcs run from the top of one device up over the floors and down to the top of the other. Wider arcs fly higher so they nest instead of crossing.
+        const deviceTop = id => centres.has(id) ? { x: centres.get(id).x, y: centres.get(id).top } : anchor(roomKey(nodesById.get(id)));
+        const ordered = trunks.map(trunk => ({ ...trunk, from: deviceTop(trunk.keys[0]), to: deviceTop(trunk.keys[1]) })).map(trunk => trunk.from.x <= trunk.to.x ? trunk : { ...trunk, from: trunk.to, to: trunk.from }).sort((a, b) => (a.to.x - a.from.x) - (b.to.x - b.from.x));
+        // Two devices mostly above one another, like a rack over the room below, get a curve bowing out to the side from the bottom of the upper one to the top of the lower one instead.
+        const upright = trunk => Math.abs(trunk.to.x - trunk.from.x) < Math.abs(trunk.to.y - trunk.from.y);
+        ordered.filter(trunk => !upright(trunk)).forEach((trunk, index) => {
+            const apex = top - 24 - index * 14;
+            drawTrunk(trunk, trunk.from, { x: trunk.from.x, y: apex }, { x: trunk.to.x, y: apex }, trunk.to);
+        });
+        ordered.filter(upright).forEach(trunk => {
+            const [upper, lower] = [...trunk.keys].sort((a, b) => deviceTop(a).y - deviceTop(b).y);
+            const from = centres.has(upper) ? { x: centres.get(upper).x, y: centres.get(upper).bottom } : deviceTop(upper);
+            const to = deviceTop(lower);
+            const down = to.y - from.y;
+            const bow = (to.x >= from.x ? 1 : -1) * Math.max(40, Math.abs(down) * 0.2);
+            drawTrunk(trunk, from, { x: from.x + bow, y: from.y + down / 3 }, { x: to.x + bow, y: to.y - down / 3 }, to);
+        });
+
+        // A Wi-Fi arc starts from the AP itself and only rises as high as the distance it covers needs. When the room is mostly below or above the AP,
+        // it leaves the AP's bottom or top and bows out to the side instead.
+        wifiArcs.filter(arc => centres.has(arc.ap) && rects.has(arc.room)).forEach(arc => {
+            const trunk = { wifi: arc, edges: arc.edges };
+            const ap = centres.get(arc.ap);
+            const to = anchor(arc.room);
+            const across = Math.abs(to.x - ap.x);
+            if (across >= Math.abs(to.y - ap.y)) {
+                const from = { x: ap.x, y: ap.top };
+                const apex = Math.min(from.y, to.y) - Math.max(30, across * 0.25);
+                drawTrunk(trunk, from, { x: from.x, y: apex }, { x: to.x, y: apex }, to);
+                return;
+            }
+            const from = { x: ap.x, y: to.y > ap.y ? ap.bottom : ap.top };
+            const down = to.y - from.y;
+            const bow = (to.x >= ap.x ? 1 : -1) * Math.max(40, Math.abs(down) * 0.2);
+            drawTrunk(trunk, from, { x: from.x + bow, y: from.y + down / 3 }, { x: to.x + bow, y: to.y - down / 3 }, to);
         });
 
         return true;
@@ -728,7 +782,7 @@
         }
         const svg = create('svg', { class: 'map-svg' });
         const viewport = create('g', {}, svg);
-        const layers = { boxes: create('g', {}, viewport), trunks: create('g', {}, viewport), edges: create('g', {}, viewport), nodes: create('g', {}, viewport), labels: create('g', { class: 'map-labels' }, viewport) };
+        const layers = { boxes: create('g', {}, viewport), trunks: create('g', {}, viewport), halos: create('g', {}, viewport), edges: create('g', {}, viewport), nodes: create('g', {}, viewport), labels: create('g', { class: 'map-labels' }, viewport) };
         labelLayer = layers.labels;
         const bounds = { width: 0, height: 0 };
 
