@@ -605,7 +605,7 @@
 
     // A device with its ports, or just its name when compact.
     const drawNode = (node, x, y, width, height, parent, compact, scale) => {
-        const group = create('g', { class: `map-node ${node.kind}${node.online ? '' : ' offline'}`, transform: `translate(${x}, ${y}) scale(${scale ?? 1})`, 'data-node': node.id }, parent);
+        const group = create('g', { class: `map-node ${node.kind}${zigbeeById.has(node.id) && !rawById.has(node.id) ? ' zigbee' : ''}${node.online ? '' : ' offline'}`, transform: `translate(${x}, ${y}) scale(${scale ?? 1})`, 'data-node': node.id }, parent);
         create('rect', { width: width, height: height, rx: compact ? 4 : 8, class: 'map-node-box' }, group);
         const label = create('text', { x: width / 2, y: !compact && node.ports.length ? 18 : height / 2 + 4, class: 'map-node-label' }, group);
         label.textContent = node.label;
@@ -1264,8 +1264,8 @@
         // Storage is only a convenience for remembering the network.
     }
 
-    // The All view with the Zigbee devices that have a room. The coordinator sits with its host, and a device whose parent is hidden hangs off the nearest shown device above it.
-    const withZigbee = () => {
+    // The All and Floor Plan views with the Zigbee devices that have a room; the Floor Plan leaves out their links. The coordinator sits with its host, and a device whose parent is hidden hangs off the nearest shown device above it.
+    const withZigbee = (links = true) => {
         if (!zigbee?.nodes.length) {
             return collapsed;
         }
@@ -1273,6 +1273,10 @@
         const host = usb ? rackOf.get(usb.source) ?? usb.source : '';
         const hostNode = collapsed.nodes.find(node => node.id === host);
         const nodes = zigbee.nodes.filter(node => node.id.startsWith('z')).map(node => node.kind === 'coordinator' && !roomsById.has(node.room) && hostNode ? { ...node, room: hostNode.room } : node).filter(node => roomsById.has(node.room));
+        const cable = hostNode && nodes.some(node => node.id === usb.target) ? [{ ...usb, source: host }] : [];
+        if (!links) {
+            return { ...collapsed, nodes: [...collapsed.nodes, ...nodes], edges: [...collapsed.edges, ...cable] };
+        }
         const shown = new Set(nodes.map(node => node.id));
         const linkTo = new Map(zigbee.edges.filter(edge => edge.zigbee).map(edge => [edge.target, edge]));
         const shownParent = id => {
@@ -1283,16 +1287,13 @@
             return current;
         };
         const edges = nodes.filter(node => shownParent(node.id)).map(node => ({ ...linkTo.get(node.id), source: shownParent(node.id) }));
-        if (hostNode && shown.has(usb.target)) {
-            edges.push({ ...usb, source: host });
-        }
-        return { ...collapsed, nodes: [...collapsed.nodes, ...nodes], edges: [...collapsed.edges, ...edges] };
+        return { ...collapsed, nodes: [...collapsed.nodes, ...nodes], edges: [...collapsed.edges, ...edges, ...cable] };
     };
 
     let renderId = 0;
     const render = async mode => {
         const id = ++renderId;
-        if ((mode === 'zigbee' || mode === 'all') && !zigbee) {
+        if ((mode === 'zigbee' || mode === 'all' || mode === 'floorplan') && !zigbee) {
             try {
                 zigbee = await (await fetch(container.dataset.zigbeeUrl)).json();
             } catch (error) {
@@ -1304,7 +1305,7 @@
                 return;
             }
         }
-        useView(mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? { ...raw, nodes: zigbee.nodes, edges: zigbee.edges } : mode === 'all' ? withZigbee() : collapsed);
+        useView(mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? { ...raw, nodes: zigbee.nodes, edges: zigbee.edges } : mode === 'all' ? withZigbee() : withZigbee(false));
         tabs.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.view === mode));
         vlanSelect.hidden = mode !== 'network' || !raw.networks.length;
         details.textContent = defaultDetails;

@@ -1088,6 +1088,11 @@ body:has(.map-layout) .details {
     border-color: #5fa8c4;
 }
 
+.swatch.box-zigbee {
+    background: #233533;
+    border-color: #2bb5a8;
+}
+
 .swatch-wave {
     width: 18px;
     height: 10px;
@@ -1294,6 +1299,11 @@ body:has(.map-layout) .details {
 .map-node.router .map-node-box {
     fill: #1f4a5c;
     stroke: #5fa8c4;
+}
+
+.map-node.zigbee.client .map-node-box {
+    fill: #233533;
+    stroke: #2bb5a8;
 }
 
 .map-node.coordinator .map-node-label,
