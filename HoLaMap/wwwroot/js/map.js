@@ -578,7 +578,8 @@
         }
         const layout = await new ELK().layout({
             id: 'root',
-            layoutOptions: groupOptions,
+            // The floors would stack in one tall column, so ELK wraps the column into side-by-side chunks to match the shape of the map area.
+            layoutOptions: { ...groupOptions, 'elk.layered.wrapping.strategy': 'MULTI_EDGE', 'elk.aspectRatio': String(Math.max(1, container.clientWidth / Math.max(1, container.clientHeight))) },
             children: floors,
             edges: graph.edges.map(edge => ({ id: edge.id, sources: [edge.sourcePort || (nodesById.get(edge.source).ports.length ? `${edge.source}-out` : `${edge.id}-from`)], targets: [edge.targetPort || (nodesById.get(edge.target).ports.length ? `${edge.target}-in` : `${edge.id}-to`)] }))
         });
@@ -608,6 +609,11 @@
                 }
             });
         });
+        // A cable leaving the bottom of a rack only to loop round and climb past it is moved to leave from the top instead,
+        // running across just above the rack to join its climb.
+        const racks = new Map();
+        (layout.children ?? []).forEach(floor => (floor.children ?? []).forEach(child => [child, ...(child.children ?? []).map(item => ({ ...item, x: child.x + item.x, y: child.y + item.y }))].filter(item => nodesById.get(item.id)?.kind === 'rack').forEach(item => racks.set(item.id, { x: floor.x + item.x, y: floor.y + item.y, width: item.width, height: item.height }))));
+        const routes = [];
         (layout.edges ?? []).forEach(layoutEdge => {
             const edge = graph.edges.find(candidate => candidate.id === layoutEdge.id);
             const from = chain.get(edge.source);
@@ -615,8 +621,47 @@
             const shared = from.filter((containerId, index) => to[index] === containerId);
             const origin = origins.get(shared[shared.length - 1]);
             const shift = point => ({ x: point.x + origin.x, y: point.y + origin.y });
-            (layoutEdge.sections ?? []).forEach(section => drawEdge(edge, [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(shift), layers.edges));
+            (layoutEdge.sections ?? []).forEach(section => routes.push({ edge: edge, points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(shift) }));
         });
+        racks.forEach((box, rackId) => {
+            const lifts = routes.map(route => {
+                const atStart = route.edge.source === rackId;
+                if (!atStart && route.edge.target !== rackId) {
+                    return null;
+                }
+                const points = atStart ? route.points : [...route.points].reverse();
+                const climb = points.findIndex((point, index) => index > 0 && points[index - 1].x === point.x && point.y < box.y - 12 && points[index - 1].y > box.y && (point.x < box.x || point.x > box.x + box.width));
+                return climb > 0 && points[0].y >= box.y + box.height - 1 ? { route: route, atStart: atStart, points: points, climb: climb } : null;
+            }).filter(lift => lift);
+            // A rack has no real ports, so the cables leaving its top are spaced out in the same order as the climbs they join, which keeps them from crossing.
+            [...lifts].sort((a, b) => a.points[a.climb].x - b.points[b.climb].x).forEach((lift, index) => {
+                lift.points = [{ x: box.x + (index + 1) * box.width / (lifts.length + 1), y: lift.points[0].y }, ...lift.points.slice(1)];
+            });
+            // Each cable rises from its port, runs across at its own height and joins its climb. The heights are ordered so as few of these cross as possible.
+            const between = (value, a, b) => value > Math.min(a, b) && value < Math.max(a, b);
+            const cost = (upper, lower) => (between(upper.points[0].x, lower.points[0].x, lower.points[lower.climb].x) ? 1 : 0) + (between(lower.points[lower.climb].x, upper.points[0].x, upper.points[upper.climb].x) ? 1 : 0);
+            const ordered = [];
+            lifts.forEach(lift => {
+                let best = 0;
+                let bestCost = Infinity;
+                for (let at = 0; at <= ordered.length; at++) {
+                    const total = ordered.slice(0, at).reduce((sum, other) => sum + cost(other, lift), 0) + ordered.slice(at).reduce((sum, other) => sum + cost(lift, other), 0);
+                    if (total < bestCost) {
+                        best = at;
+                        bestCost = total;
+                    }
+                }
+                ordered.splice(best, 0, lift);
+            });
+            ordered.forEach((lift, order) => {
+                const across = box.y - 12 - (ordered.length - 1 - order) * laneGap;
+                const start = lift.points[0];
+                const join = { x: lift.points[lift.climb].x, y: across };
+                const points = [{ x: start.x, y: box.y }, { x: start.x, y: across }, join, ...lift.points.slice(lift.climb)];
+                lift.route.points = lift.atStart ? points : points.reverse();
+            });
+        });
+        routes.forEach(route => drawEdge(route.edge, route.points, layers.edges));
     };
 
     // Floor Plan view: rooms exactly as saved, floors side by side. Each room's devices are a small tree of name-only chips, all shrunk by the same amount so every room matches.
