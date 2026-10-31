@@ -2,6 +2,7 @@ using HoLaMap.Data;
 using HoLaMap.Display;
 using HoLaMap.Graph;
 using HoLaMap.Models;
+using HoLaMap.Zigbee;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
@@ -48,6 +49,49 @@ namespace HoLaMap.Pages
         public async Task<IActionResult> OnPostRoomAsync(int id, int? roomId)
         {
             Device? device = await context.Devices.FirstOrDefaultAsync(item => item.Id == id);
+            if (device == null || (roomId != null && !await context.Rooms.AnyAsync(room => room.Id == roomId)))
+            {
+                return NotFound();
+            }
+            device.RoomId = roomId;
+            await context.SaveChangesAsync();
+            return new OkResult();
+        }
+
+        /// <summary>
+        /// Returns the Zigbee mesh as a tree: routers back to the coordinator along their strongest links, end devices under their parents, and the coordinator under the device it's plugged into.
+        /// </summary>
+        /// <returns>The Zigbee devices and links as JSON.</returns>
+        public async Task<JsonResult> OnGetZigbeeAsync()
+        {
+            List<ZigbeeDevice> devices = await context.ZigbeeDevices.Include(device => device.Neighbors).OrderBy(device => device.Name).ToListAsync();
+            Dictionary<int, (ZigbeeDevice Parent, int? Lqi)> parents = ZigbeeMesh.Parents(devices);
+            string hostName = configuration["HomeAssistant:CoordinatorHost"] ?? string.Empty;
+            Device? host = hostName.Length == 0 ? null : await context.Devices.FirstOrDefaultAsync(device => device.Name == hostName);
+            ZigbeeDevice? coordinator = devices.FirstOrDefault(device => device.Role == "Coordinator");
+            DateTime onlineSince = DateTime.UtcNow.AddMinutes(-configuration.GetValue<int>("Map:OfflineAfterMinutes"));
+            GraphData graph = new()
+            {
+                Nodes = [.. devices.Select(device => new GraphNode { Id = $"z{device.Id}", Label = device.Name, Kind = device.Role switch { "Coordinator" => "coordinator", "Router" => "router", _ => "client" }, Online = device.Available, Room = device.RoomId == null ? string.Empty : $"r{device.RoomId}", Model = device.Model ?? string.Empty, Mac = device.Ieee, Manufacturer = device.Manufacturer ?? string.Empty, Power = device.PowerSource ?? string.Empty, Lqi = device.Lqi, Rssi = device.Rssi, LastSeen = device.LastSeen?.ToLocalTime().ToString("d MMM HH:mm") ?? string.Empty })],
+                Edges = [.. parents.Select(pair => new GraphEdge { Id = $"zl{pair.Key}", Source = $"z{pair.Value.Parent.Id}", Target = $"z{pair.Key}", Label = pair.Value.Lqi == null ? "Zigbee" : $"LQI {pair.Value.Lqi}", Style = pair.Value.Lqi >= 150 ? "port-1000" : pair.Value.Lqi >= 80 ? "port-100" : "port-10", Zigbee = true, Lqi = pair.Value.Lqi, Online = devices.First(device => device.Id == pair.Key).Available })]
+            };
+            if (host != null && coordinator != null)
+            {
+                graph.Nodes.Insert(0, new GraphNode { Id = $"d{host.Id}", Label = host.Name, Kind = "client", Online = host.LastSeen >= onlineSince, Room = host.RoomId == null ? string.Empty : $"r{host.RoomId}", Model = host.Model ?? string.Empty, Ip = host.Ip ?? string.Empty, Mac = host.Mac, LastSeen = host.LastSeen.ToLocalTime().ToString("d MMM HH:mm") });
+                graph.Edges.Insert(0, new GraphEdge { Id = "zl-usb", Source = $"d{host.Id}", Target = $"z{coordinator.Id}", Label = "USB", Style = "port-down", Online = true, Detail = "Zigbee coordinator plugged into the host" });
+            }
+            return new JsonResult(graph);
+        }
+
+        /// <summary>
+        /// Moves a Zigbee device to another room, or out of every room, from the map's details box.
+        /// </summary>
+        /// <param name="id">The Zigbee device ID.</param>
+        /// <param name="roomId">The room, or null for no room.</param>
+        /// <returns>OK, or not found if the device or room has gone.</returns>
+        public async Task<IActionResult> OnPostZigbeeRoomAsync(int id, int? roomId)
+        {
+            ZigbeeDevice? device = await context.ZigbeeDevices.FirstOrDefaultAsync(item => item.Id == id);
             if (device == null || (roomId != null && !await context.Rooms.AnyAsync(room => room.Id == roomId)))
             {
                 return NotFound();

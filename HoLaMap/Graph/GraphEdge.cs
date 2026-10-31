@@ -91,6 +91,16 @@ namespace HoLaMap.Graph
         public int? Rate { get; set; }
 
         /// <summary>
+        /// Whether this is a Zigbee link rather than a cable.
+        /// </summary>
+        public bool Zigbee { get; set; }
+
+        /// <summary>
+        /// The Zigbee link quality from 0 to 255, for a Zigbee link.
+        /// </summary>
+        public int? Lqi { get; set; }
+
+        /// <summary>
         /// Whether the downstream device was seen by the last few syncs.
         /// </summary>
         public bool Online { get; set; }

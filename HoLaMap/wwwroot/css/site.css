@@ -1232,3 +1232,20 @@ body:has(.map-layout) .details {
 .details-table tr.down td {
     color: #7b8794;
 }
+
+.map-edge.zigbee .map-edge-line {
+    stroke-dasharray: 1 5;
+    stroke-linecap: round;
+    stroke-width: 3.5;
+}
+
+.map-node.coordinator .map-node-box,
+.map-node.router .map-node-box {
+    fill: #3d2f6b;
+    stroke: #9b84d6;
+}
+
+.map-node.coordinator .map-node-label,
+.map-node.router .map-node-label {
+    font-weight: 600;
+}

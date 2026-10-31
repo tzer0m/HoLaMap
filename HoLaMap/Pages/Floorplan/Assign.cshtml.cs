@@ -24,6 +24,11 @@ namespace HoLaMap.Pages.Floorplan
         public List<SelectListItem> RoomOptions { get; private set; } = [];
 
         /// <summary>
+        /// The Zigbee devices.
+        /// </summary>
+        public List<ZigbeeDevice> ZigbeeDevices { get; private set; } = [];
+
+        /// <summary>
         /// Loads the devices and rooms.
         /// </summary>
         /// <returns>A task that completes when the data has loaded.</returns>
@@ -31,6 +36,7 @@ namespace HoLaMap.Pages.Floorplan
         {
             List<Device> devices = await context.Devices.ToListAsync();
             Devices = [.. devices.OrderBy(device => device.Kind == DeviceKind.Client).ThenBy(device => device.Kind).ThenBy(device => device.Name)];
+            ZigbeeDevices = await context.ZigbeeDevices.OrderBy(device => device.Role).ThenBy(device => device.Name).ToListAsync();
             List<Room> rooms = await context.Rooms.Include(room => room.Floor).ToListAsync();
             Dictionary<int, SelectListGroup> groups = rooms.Select(room => room.Floor).DistinctBy(floor => floor.Id).ToDictionary(floor => floor.Id, floor => new SelectListGroup { Name = floor.Name });
             RoomOptions = [.. rooms.OrderBy(room => room.Floor.SortOrder).ThenBy(room => room.Name).Select(room => new SelectListItem(room.Name, room.Id.ToString()) { Group = groups[room.FloorId] })];
@@ -53,6 +59,23 @@ namespace HoLaMap.Pages.Floorplan
                     device.RackU = null;
                     device.RackColumn = null;
                 }
+                device.RoomId = roomId;
+                await context.SaveChangesAsync();
+            }
+            return RedirectToPage();
+        }
+
+        /// <summary>
+        /// Moves a Zigbee device into a room, or out of its room.
+        /// </summary>
+        /// <param name="id">The Zigbee device ID.</param>
+        /// <param name="roomId">The room ID, or null for no room.</param>
+        /// <returns>A redirect back to the list.</returns>
+        public async Task<IActionResult> OnPostSaveZigbeeAsync(int id, int? roomId)
+        {
+            ZigbeeDevice? device = await context.ZigbeeDevices.FirstOrDefaultAsync(item => item.Id == id);
+            if (device != null && (roomId == null || await context.Rooms.AnyAsync(room => room.Id == roomId)))
+            {
                 device.RoomId = roomId;
                 await context.SaveChangesAsync();
             }

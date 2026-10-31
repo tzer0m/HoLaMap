@@ -70,7 +70,7 @@
         measure.font = `${bold ? 600 : 400} 12px ${fontFamily}`;
         return measure.measureText(text).width;
     };
-    const isInfrastructure = node => ['gateway', 'switch', 'accesspoint', 'rack'].includes(node.kind);
+    const isInfrastructure = node => ['gateway', 'switch', 'accesspoint', 'rack', 'coordinator', 'router'].includes(node.kind);
 
     // Size each device to fit its name and a row of port squares along the bottom.
     const sizeOf = node => {
@@ -290,7 +290,71 @@
         section('Devices').append(list);
     };
 
+    // Zigbee view: the mesh from Home Assistant's ZHA, fetched the first time the tab is opened.
+    let zigbee = null;
+    const zigbeeById = new Map();
+    const roleNames = { coordinator: 'Coordinator', router: 'Router', client: 'End Device' };
+    const zigbeeButton = nodeId => button(zigbeeById.get(nodeId)?.label ?? 'Unknown', () => {
+        showDevice(nodeId);
+        focusNode(nodeId);
+    });
+    const lqiText = lqi => lqi === null || lqi === undefined ? '' : `${lqi} (${lqi >= 150 ? 'Good' : lqi >= 80 ? 'Fair' : 'Poor'})`;
+    const showZigbee = nodeId => {
+        const node = zigbeeById.get(nodeId);
+        heading(node.label, [[roleNames[node.kind] ?? node.kind], node.online ? ['Online', 'online'] : ['Offline', 'offline']]);
+        let room = roomsById.get(node.room)?.name ?? 'No Room';
+        if (details.dataset.zigbeeRoomUrl) {
+            room = element('select', 'details-select');
+            room.append(new Option('No Room', ''));
+            raw.floors.forEach(floor => {
+                const group = element('optgroup');
+                group.label = floor.name;
+                floor.rooms.forEach(item => group.append(new Option(item.name, item.id.substring(1), false, item.id === node.room)));
+                room.append(group);
+            });
+            room.addEventListener('change', async () => {
+                await post(details.dataset.zigbeeRoomUrl, { id: nodeId.substring(1), roomId: room.value });
+                location.reload();
+            });
+        }
+        rows(section(), [['Manufacturer', node.manufacturer], ['Model', node.model], ['IEEE', node.mac ? copyable(node.mac) : ''], ['Power', node.power], ['LQI', lqiText(node.lqi)], ['RSSI', node.rssi ? `${node.rssi} dBm` : ''], ['Room', room], ['Last Seen', node.lastSeen]]);
+        const hops = [];
+        for (let current = nodeId, guard = 0; guard < 50; guard++) {
+            const edge = zigbee.edges.find(item => item.target === current);
+            if (!edge) {
+                break;
+            }
+            hops.unshift(edge);
+            current = edge.source;
+        }
+        if (hops.length) {
+            const list = element('ol', 'details-list');
+            hops.forEach(edge => {
+                const item = element('li');
+                item.append(zigbeeButton(edge.source), document.createTextNode(' → '), zigbeeButton(edge.target));
+                meta(item, edge.lqi ? `LQI ${edge.lqi}` : edge.label);
+                list.append(item);
+            });
+            section('Route to Coordinator').append(list);
+        }
+        const children = zigbee.edges.filter(edge => edge.source === nodeId);
+        if (children.length) {
+            const list = element('ul', 'details-list');
+            children.forEach(edge => {
+                const item = element('li');
+                item.append(zigbeeButton(edge.target));
+                meta(item, [roleNames[zigbeeById.get(edge.target)?.kind], edge.lqi ? `LQI ${edge.lqi}` : ''].filter(part => part).join(' · '));
+                list.append(item);
+            });
+            section('Connected Devices').append(list);
+        }
+    };
+
     const showDevice = nodeId => {
+        if (zigbeeById.has(nodeId) && !rawById.has(nodeId)) {
+            showZigbee(nodeId);
+            return;
+        }
         if (nodeId.startsWith('k')) {
             showRack(nodeId);
             return;
@@ -383,6 +447,12 @@
     };
 
     const showEdge = edgeId => {
+        if (edgeId.startsWith('zl') && zigbee) {
+            const link = zigbee.edges.find(item => item.id === edgeId);
+            heading(`${zigbeeById.get(link.source)?.label} → ${zigbeeById.get(link.target)?.label}`, [[link.zigbee ? 'Zigbee' : 'USB'], link.online ? ['Online', 'online'] : ['Offline', 'offline']]);
+            rows(section(), [['From', zigbeeButton(link.source)], ['To', zigbeeButton(link.target)], ['LQI', lqiText(link.lqi)], ['Notes', link.detail]]);
+            return;
+        }
         const edge = rawEdgesById.get(edgeId);
         if (!edge) {
             return;
@@ -455,7 +525,7 @@
             create('path', { d: roundedPath(clean), class: 'map-halo' }, halo);
         }
         const d = roundedPath(clean);
-        const group = create('g', { class: 'map-edge' + (edge.online ? '' : ' offline') + (edge.tagged ? ' tagged' : ''), 'data-edge': edge.id }, parent);
+        const group = create('g', { class: 'map-edge' + (edge.online ? '' : ' offline') + (edge.tagged ? ' tagged' : '') + (edge.zigbee ? ' zigbee' : ''), 'data-edge': edge.id }, parent);
         create('path', { d: d, class: 'map-edge-hit' }, group);
         drawLine(edge, clean, 'map-edge-line', group, true);
         group.addEventListener('click', event => {
@@ -1152,13 +1222,20 @@
     let renderId = 0;
     const render = async mode => {
         const id = ++renderId;
-        useView(mode === 'unifi' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : collapsed);
+        if (mode === 'zigbee' && !zigbee) {
+            zigbee = await (await fetch(container.dataset.zigbeeUrl)).json();
+            zigbee.nodes.forEach(node => zigbeeById.set(node.id, node));
+            if (id !== renderId) {
+                return;
+            }
+        }
+        useView(mode === 'unifi' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? { ...raw, nodes: zigbee.nodes, edges: zigbee.edges } : collapsed);
         tabs.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.view === mode));
         vlanSelect.hidden = mode !== 'unifi' || !raw.networks.length;
         details.textContent = defaultDetails;
-        if (mode === 'unifi' && !graph.nodes.length) {
+        if ((mode === 'unifi' || mode === 'zigbee') && !graph.nodes.length) {
             container.replaceChildren();
-            container.textContent = 'Nothing found on this network.';
+            container.textContent = mode === 'zigbee' ? 'No Zigbee devices yet. They come from Home Assistant once its URL and token are set.' : 'Nothing found on this network.';
             return;
         }
         if (mode === 'floorplan' && !graph.floors.length) {
@@ -1172,7 +1249,7 @@
         labelLayer = layers.labels;
         const bounds = { width: 0, height: 0 };
 
-        if (mode === 'unifi' || !graph.floors.length) {
+        if (mode === 'unifi' || mode === 'zigbee' || !graph.floors.length) {
             // The network on its own, laid out and routed by ELK.
             const result = await layoutGroup({ nodes: graph.nodes, edges: graph.edges });
             if (id !== renderId) {
@@ -1249,7 +1326,7 @@
         svg.addEventListener('dblclick', fit);
     };
 
-    const modes = ['all', 'unifi', 'floorplan'];
+    const modes = ['all', 'unifi', 'floorplan', 'zigbee'];
     let stored = null;
     try {
         stored = localStorage.getItem('holamap.view');

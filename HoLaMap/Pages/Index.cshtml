@@ -21,14 +21,15 @@
     <button type="button" data-view="all">All</button>
     <button type="button" data-view="unifi">UniFi</button>
     <button type="button" data-view="floorplan">Floor Plan</button>
+    <button type="button" data-view="zigbee">Zigbee</button>
 </nav>
 
 <div class="map-layout">
     <div class="map-wrap">
-        <div id="map" class="map" data-graph-url="@Url.Page("/Index", "Graph")"></div>
+        <div id="map" class="map" data-graph-url="@Url.Page("/Index", "Graph")" data-zigbee-url="@Url.Page("/Index", "Zigbee")"></div>
         <select id="vlan-select" class="vlan-select" title="Network" hidden></select>
     </div>
-    <aside id="details" class="details" data-splitter-url="@Url.Page("/Index", "Splitter")" data-room-url="@Url.Page("/Index", "Room")">Select a device or link to see its details.</aside>
+    <aside id="details" class="details" data-splitter-url="@Url.Page("/Index", "Splitter")" data-room-url="@Url.Page("/Index", "Room")" data-zigbee-room-url="@Url.Page("/Index", "ZigbeeRoom")">Select a device or link to see its details.</aside>
     @Html.AntiForgeryToken()
 </div>
 

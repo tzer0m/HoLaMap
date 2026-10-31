@@ -451,6 +451,88 @@ namespace HoLaMap.Migrations
                     b.ToTable("Rooms");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.ZigbeeDevice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Available")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Ieee")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastSeen")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("Lqi")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Manufacturer")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Model")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PowerSource")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RoomId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Rssi")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Ieee")
+                        .IsUnique();
+
+                    b.HasIndex("RoomId");
+
+                    b.ToTable("ZigbeeDevices");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.ZigbeeNeighbor", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DeviceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Lqi")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NeighborIeee")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Relationship")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId");
+
+                    b.ToTable("ZigbeeNeighbors");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.ActionItem", b =>
                 {
                     b.HasOne("HoLaMap.Models.Device", "Device")
@@ -607,6 +689,27 @@ namespace HoLaMap.Migrations
                     b.Navigation("Floor");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.ZigbeeDevice", b =>
+                {
+                    b.HasOne("HoLaMap.Models.Room", "Room")
+                        .WithMany()
+                        .HasForeignKey("RoomId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Room");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.ZigbeeNeighbor", b =>
+                {
+                    b.HasOne("HoLaMap.Models.ZigbeeDevice", "Device")
+                        .WithMany("Neighbors")
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.Device", b =>
                 {
                     b.Navigation("Macs");
@@ -636,6 +739,11 @@ namespace HoLaMap.Migrations
                     b.Navigation("Devices");
 
                     b.Navigation("Racks");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.ZigbeeDevice", b =>
+                {
+                    b.Navigation("Neighbors");
                 });
 #pragma warning restore 612, 618
         }

@@ -65,6 +65,16 @@ namespace HoLaMap.Data
         public DbSet<PatchConnection> PatchConnections => Set<PatchConnection>();
 
         /// <summary>
+        /// Gets the Zigbee devices.
+        /// </summary>
+        public DbSet<ZigbeeDevice> ZigbeeDevices => Set<ZigbeeDevice>();
+
+        /// <summary>
+        /// Gets the Zigbee neighbour table entries.
+        /// </summary>
+        public DbSet<ZigbeeNeighbor> ZigbeeNeighbors => Set<ZigbeeNeighbor>();
+
+        /// <summary>
         /// Configures keys, indexes and relationships.
         /// </summary>
         /// <param name="modelBuilder">The model builder.</param>
@@ -86,6 +96,9 @@ namespace HoLaMap.Data
             modelBuilder.Entity<Room>().HasOne(room => room.Floor).WithMany(floor => floor.Rooms).HasForeignKey(room => room.FloorId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<Rack>().HasIndex(rack => new { rack.RoomId, rack.Name }).IsUnique();
             modelBuilder.Entity<Rack>().HasOne(rack => rack.Room).WithMany(room => room.Racks).HasForeignKey(rack => rack.RoomId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<ZigbeeDevice>().HasIndex(device => device.Ieee).IsUnique();
+            modelBuilder.Entity<ZigbeeDevice>().HasOne(device => device.Room).WithMany().HasForeignKey(device => device.RoomId).OnDelete(DeleteBehavior.SetNull);
+            modelBuilder.Entity<ZigbeeNeighbor>().HasOne(neighbor => neighbor.Device).WithMany(device => device.Neighbors).HasForeignKey(neighbor => neighbor.DeviceId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<Device>().HasOne(device => device.WirelessAp).WithMany().HasForeignKey(device => device.WirelessApId).OnDelete(DeleteBehavior.SetNull);
             modelBuilder.Entity<Device>().HasOne(device => device.Rack).WithMany(rack => rack.Devices).HasForeignKey(device => device.RackId).OnDelete(DeleteBehavior.SetNull);
             modelBuilder.Entity<RackPanel>().HasOne(panel => panel.Rack).WithMany(rack => rack.Panels).HasForeignKey(panel => panel.RackId).OnDelete(DeleteBehavior.Cascade);

@@ -50,4 +50,42 @@ else
             }
         </tbody>
     </table>
+    if (Model.ZigbeeDevices.Count > 0)
+    {
+        <h2>Zigbee Devices</h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Device</th>
+                    <th>Role</th>
+                    <th>Room</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (ZigbeeDevice device in Model.ZigbeeDevices)
+                {
+                    <tr>
+                        <td>@device.Name</td>
+                        <td>@(device.Role == "EndDevice" ? "End Device" : device.Role)</td>
+                        <td>
+                            <form method="post" asp-page-handler="SaveZigbee" asp-route-id="@device.Id">
+                                <select name="roomId" onchange="this.form.submit()">
+                                    <option value="" selected="@(device.RoomId == null)">No Room</option>
+                                    @foreach (IGrouping<string?, SelectListItem> group in Model.RoomOptions.GroupBy(option => option.Group?.Name))
+                                    {
+                                        <optgroup label="@group.Key">
+                                            @foreach (SelectListItem option in group)
+                                            {
+                                                <option value="@option.Value" selected="@(option.Value == device.RoomId?.ToString())">@option.Text</option>
+                                            }
+                                        </optgroup>
+                                    }
+                                </select>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 }

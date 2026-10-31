@@ -66,6 +66,26 @@ namespace HoLaMap.Graph
         public string LastSeen { get; set; } = string.Empty;
 
         /// <summary>
+        /// The manufacturer, for a Zigbee device.
+        /// </summary>
+        public string Manufacturer { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The power source, such as Mains or Battery, for a Zigbee device.
+        /// </summary>
+        public string Power { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The last link quality from 0 to 255, for a Zigbee device.
+        /// </summary>
+        public int? Lqi { get; set; }
+
+        /// <summary>
+        /// The last signal strength in dBm, for a Zigbee device.
+        /// </summary>
+        public int? Rssi { get; set; }
+
+        /// <summary>
         /// The lowest rack unit the device occupies, counting from 1 at the bottom, or 0 if it isn't in a rack.
         /// </summary>
         public int RackU { get; set; }
