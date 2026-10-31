@@ -833,7 +833,11 @@
         if (!network) {
             return { ...raw, nodes: [], edges: [] };
         }
-        const members = new Set(raw.nodes.filter(node => inSubnet(node.ip, network.subnet)).map(node => node.id));
+        // The gateway routes every network, so it's always shown, whatever its own IP is.
+        const members = new Set(raw.nodes.filter(node => node.kind === 'gateway' || inSubnet(node.ip, network.subnet)).map(node => node.id));
+        // UniFi names the gateway's own ports' networks differently, like LAN for Default, so a native network that matches no known network counts as the default one.
+        const defaultName = raw.networks.find(item => !item.vlanId)?.name;
+        const nativeOf = port => raw.networks.some(item => sameName(item.name, port.network)) ? port.network : defaultName;
         let edges = raw.edges.map(edge => {
             const target = rawById.get(edge.target);
             if (edge.wireless) {
@@ -843,7 +847,7 @@
             if (!port) {
                 return null;
             }
-            if (sameName(port.network, name)) {
+            if (sameName(nativeOf(port), name)) {
                 return edge;
             }
             return port.tagged.some(tagged => sameName(tagged, name)) && (isInfrastructure(target) || members.has(edge.target)) ? { ...edge, tagged: true } : null;
