@@ -384,10 +384,25 @@
             return { id: id, parentId: parentId, left: left, items: items, laneX: laneX, entryX: left ? lanesWidth : leafWidth, width: leafWidth + lanesWidth, height: y - stackGap };
         });
 
+        // On the Floor Plan, devices with no cables in the room are stacked in one column, the same distance apart as a stack under a switch.
+        const connectedIds = new Set(group.edges.flatMap(edge => [edge.source, edge.target]));
+        const looseNodes = compact ? group.nodes.filter(node => !connectedIds.has(node.id)) : [];
+        let looseY = 0;
+        const loose = looseNodes.length > 1 ? {
+            id: 'loose',
+            items: looseNodes.map(node => {
+                const size = sizeFor(node);
+                const item = { node: node, x: 0, y: looseY, width: size.width, height: size.height };
+                looseY += size.height + stackGap;
+                return item;
+            }),
+            width: Math.max(...looseNodes.map(node => sizeFor(node).width))
+        } : null;
+
         const run = async leftSide => {
             const stacks = makeStacks(leftSide);
             const stackItemsByEdge = new Map(stacks.flatMap(stack => stack.items.map(item => [item.edge.id, { stack: stack, item: item }])));
-            const stackedNodeIds = new Set(stacks.flatMap(stack => stack.items.map(item => item.node.id)));
+            const stackedNodeIds = new Set([...stacks.flatMap(stack => stack.items.map(item => item.node.id)), ...(loose ? looseNodes.map(node => node.id) : [])]);
             // Chips have no ports, so each cable gets its own spot along the bottom and ELK spreads them out rather than running them on top of each other.
             const outgoing = new Map();
             group.edges.forEach(edge => outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge]));
@@ -430,6 +445,7 @@
                             ]
                         };
                     }),
+                    ...(loose ? [{ id: loose.id, width: loose.width, height: looseY - stackGap }] : []),
                     ...stacks.map(stack => ({
                         id: stack.id,
                         width: stack.width,
@@ -464,7 +480,7 @@
         }
         const placements = [];
         layout.children.forEach(child => {
-            const stack = stacks.find(candidate => candidate.id === child.id);
+            const stack = stacks.find(candidate => candidate.id === child.id) ?? (loose && child.id === loose.id ? loose : null);
             if (stack) {
                 stack.items.forEach(item => placements.push({ node: item.node, x: child.x + item.x, y: child.y + item.y, width: item.width, height: item.height, stacked: true }));
             } else {
@@ -638,7 +654,7 @@
         const drawContent = (result, left, top) => {
             const transform = `translate(${left}, ${top}) scale(${scale})`;
             drawGroup(result, { edges: create('g', { transform: transform }, layers.edges), nodes: create('g', { transform: transform }, layers.nodes) }, true);
-            result.placements.forEach(placement => centres.set(placement.node.id, { x: left + (placement.x + placement.width / 2) * scale, y: top + (placement.y + placement.height / 2) * scale }));
+            result.placements.forEach(placement => centres.set(placement.node.id, { x: left + (placement.x + placement.width / 2) * scale, y: top + (placement.y + placement.height / 2) * scale, top: top + placement.y * scale, bottom: top + (placement.y + placement.height) * scale, left: left + placement.x * scale, right: left + (placement.x + placement.width) * scale }));
         };
         graph.floors.forEach(floor => {
             const floorPlans = plans.filter(plan => plan.floor === floor);
@@ -695,6 +711,7 @@
                 focusEdges(trunk.edges);
             });
         });
+
         return true;
     };
 
