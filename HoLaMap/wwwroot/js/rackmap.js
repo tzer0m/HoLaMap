@@ -355,16 +355,12 @@ window.RackMap = (function () {
             // A port in the top row of two exits upwards and one in the bottom row downwards; a single row picks the side the cable is heading.
             // A patch panel socket on top leaves upwards and one underneath leaves downwards.
             const pickUp = (end, wantUp) => end.box.node.patch ? end.row % 2 === 0 : end.box.rows === 2 ? end.row === 0 : wantUp;
-            const take = (end, up) => {
-                end.taken = up;
-                return up;
-            };
             [...cables].filter(cable => !cable.jumper).sort((a, b) => a.external - b.external).forEach(cable => {
                 if (cable.external) {
                     const end = cable.inside;
                     const above = channels[topOf(end.box)].length;
                     const below = channels[bottomOf(end.box)].length;
-                    cable.up = take(end, pickUp(end, (above <= below) !== choice.has(cable)));
+                    cable.up = pickUp(end, (above <= below) !== choice.has(cable));
                     cable.channel = channelOf(end, cable.up);
                     cable.run = { cable: cable, kind: 'out' };
                     channels[cable.channel].push(cable.run);
@@ -372,8 +368,8 @@ window.RackMap = (function () {
                 }
                 const sourceAbove = centreU(cable.from) < centreU(cable.to);
                 const sameLevel = centreU(cable.from) === centreU(cable.to);
-                cable.fromUp = take(cable.from, pickUp(cable.from, (sameLevel || sourceAbove) !== choice.has(cable)));
-                cable.toUp = take(cable.to, pickUp(cable.to, (sameLevel || !sourceAbove) !== choice.has(cable)));
+                cable.fromUp = pickUp(cable.from, (sameLevel || sourceAbove) !== choice.has(cable));
+                cable.toUp = pickUp(cable.to, (sameLevel || !sourceAbove) !== choice.has(cable));
                 const fromChannel = channelOf(cable.from, cable.fromUp);
                 const toChannel = channelOf(cable.to, cable.toUp);
                 if (fromChannel === toChannel) {

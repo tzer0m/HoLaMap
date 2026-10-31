@@ -366,11 +366,6 @@ body:has(.map-layout) .details {
     stroke-width: 5;
 }
 
-.map-edge-label {
-    fill: #9aa3b5;
-    font-size: 9px;
-}
-
 .map-node.offline,
 .map-edge.offline {
     opacity: 0.4;
@@ -724,11 +719,6 @@ body:has(.map-layout) .details {
     border: 1px solid #4a5068;
     border-radius: 0 6px 6px 6px;
     background: #1b1f27;
-}
-
-.rack-forms h2 {
-    margin: 0;
-    font-size: 1.1rem;
 }
 
 .rack-add {
