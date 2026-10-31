@@ -28,7 +28,8 @@
         <div id="map" class="map" data-graph-url="@Url.Page("/Index", "Graph")"></div>
         <select id="vlan-select" class="vlan-select" title="Network" hidden></select>
     </div>
-    <aside id="details" class="details">Select a device or link to see its details.</aside>
+    <aside id="details" class="details" data-splitter-url="@Url.Page("/Index", "Splitter")" data-room-url="@Url.Page("/Index", "Room")">Select a device or link to see its details.</aside>
+    @Html.AntiForgeryToken()
 </div>
 
 <dialog id="rack-dialog" class="rack-dialog" data-rack-url="@Url.Page("/Racks/Details", new { id = 0 })">

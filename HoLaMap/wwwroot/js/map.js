@@ -167,13 +167,282 @@
         }
     });
 
-    const showDetails = (title, body) => {
+    // The details box: a heading with badges, then labelled rows and lists for whatever was clicked.
+    const rawEdgesById = new Map(raw.edges.map(edge => [edge.id, edge]));
+    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+    const kindNames = { gateway: 'Gateway', switch: 'Switch', accesspoint: 'Access Point', client: 'Client', rack: 'Rack' };
+    const element = (tag, className, text) => {
+        const item = document.createElement(tag);
+        if (className) {
+            item.className = className;
+        }
+        if (text !== undefined && text !== null) {
+            item.textContent = text;
+        }
+        return item;
+    };
+    const button = (text, onClick, className) => {
+        const item = element('button', className ?? 'details-link', text);
+        item.type = 'button';
+        item.addEventListener('click', onClick);
+        return item;
+    };
+    const heading = (title, badges) => {
         details.replaceChildren();
-        const heading = document.createElement('strong');
-        heading.textContent = title;
-        const text = document.createElement('p');
-        text.textContent = body;
-        details.append(heading, text);
+        const head = element('div', 'details-head');
+        head.append(element('strong', null, title));
+        const tags = element('div', 'details-badges');
+        badges.filter(badge => badge).forEach(([text, className]) => tags.append(element('span', `details-badge ${className ?? ''}`, text)));
+        head.append(tags);
+        details.append(head);
+    };
+    const section = title => {
+        const part = element('section', 'details-section');
+        if (title) {
+            part.append(element('h3', null, title));
+        }
+        details.append(part);
+        return part;
+    };
+    const rows = (parent, pairs) => {
+        const list = element('dl', 'details-rows');
+        pairs.filter(([, value]) => value !== null && value !== undefined && value !== '').forEach(([label, value]) => {
+            list.append(element('dt', null, label));
+            const cell = element('dd');
+            if (value instanceof Node) {
+                cell.append(value);
+            } else {
+                cell.textContent = value;
+            }
+            list.append(cell);
+        });
+        parent.append(list);
+    };
+    const copyable = text => {
+        const wrap = element('span', 'details-copy', text);
+        const copy = button('Copy', () => navigator.clipboard?.writeText(text).then(() => {
+            copy.textContent = 'Copied';
+            setTimeout(() => copy.textContent = 'Copy', 1200);
+        }), 'details-mini');
+        wrap.append(copy);
+        return wrap;
+    };
+    const post = async (url, values) => {
+        const response = await fetch(url, { method: 'POST', headers: { RequestVerificationToken: token }, body: new URLSearchParams(values) });
+        if (!response.ok) {
+            throw new Error(`Saving failed: ${response.status}`);
+        }
+    };
+    const speedText = port => !port ? '' : !port.up ? 'Down' : port.speed >= 1000 ? `${port.speed / 1000} Gbps` : port.speed ? `${port.speed} Mbps` : 'Up';
+    const poeText = port => port?.poEPower ? `${port.poEPower.toFixed(1)} W` : port?.poECapable ? 'Available' : '';
+    const vlanText = port => port ? [port.network ? `${port.network} (Untagged)` : null, ...(port.tagged ?? []).map(name => `${name} (Tagged)`)].filter(part => part).join(', ') : '';
+    const endText = (nodeId, portId) => {
+        const port = portsById.get(portId);
+        return `${rawById.get(nodeId)?.label ?? 'Unknown'}${port ? ` Port ${port.index}` : ''}`;
+    };
+    const deviceButton = nodeId => button(rawById.get(nodeId)?.label ?? raw.racks.find(rack => rack.id === nodeId)?.name ?? 'Unknown', () => {
+        showDevice(nodeId);
+        // In a view where racks are drawn as one block, a racked device lights up its rack.
+        focusNode(nodesById.has(nodeId) ? nodeId : rackOf.get(nodeId) ?? nodeId);
+    });
+    const edgeButton = (edge, text) => button(text, () => {
+        showEdge(edge.id);
+        focusEdges([graph.edges.find(item => item.id === edge.id) ?? edge]);
+    });
+    const meta = (parent, text) => {
+        if (text) {
+            parent.append(element('span', 'details-meta', text));
+        }
+    };
+
+    // The route back to the gateway, one hop per line, preferring cables over Wi-Fi.
+    const upstream = nodeId => {
+        const hops = [];
+        const seen = new Set([nodeId]);
+        let current = nodeId;
+        while (rawById.get(current)?.kind !== 'gateway') {
+            const into = raw.edges.filter(edge => edge.target === current && edge.source !== current);
+            const edge = into.find(item => !item.wireless) ?? into[0];
+            if (!edge || seen.has(edge.source)) {
+                break;
+            }
+            hops.unshift(edge);
+            seen.add(edge.source);
+            current = edge.source;
+        }
+        return hops;
+    };
+
+    // Patch panel ports a cable passes through, found from what's plugged into each panel.
+    const patchHops = edge => raw.racks.flatMap(rack => (rack.panels ?? []).filter(panel => panel.kind === 'patch').flatMap(panel => panel.patches.filter(patch => patch.node && [[edge.source, edge.sourcePort], [edge.target, edge.targetPort]].some(([node, port]) => patch.node === node && (!patch.port || !port || patch.port === port))).map(patch => `${rack.name} · ${panel.name} Port ${patch.number} ${patch.side === 'back' ? 'Rear' : 'Front'}`)));
+
+    const showRack = rackId => {
+        const rack = raw.racks.find(item => item.id === rackId);
+        heading(rack.name, [['Rack'], rack.online ? ['Online', 'online'] : ['Offline', 'offline']]);
+        rows(section(), [['Room', roomsById.get(rack.room)?.name ?? ''], ['Height', `${rack.heightU}U`], ['Rack Map', button('Open Rack Map', () => openRack(rackId))]]);
+        const list = element('ul', 'details-list');
+        raw.nodes.filter(node => node.rack === rackId).sort((a, b) => b.rackU - a.rackU).forEach(node => {
+            const item = element('li');
+            item.append(deviceButton(node.id));
+            meta(item, node.rackU ? `U${node.rackU}` : 'Not Placed');
+            list.append(item);
+        });
+        section('Devices').append(list);
+    };
+
+    const showDevice = nodeId => {
+        if (nodeId.startsWith('k')) {
+            showRack(nodeId);
+            return;
+        }
+        const node = rawById.get(nodeId);
+        if (!node) {
+            return;
+        }
+        heading(node.label, [[kindNames[node.kind] ?? node.kind], node.online ? ['Online', 'online'] : ['Offline', 'offline']]);
+
+        // Where it is, with a picker to move it to another room. A device in a rack moves with its rack.
+        const rack = raw.racks.find(item => item.id === node.rack);
+        let room = roomsById.get(node.room)?.name ?? 'No Room';
+        if (!rack && details.dataset.roomUrl) {
+            room = element('select', 'details-select');
+            room.append(new Option('No Room', ''));
+            raw.floors.forEach(floor => {
+                const group = element('optgroup');
+                group.label = floor.name;
+                floor.rooms.forEach(item => group.append(new Option(item.name, item.id.substring(1), false, item.id === node.room)));
+                room.append(group);
+            });
+            room.addEventListener('change', async () => {
+                await post(details.dataset.roomUrl, { id: nodeId.substring(1), roomId: room.value });
+                location.reload();
+            });
+        }
+        rows(section(), [
+            ['Model', node.model],
+            ['IP', node.ip ? copyable(node.ip) : ''],
+            ['MAC', node.mac ? copyable(node.mac) : ''],
+            ['Room', room],
+            ['Rack', rack ? (() => {
+                const wrap = element('span');
+                wrap.append(button(rack.name, () => openRack(rack.id)));
+                meta(wrap, node.rackU ? `U${node.rackU}` : 'Not Placed');
+                return wrap;
+            })() : ''],
+            ['Last Seen', node.lastSeen]
+        ]);
+
+        const wifi = raw.edges.find(edge => edge.wireless && edge.target === nodeId);
+        if (wifi) {
+            rows(section('Wi-Fi'), [['Access Point', deviceButton(wifi.source)], ['SSID', wifi.ssid], ['Band', wifi.band], ['Channel', wifi.channel ?? ''], ['Signal', wifi.signal ? `${wifi.signal} dBm` : ''], ['Rate', wifi.rate ? `${wifi.rate} Mbps` : '']]);
+        }
+
+        const hops = upstream(nodeId);
+        if (hops.length) {
+            const list = element('ol', 'details-list');
+            hops.forEach(edge => {
+                const item = element('li');
+                item.append(edgeButton(edge, `${endText(edge.source, edge.sourcePort)} → ${endText(edge.target, edge.targetPort)}`));
+                meta(item, edge.wireless ? 'Wi-Fi' : speedText(portsById.get(edge.sourcePort)));
+                list.append(item);
+            });
+            section('Upstream').append(list);
+        }
+
+        const connections = raw.edges.filter(edge => edge.source === nodeId || edge.target === nodeId);
+        if (connections.length) {
+            const list = element('ul', 'details-list');
+            connections.forEach(edge => {
+                const outgoing = edge.source === nodeId;
+                const mine = portsById.get(outgoing ? edge.sourcePort : edge.targetPort);
+                const item = element('li');
+                item.append(edgeButton(edge, `${mine ? `Port ${mine.index} ` : ''}${outgoing ? '→' : '←'} ${endText(outgoing ? edge.target : edge.source, outgoing ? edge.targetPort : edge.sourcePort)}`));
+                const port = portsById.get(edge.sourcePort);
+                meta(item, edge.wireless ? `Wi-Fi${edge.band ? ` · ${edge.band}` : ''}` : [speedText(port), port?.poEPower ? `${port.poEPower.toFixed(1)} W` : '', edge.splitter ? 'Splitter' : ''].filter(part => part).join(' · '));
+                list.append(item);
+            });
+            section('Connections').append(list);
+        }
+
+        if (node.ports.length) {
+            const table = element('table', 'details-table');
+            const head = element('tr');
+            ['Port', 'Speed', 'PoE', 'VLANs', 'Connected To'].forEach(text => head.append(element('th', null, text)));
+            table.append(head);
+            node.ports.forEach(port => {
+                const line = element('tr', port.up ? '' : 'down');
+                line.append(element('td', null, port.index), element('td', null, speedText(port)), element('td', null, port.poEPower ? `${port.poEPower.toFixed(1)} W` : ''), element('td', null, `${port.network ?? ''}${port.tagged?.length ? ` +${port.tagged.length}` : ''}`));
+                const connected = element('td');
+                raw.edges.filter(edge => edge.sourcePort === port.id || edge.targetPort === port.id).forEach(edge => connected.append(deviceButton(edge.sourcePort === port.id ? edge.target : edge.source)));
+                line.append(connected);
+                line.querySelector('td:nth-child(4)').title = vlanText(port);
+                table.append(line);
+            });
+            section('Ports').append(table);
+        }
+    };
+
+    const showEdge = edgeId => {
+        const edge = rawEdgesById.get(edgeId);
+        if (!edge) {
+            return;
+        }
+        if (edge.wireless) {
+            heading(`${rawById.get(edge.source)?.label} → ${rawById.get(edge.target)?.label}`, [['Wi-Fi'], edge.online ? ['Online', 'online'] : ['Offline', 'offline']]);
+            rows(section(), [['Access Point', deviceButton(edge.source)], ['Device', deviceButton(edge.target)], ['SSID', edge.ssid], ['Band', edge.band], ['Channel', edge.channel ?? ''], ['Signal', edge.signal ? `${edge.signal} dBm` : ''], ['Rate', edge.rate ? `${edge.rate} Mbps` : '']]);
+            return;
+        }
+        const from = portsById.get(edge.sourcePort);
+        heading(`${endText(edge.source, edge.sourcePort)} → ${endText(edge.target, edge.targetPort)}`, [[edge.manual ? 'Manual' : 'UniFi'], edge.online ? ['Online', 'online'] : ['Offline', 'offline']]);
+        const end = (nodeId, portId) => {
+            const wrap = element('span');
+            wrap.append(deviceButton(nodeId));
+            const port = portsById.get(portId);
+            meta(wrap, port ? `Port ${port.index}${port.name ? ` · ${port.name}` : ''}` : '');
+            return wrap;
+        };
+        let splitter = edge.splitter ? 'Yes' : 'No';
+        if (edge.id.startsWith('l') && details.dataset.splitterUrl) {
+            splitter = element('span');
+            splitter.append(edge.splitter ? 'Yes ' : 'No ');
+            splitter.append(button(edge.splitter ? 'Remove' : 'Add', async () => {
+                await post(details.dataset.splitterUrl, { id: edge.id.substring(1) });
+                location.reload();
+            }, 'details-mini'));
+        }
+        const hops = patchHops(edge);
+        rows(section(), [
+            ['From', end(edge.source, edge.sourcePort)],
+            ['To', end(edge.target, edge.targetPort)],
+            ['Speed', speedText(from)],
+            ['PoE', poeText(from) || 'No'],
+            ['PoE Splitter', splitter],
+            ['VLANs', vlanText(from)],
+            ['Patch Panel', hops.length ? hops.join('\n') : ''],
+            ['Notes', edge.notes]
+        ]);
+    };
+
+    const showPort = (nodeId, portId) => {
+        const port = portsById.get(portId);
+        const node = rawById.get(nodeId);
+        heading(`${node?.label} Port ${port.index}`, [[port.up ? speedText(port) : 'Down', port.up ? 'online' : 'offline']]);
+        const connected = element('span');
+        raw.edges.filter(edge => edge.sourcePort === portId || edge.targetPort === portId).forEach(edge => connected.append(edgeButton(edge, endText(edge.sourcePort === portId ? edge.target : edge.source, edge.sourcePort === portId ? edge.targetPort : edge.sourcePort))));
+        rows(section(), [['Device', deviceButton(nodeId)], ['Name', port.name], ['Speed', speedText(port)], ['PoE', poeText(port)], ['Untagged VLAN', port.network], ['Tagged VLANs', (port.tagged ?? []).join(', ')], ['Connected To', connected.childNodes.length ? connected : '']]);
+    };
+
+    // A group of cables or Wi-Fi links, like an arc between rooms.
+    const showEdges = (title, edges) => {
+        heading(title, [[`${edges.length} ${edges.length === 1 ? 'Link' : 'Links'}`]]);
+        const list = element('ul', 'details-list');
+        edges.forEach(edge => {
+            const item = element('li');
+            item.append(edgeButton(edge, `${endText(edge.source, edge.sourcePort)} → ${endText(edge.target, edge.targetPort)}`));
+            meta(item, edge.wireless ? 'Wi-Fi' : speedText(portsById.get(edge.sourcePort)));
+            list.append(item);
+        });
+        section().append(list);
     };
 
     // A halo is a wider copy of a cable or device in the room colour, drawn under everything else but over the arcs, so an arc passing behind disappears instead of crossing it.
@@ -191,7 +460,7 @@
         drawLine(edge, clean, 'map-edge-line', group, true);
         group.addEventListener('click', event => {
             event.stopPropagation();
-            showDetails(`${nodesById.get(edge.source).label} → ${nodesById.get(edge.target).label} (${edge.label})`, edge.detail);
+            showEdge(edge.id);
             focusEdges([edge]);
         });
     };
@@ -268,7 +537,7 @@
         label.textContent = node.label;
         group.addEventListener('click', event => {
             event.stopPropagation();
-            showDetails(node.label, node.detail);
+            showDevice(node.id);
             focusNode(node.id);
             if (node.kind === 'rack') {
                 openRack(node.id);
@@ -285,7 +554,7 @@
             create('title', {}, square).textContent = port.detail;
             square.addEventListener('click', event => {
                 event.stopPropagation();
-                showDetails(`${node.label} Port ${port.index}`, port.detail);
+                showPort(node.id, port.id);
             });
         });
     };
@@ -764,11 +1033,10 @@
             create('text', { x: middle.x, y: middle.y + 4, class: 'map-trunk-count' }, group).textContent = trunk.edges.length;
             group.addEventListener('click', event => {
                 event.stopPropagation();
-                const describe = edge => `${nodesById.get(edge.source).label} → ${nodesById.get(edge.target).label}`;
                 if (trunk.wifi) {
-                    showDetails(`${nodesById.get(trunk.wifi.ap).label} → ${roomName(trunk.wifi.room)} (${trunk.edges.length} Wi-Fi ${trunk.edges.length === 1 ? 'Device' : 'Devices'})`, trunk.edges.map(edge => `${nodesById.get(edge.target).label} · ${edge.detail}`).join('\n'));
+                    showEdges(`${nodesById.get(trunk.wifi.ap).label} → ${roomName(trunk.wifi.room)}`, trunk.edges.map(edge => rawEdgesById.get(edge.id) ?? edge));
                 } else {
-                    showDetails(`${nodesById.get(trunk.keys[0]).label} ↔ ${nodesById.get(trunk.keys[1]).label} (${trunk.edges.length} ${trunk.edges.length === 1 ? 'Cable' : 'Cables'})`, trunk.edges.map(describe).join('\n'));
+                    showEdges(`${nodesById.get(trunk.keys[0]).label} ↔ ${nodesById.get(trunk.keys[1]).label}`, trunk.edges.map(edge => rawEdgesById.get(edge.id) ?? edge));
                 }
                 focusEdges(trunk.edges);
             });

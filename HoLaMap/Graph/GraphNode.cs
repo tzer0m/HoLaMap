@@ -51,6 +51,21 @@ namespace HoLaMap.Graph
         public string Ip { get; set; } = string.Empty;
 
         /// <summary>
+        /// The device model, or empty if it isn't known.
+        /// </summary>
+        public string Model { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The device's MAC address.
+        /// </summary>
+        public string Mac { get; set; } = string.Empty;
+
+        /// <summary>
+        /// When the device was last seen, in local time.
+        /// </summary>
+        public string LastSeen { get; set; } = string.Empty;
+
+        /// <summary>
         /// The lowest rack unit the device occupies, counting from 1 at the bottom, or 0 if it isn't in a rack.
         /// </summary>
         public int RackU { get; set; }

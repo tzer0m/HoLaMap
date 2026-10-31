@@ -34,5 +34,30 @@ namespace HoLaMap.Graph
         /// The networks (VLANs) the port carries tagged.
         /// </summary>
         public List<string> Tagged { get; set; } = [];
+
+        /// <summary>
+        /// The port name, or empty if it has none.
+        /// </summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Whether the port is up.
+        /// </summary>
+        public bool Up { get; set; }
+
+        /// <summary>
+        /// The link speed in Mbps, or null when the port is down.
+        /// </summary>
+        public int? Speed { get; set; }
+
+        /// <summary>
+        /// Whether the port can supply PoE.
+        /// </summary>
+        public bool PoECapable { get; set; }
+
+        /// <summary>
+        /// The PoE power being drawn in watts, or null if none.
+        /// </summary>
+        public double? PoEPower { get; set; }
     }
 }

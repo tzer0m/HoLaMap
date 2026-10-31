@@ -61,6 +61,36 @@ namespace HoLaMap.Graph
         public bool Wireless { get; set; }
 
         /// <summary>
+        /// Notes added to a link by hand.
+        /// </summary>
+        public string Notes { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The Wi-Fi network name, for a Wi-Fi link.
+        /// </summary>
+        public string Ssid { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The Wi-Fi band, such as 5 GHz, for a Wi-Fi link.
+        /// </summary>
+        public string Band { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The Wi-Fi channel, for a Wi-Fi link.
+        /// </summary>
+        public int? Channel { get; set; }
+
+        /// <summary>
+        /// The Wi-Fi signal strength in dBm, for a Wi-Fi link.
+        /// </summary>
+        public int? Signal { get; set; }
+
+        /// <summary>
+        /// The Wi-Fi link rate in Mbps, for a Wi-Fi link.
+        /// </summary>
+        public int? Rate { get; set; }
+
+        /// <summary>
         /// Whether the downstream device was seen by the last few syncs.
         /// </summary>
         public bool Online { get; set; }

@@ -8,9 +8,10 @@
 - Blank, brush and patch panels (12/24/48 ports, front and rear sockets, jumpers between ports, routes drawn through the panel).
 - PoE splitters as a property on links, drawn inline with PoE before and plain Ethernet after.
 - Wi-Fi links from each client's current AP, shown for clients with a room (SSID, band, channel, signal, rate in the details).
+- VLAN filter on the UniFi view (membership by IP subnet, untagged solid, tagged dashed, tagged lists synced from port overrides/profiles).
 
 ## Next Up
 
 ## Later
-- Separate colours for 2.5 and 10 Gbps.
-- More layers: networks/VLANs, firewall zones and policies, services, public exposure, dependencies.
+- Separate colours for 2.5 and 10 Gbps (not needed while everything is 1 Gbps).
+- More layers: services and dependencies, firewall zones and policies, public exposure.
