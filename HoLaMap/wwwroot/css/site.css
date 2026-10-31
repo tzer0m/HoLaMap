@@ -1239,10 +1239,14 @@ body:has(.map-layout) .details {
     stroke-width: 3.5;
 }
 
-.map-node.coordinator .map-node-box,
-.map-node.router .map-node-box {
+.map-node.coordinator .map-node-box {
     fill: #3d2f6b;
     stroke: #9b84d6;
+}
+
+.map-node.router .map-node-box {
+    fill: #1f4a5c;
+    stroke: #5fa8c4;
 }
 
 .map-node.coordinator .map-node-label,

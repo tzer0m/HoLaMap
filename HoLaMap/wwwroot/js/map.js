@@ -3,7 +3,7 @@
     const container = document.getElementById('map');
     const details = document.getElementById('details');
     const tabs = document.getElementById('view-tabs');
-    const colours = { 'port-wan': '#1e88c8', 'port-1000': '#4a8a1c', 'port-100': '#e6c229', 'port-10': '#e67e22', 'port-down': '#7b8794', 'wifi': '#9b6bd1' };
+    const colours = { 'port-wan': '#1e88c8', 'port-1000': '#4a8a1c', 'port-100': '#e6c229', 'port-10': '#e67e22', 'port-down': '#7b8794', 'wifi': '#9b6bd1', 'zigbee': '#2bb5a8' };
     const darkText = ['port-100', 'port-down'];
     // Cables are drawn in a darker shade of their speed colour, and PoE cables in the full colour so they stand out.
     const darken = hex => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.substr(i, 2), 16) * 0.65).toString(16).padStart(2, '0')).join('');
@@ -588,6 +588,10 @@
         const split = edge.splitter && splitterAtEnd !== null ? splitAt(splitterAtEnd ? clean : [...clean].reverse(), Math.min(40, pathLength(clean) * 0.3)) : null;
         if (edge.wireless) {
             create('path', { d: wavePath(clean), class: `${lineClass} wireless`, stroke: colours.wifi }, parent);
+            return;
+        }
+        if (edge.zigbee) {
+            create('path', { d: roundedPath(clean), class: lineClass, stroke: colours.zigbee }, parent);
             return;
         }
         if (!split) {
