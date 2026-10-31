@@ -100,9 +100,9 @@ window.RackMap = (function () {
     };
     const pathLength = points => points.slice(1).reduce((sum, point, index) => sum + Math.hypot(point.x - points[index].x, point.y - points[index].y), 0);
     const drawSplitter = (at, vertical, colour, parent) => {
-        const group = create('g', { class: 'poe-splitter', transform: `translate(${at.x}, ${at.y})${vertical ? ' rotate(90)' : ''}` }, parent);
-        create('polygon', { points: '-13,6 -7,-6 13,-6 7,6', stroke: colour }, group);
-        create('path', { d: 'M -1 -4 L -4 1 L 1 1 L -2 5', stroke: colour }, group);
+        const group = create('g', { class: 'poe-splitter', transform: `translate(${at.x}, ${at.y})` }, parent);
+        create('rect', { x: vertical ? -7 : -9, y: vertical ? -9 : -7, width: vertical ? 14 : 18, height: vertical ? 18 : 14, rx: 4, fill: colour }, group);
+        create('polygon', { points: '1.5,-6 -3.5,1 -0.5,1 -1.5,6 3.5,-1 0.5,-1' }, group);
         create('title', {}, group).textContent = 'PoE Splitter';
     };
     // Draws a cable's line, split at its PoE splitter when it has one: full colour with the zigzag up to the splitter, the plain darker shade after it.
