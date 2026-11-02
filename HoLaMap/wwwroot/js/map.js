@@ -508,8 +508,8 @@
         const list = element('ul', 'details-list');
         edges.forEach(edge => {
             const item = element('li');
-            item.append(edgeButton(edge, `${endText(edge.source, edge.sourcePort)} → ${endText(edge.target, edge.targetPort)}`));
-            meta(item, edge.wireless ? 'Wi-Fi' : speedText(portsById.get(edge.sourcePort)));
+            item.append(edgeButton(edge, edge.zigbee ? `${zigbeeById.get(edge.source)?.label} → ${zigbeeById.get(edge.target)?.label}` : `${endText(edge.source, edge.sourcePort)} → ${endText(edge.target, edge.targetPort)}`));
+            meta(item, edge.zigbee ? edge.lqi ? `LQI ${edge.lqi}` : 'Zigbee' : edge.wireless ? 'Wi-Fi' : speedText(portsById.get(edge.sourcePort)));
             list.append(item);
         });
         section().append(list);
@@ -880,11 +880,19 @@
     const focusEdges = edges => focusOn(new Set(edges.flatMap(edge => [edge.source, edge.target])), new Set(edges.map(edge => edge.id)));
     const clearFocus = () => focusOn(new Set(), new Set());
 
-    // All view: floors contain rooms, rooms contain devices, and ELK lays out and routes the whole thing at once. Not to scale.
+    // All view: each floor is laid out by ELK on its own with its rooms and devices, and the floors sit side by side like the Floor Plan. Not to scale.
+    // A line between floors leaves through the top of its floor, at the spot ELK picks to cross as little as possible, and runs across above the floors.
     // The Zigbee view uses the same layout with just the floors, so the mesh stays one tree.
     const layoutNested = async withRooms => {
         const groupOptions = { 'elk.algorithm': 'layered', 'elk.direction': 'DOWN', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.layered.mergeHierarchyEdges': 'false', 'elk.layered.spacing.nodeNodeBetweenLayers': '50', 'elk.layered.spacing.edgeNodeBetweenLayers': '20', 'elk.layered.spacing.edgeEdgeBetweenLayers': '10', 'elk.spacing.nodeNode': '30', 'elk.spacing.edgeEdge': '10', 'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF' };
+        const groups = [
+            ...graph.floors.map(floor => ({ id: `floor-${floor.id}`, rooms: floor.rooms, nodes: graph.nodes.filter(node => floor.rooms.some(item => item.id === node.room)) })),
+            { id: 'floor-unplaced', rooms: [], nodes: graph.nodes.filter(node => !roomsById.has(node.room)) }
+        ].filter(group => group.nodes.length);
+        const groupOf = new Map(groups.flatMap(group => group.nodes.map(node => [node.id, group.id])));
+        const crossing = new Set(graph.edges.filter(edge => groupOf.get(edge.source) !== groupOf.get(edge.target)).map(edge => edge.id));
         // Devices without ports, like a rack, get a connection point per cable so ELK can spread the cables out instead of bunching them into one spot.
+        // A line to another floor always connects to the top, since that's the way out.
         const device = (node, edges) => {
             const size = sizeOf(node);
             if (!node.ports.length) {
@@ -895,7 +903,7 @@
                     width: size.width,
                     height: size.height,
                     layoutOptions: { 'elk.portConstraints': 'FIXED_SIDE', 'elk.nodeSize.constraints': 'PORTS MINIMUM_SIZE', 'elk.nodeSize.minimum': `(${size.width}, ${size.height})`, 'elk.spacing.portPort': '10' },
-                    ports: [...into.map(edge => ({ id: `${edge.id}-to`, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } })), ...outOf.map(edge => ({ id: `${edge.id}-from`, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'SOUTH' } }))]
+                    ports: [...into.map(edge => ({ id: `${edge.id}-to`, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } })), ...outOf.map(edge => ({ id: `${edge.id}-from`, width: 0, height: 0, layoutOptions: { 'elk.port.side': crossing.has(edge.id) ? 'NORTH' : 'SOUTH' } }))]
                 };
             }
             return {
@@ -910,92 +918,147 @@
                 ]
             };
         };
-        const run = edges => {
-            const room = (id, nodes) => ({ id: id, layoutOptions: { ...groupOptions, 'elk.padding': `[top=${roomHeader + 20},left=16,bottom=${portSize + 16},right=16]` }, children: nodes.map(node => device(node, edges)) });
-            const floors = graph.floors.map(floor => ({
-                id: `floor-${floor.id}`,
-                layoutOptions: { ...groupOptions, 'elk.padding': `[top=${titleHeight + 12},left=16,bottom=16,right=16]` },
-                children: withRooms ? floor.rooms.map(item => room(`room-${item.id}`, graph.nodes.filter(node => node.room === item.id))).filter(item => item.children.length) : graph.nodes.filter(node => floor.rooms.some(item => item.id === node.room)).map(node => device(node, edges))
-            })).filter(floor => floor.children.length);
-            const unplaced = graph.nodes.filter(node => !roomsById.has(node.room));
-            if (unplaced.length) {
-                floors.push({ id: 'floor-unplaced', layoutOptions: { ...groupOptions, 'elk.padding': `[top=${titleHeight + 12},left=16,bottom=${portSize + 16},right=16]` }, children: unplaced.map(node => device(node, edges)) });
+        const end = (edge, nodeId) => {
+            const port = nodeId === edge.source ? edge.sourcePort : edge.targetPort;
+            if (port) {
+                return port;
             }
-            return new ELK().layout({
-                id: 'root',
-                // The floors would stack in one tall column, so ELK wraps the column into side-by-side chunks to match the shape of the map area.
-                layoutOptions: { ...groupOptions, 'elk.layered.wrapping.strategy': 'MULTI_EDGE', 'elk.aspectRatio': String(Math.max(1, container.clientWidth / Math.max(1, container.clientHeight))) },
-                children: floors,
-                edges: edges.map(edge => ({ id: edge.id, sources: [edge.sourcePort || (nodesById.get(edge.source).ports.length ? `${edge.source}-out` : `${edge.id}-from`)], targets: [edge.targetPort || (nodesById.get(edge.target).ports.length ? `${edge.target}-in` : `${edge.id}-to`)] }))
+            if (nodesById.get(nodeId).ports.length) {
+                return `${nodeId}-${crossing.has(edge.id) || nodeId === edge.target ? 'in' : 'out'}`;
+            }
+            return `${edge.id}-${nodeId === edge.target ? 'to' : 'from'}`;
+        };
+        const room = (id, nodes, edges) => ({ id: id, layoutOptions: { ...groupOptions, 'elk.padding': `[top=${roomHeader + 20},left=16,bottom=${portSize + 16},right=16]` }, children: nodes.map(node => device(node, edges)) });
+        // Each floor is the one child of its own root, with a port on its top edge for every line leaving it. The lines inside run from that port to the device.
+        const results = await Promise.all(groups.map(async group => {
+            const outside = graph.edges.filter(edge => crossing.has(edge.id) && (groupOf.get(edge.source) === group.id || groupOf.get(edge.target) === group.id));
+            const run = inside => {
+                const touching = [...inside, ...outside];
+                const children = withRooms && group.rooms.length ? group.rooms.map(item => room(`room-${item.id}`, group.nodes.filter(node => node.room === item.id), touching)).filter(item => item.children.length) : group.nodes.map(node => device(node, touching));
+                return new ELK().layout({
+                    id: 'root',
+                    layoutOptions: { ...groupOptions, 'elk.padding': '[top=0,left=0,bottom=0,right=0]' },
+                    children: [{
+                        id: group.id,
+                        layoutOptions: { ...groupOptions, 'elk.portConstraints': 'FIXED_SIDE', 'elk.padding': `[top=${titleHeight + 12},left=16,bottom=${group.rooms.length ? 16 : portSize + 16},right=16]` },
+                        ports: outside.map(edge => ({ id: `${edge.id}@${group.id}`, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } })),
+                        children: children
+                    }],
+                    edges: [
+                        ...inside.map(edge => ({ id: edge.id, sources: [end(edge, edge.source)], targets: [end(edge, edge.target)] })),
+                        ...outside.map(edge => ({ id: `${edge.id}@${group.id}`, sources: [`${edge.id}@${group.id}`], targets: [end(edge, groupOf.get(edge.source) === group.id ? edge.source : edge.target)] }))
+                    ]
+                });
+            };
+            const inside = graph.edges.filter(edge => groupOf.get(edge.source) === group.id && groupOf.get(edge.target) === group.id);
+            // The Zigbee view is one tree already running downwards from the coordinator, so it needs no turning.
+            const loose = edge => withRooms && (edge.wireless || edge.zigbee) && roomsById.get(nodesById.get(edge.source).room) !== roomsById.get(nodesById.get(edge.target).room);
+            if (!inside.some(loose)) {
+                return run(inside);
+            }
+            // Wi-Fi and Zigbee links between rooms have no real direction, but ELK runs every line downwards and loops any line pointing back up the long way round.
+            // So the floor is laid out first without them, then each one is turned to run from the higher device to the lower before the real layout.
+            const first = await run(inside.filter(edge => !loose(edge)));
+            const heights = new Map();
+            const walk = (box, y) => (box.children ?? []).forEach(child => {
+                heights.set(child.id, y + child.y + child.height / 2);
+                walk(child, y + child.y);
             });
-        };
-        // The Zigbee view is all one tree already running downwards from the coordinator, so it needs no turning.
-        if (!withRooms || !graph.edges.some(edge => edge.zigbee)) {
-            return run(graph.edges);
-        }
-        // A Zigbee link has no real direction, but ELK runs every line downwards and loops any line pointing back up the long way round.
-        // So the network is laid out first without them, then each one is turned to run from the higher device to the lower before the real layout.
-        const first = await run(graph.edges.filter(edge => !edge.zigbee));
-        // ELK's order runs down each wrapped column of floors, then on to the next column to the right.
-        const order = new Map();
-        const walk = (box, x, y, floor) => (box.children ?? []).forEach(child => {
-            const home = floor ?? { x: child.x, right: child.x + child.width };
-            order.set(child.id, { floor: home, y: child.y + y + child.height / 2 });
-            walk(child, child.x + x, child.y + y, home);
-        });
-        walk(first, 0, 0, null);
-        const before = (a, b) => {
-            const from = order.get(a);
-            const to = order.get(b);
-            const sameColumn = from.floor.x < to.floor.right && to.floor.x < from.floor.right;
-            return sameColumn ? from.y <= to.y : from.floor.x < to.floor.x;
-        };
-        useView({ ...graph, edges: graph.edges.map(edge => edge.zigbee && !before(edge.source, edge.target) ? { ...edge, source: edge.target, target: edge.source } : edge) });
-        const layout = await run(graph.edges);
-        return layout;
+            walk(first, 0);
+            return run(inside.map(edge => loose(edge) && heights.get(edge.source) > heights.get(edge.target) ? { ...edge, source: edge.target, target: edge.source, sourcePort: edge.targetPort, targetPort: edge.sourcePort } : edge));
+        }));
+        return { groups: groups.map((group, index) => ({ ...group, layout: results[index] })), groupOf: groupOf, crossing: crossing };
     };
 
-    const drawNested = (layout, layers) => {
+    const drawNested = (nested, layers) => {
         const floorNames = new Map(graph.floors.map(floor => [`floor-${floor.id}`, floor.name]));
         const roomNames = new Map(graph.floors.flatMap(floor => floor.rooms.map(item => [`room-${item.id}`, item.name])));
-        // ELK gives each box relative to its parent, and each line relative to the innermost box holding both its ends.
-        const origins = new Map([['root', { x: 0, y: 0 }]]);
-        const chain = new Map();
-        (layout.children ?? []).forEach(floor => {
-            drawFrame(floorNames.get(floor.id) ?? 'Unplaced', floor.x, floor.y, floor.width, floor.height, layers.boxes);
-            origins.set(floor.id, { x: floor.x, y: floor.y });
+        // The floors in a row, in their saved order, then the unplaced devices.
+        let ox = 0;
+        const placed = nested.groups.map(group => {
+            const box = group.layout.children[0];
+            const place = { ...group, box: box, x: ox };
+            ox += box.width + groupGap;
+            return place;
+        });
+        const placeOf = new Map(placed.map(place => [place.id, place]));
+        // Each line between floors gets its own lane above them. Shorter lines get the lower lanes so the longer ones pass over them instead of crossing.
+        const exitX = (edgeId, groupId) => {
+            const place = placeOf.get(groupId);
+            return place.x + place.box.ports.find(port => port.id === `${edgeId}@${groupId}`).x;
+        };
+        const lanes = [];
+        const laneOf = new Map();
+        graph.edges.filter(edge => nested.crossing.has(edge.id)).map(edge => {
+            const a = exitX(edge.id, nested.groupOf.get(edge.source));
+            const b = exitX(edge.id, nested.groupOf.get(edge.target));
+            return { id: edge.id, from: Math.min(a, b), to: Math.max(a, b) };
+        }).sort((a, b) => (a.to - a.from) - (b.to - b.from)).forEach(span => {
+            let lane = lanes.findIndex(taken => taken.every(other => span.to < other.from - 6 || span.from > other.to + 6));
+            if (lane < 0) {
+                lane = lanes.length;
+                lanes.push([]);
+            }
+            lanes[lane].push(span);
+            laneOf.set(span.id, lane);
+        });
+        const top = 24 + lanes.length * laneGap;
+        const laneY = edgeId => top - 14 - laneOf.get(edgeId) * laneGap;
+
+        const boxes = new Map();
+        const routes = [];
+        // ELK gives each line relative to the innermost box holding both its ends: the floor, or a room when both ends are in it.
+        const roomOfNode = new Map();
+        placed.forEach(place => (place.box.children ?? []).filter(child => roomNames.has(child.id)).forEach(child => (child.children ?? []).forEach(item => roomOfNode.set(item.id, child))));
+        const pointsOf = (layoutEdge, place, edge) => {
+            const inRoom = edge && roomOfNode.get(edge.source) && roomOfNode.get(edge.source) === roomOfNode.get(edge.target) ? roomOfNode.get(edge.source) : null;
+            const origin = { x: place.x + (inRoom?.x ?? 0), y: top + (inRoom?.y ?? 0) };
+            return (layoutEdge?.sections ?? []).flatMap(section => [section.startPoint, ...(section.bendPoints ?? []), section.endPoint]).map(point => ({ x: point.x + origin.x, y: point.y + origin.y }));
+        };
+        placed.forEach(place => {
+            const floor = place.box;
+            drawFrame(floorNames.get(place.id) ?? 'Unplaced', place.x, top, floor.width, floor.height, layers.boxes);
             (floor.children ?? []).forEach(child => {
-                const x = floor.x + child.x;
-                const y = floor.y + child.y;
-                chain.set(child.id, ['root', floor.id]);
+                const x = place.x + child.x;
+                const y = top + child.y;
                 if (roomNames.has(child.id)) {
-                    origins.set(child.id, { x: x, y: y });
-                    (child.children ?? []).forEach(item => chain.set(item.id, ['root', floor.id, child.id]));
                     drawRoom(roomNames.get(child.id), x, y, child.width, child.height, layers.boxes);
-                    (child.children ?? []).forEach(item => drawNode(nodesById.get(item.id), x + item.x, y + item.y, item.width, item.height, layers.nodes, false));
+                    (child.children ?? []).forEach(item => {
+                        drawNode(nodesById.get(item.id), x + item.x, y + item.y, item.width, item.height, layers.nodes, false);
+                        boxes.set(item.id, { x: x + item.x, y: y + item.y, width: item.width, height: item.height });
+                    });
                 } else {
                     drawNode(nodesById.get(child.id), x, y, child.width, child.height, layers.nodes, false);
+                    boxes.set(child.id, { x: x, y: y, width: child.width, height: child.height });
                 }
             });
+            (place.layout.edges ?? []).filter(layoutEdge => !layoutEdge.id.includes('@')).forEach(layoutEdge => {
+                const edge = graph.edges.find(item => item.id === layoutEdge.id);
+                routes.push({ edge: edge, points: pointsOf(layoutEdge, place, edge) });
+            });
         });
-        // A cable or Zigbee link leaving the bottom of a rack or Zigbee device only to loop round and climb past it is moved to leave from the top instead,
-        // running across just above the box to join its climb.
-        const racks = new Map();
-        (layout.children ?? []).forEach(floor => (floor.children ?? []).forEach(child => [child, ...(child.children ?? []).map(item => ({ ...item, x: child.x + item.x, y: child.y + item.y }))].filter(item => nodesById.get(item.id)?.kind === 'rack' || zigbeeById.has(item.id) && !rawById.has(item.id)).forEach(item => racks.set(item.id, { x: floor.x + item.x, y: floor.y + item.y, width: item.width, height: item.height }))));
-        const routes = [];
-        (layout.edges ?? []).forEach(layoutEdge => {
-            const edge = graph.edges.find(candidate => candidate.id === layoutEdge.id);
-            const from = chain.get(edge.source);
-            const to = chain.get(edge.target);
-            const shared = from.filter((containerId, index) => to[index] === containerId);
-            const origin = origins.get(shared[shared.length - 1]);
-            const shift = point => ({ x: point.x + origin.x, y: point.y + origin.y });
-            (layoutEdge.sections ?? []).forEach(section => routes.push({ edge: edge, points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(shift) }));
+        // A line between floors: from its device out of the top of the floor, across its lane, and down into the other floor to its other device.
+        graph.edges.filter(edge => nested.crossing.has(edge.id)).forEach(edge => {
+            const half = groupId => {
+                const place = placeOf.get(groupId);
+                return pointsOf(place.layout.edges.find(layoutEdge => layoutEdge.id === `${edge.id}@${groupId}`), place);
+            };
+            const out = [...half(nested.groupOf.get(edge.source))].reverse();
+            const back = half(nested.groupOf.get(edge.target));
+            if (!out.length || !back.length) {
+                return;
+            }
+            const y = laneY(edge.id);
+            routes.push({ edge: edge, points: [...out, { x: out[out.length - 1].x, y: y }, { x: back[0].x, y: y }, ...back] });
         });
+
+        // A cable leaving the bottom of a rack only to loop round and climb past it is moved to leave from the top instead,
+        // running across just above the rack to join its climb.
+        const racks = new Map([...boxes].filter(([nodeId]) => nodesById.get(nodeId).kind === 'rack'));
         racks.forEach((box, rackId) => {
             const lifts = routes.map(route => {
                 const atStart = route.edge.source === rackId;
-                if (!atStart && route.edge.target !== rackId || nodesById.get(rackId).kind !== 'rack' && !route.edge.zigbee) {
+                if (!atStart && route.edge.target !== rackId) {
                     return null;
                 }
                 const points = atStart ? route.points : [...route.points].reverse();
@@ -1003,42 +1066,25 @@
                 return climb > 0 && points[0].y >= box.y + box.height - 1 ? { route: route, atStart: atStart, points: points, climb: climb } : null;
             }).filter(lift => lift);
             // A rack has no real ports, so the cables leaving its top are spaced out in the same order as the climbs they join, which keeps them from crossing.
+            [...lifts].sort((a, b) => a.points[a.climb].x - b.points[b.climb].x).forEach((lift, index) => {
+                lift.points = [{ x: box.x + (index + 1) * box.width / (lifts.length + 1), y: lift.points[0].y }, ...lift.points.slice(1)];
+            });
             // Each cable rises from its port, runs across at its own height and joins its climb. The heights are ordered so as few of these cross as possible.
             const between = (value, a, b) => value > Math.min(a, b) && value < Math.max(a, b);
             const cost = (upper, lower) => (between(upper.points[0].x, lower.points[0].x, lower.points[lower.climb].x) ? 1 : 0) + (between(lower.points[lower.climb].x, upper.points[0].x, upper.points[upper.climb].x) ? 1 : 0);
-            // Lines already coming in through the top of the box, which a line running across would cut through.
-            const comingIn = routes.filter(route => !lifts.some(lift => lift.route === route)).flatMap(route => [route.points[0], route.points[route.points.length - 1]]).filter(point => Math.abs(point.y - box.y) < 1 && point.x > box.x && point.x < box.x + box.width).map(point => point.x);
-            const plan = chosen => {
-                [...chosen].sort((a, b) => a.points[a.climb].x - b.points[b.climb].x).forEach((lift, index) => {
-                    lift.points = [{ x: box.x + (index + 1) * box.width / (chosen.length + 1), y: lift.points[0].y }, ...lift.points.slice(1)];
-                });
-                const ordered = [];
-                let total = 0;
-                chosen.forEach(lift => {
-                    let best = 0;
-                    let bestCost = Infinity;
-                    for (let at = 0; at <= ordered.length; at++) {
-                        const sum = ordered.slice(0, at).reduce((sum, other) => sum + cost(other, lift), 0) + ordered.slice(at).reduce((sum, other) => sum + cost(lift, other), 0);
-                        if (sum < bestCost) {
-                            best = at;
-                            bestCost = sum;
-                        }
+            const ordered = [];
+            lifts.forEach(lift => {
+                let best = 0;
+                let bestCost = Infinity;
+                for (let at = 0; at <= ordered.length; at++) {
+                    const total = ordered.slice(0, at).reduce((sum, other) => sum + cost(other, lift), 0) + ordered.slice(at).reduce((sum, other) => sum + cost(lift, other), 0);
+                    if (total < bestCost) {
+                        best = at;
+                        bestCost = total;
                     }
-                    ordered.splice(best, 0, lift);
-                    total += bestCost;
-                });
-                const conflicts = lift => chosen.filter(other => other !== lift && (cost(lift, other) || cost(other, lift))).length + comingIn.filter(x => between(x, lift.points[0].x, lift.points[lift.climb].x)).length;
-                return { ordered: ordered, total: total + chosen.reduce((sum, lift) => sum + comingIn.filter(x => between(x, lift.points[0].x, lift.points[lift.climb].x)).length, 0), conflicts: conflicts };
-            };
-            // The coordinator has the most links, so it only moves the ones that can go over its top cleanly and the rest keep leaving from the bottom.
-            let chosen = lifts.map(lift => ({ ...lift }));
-            let result = plan(chosen);
-            while (nodesById.get(rackId).kind === 'coordinator' && result.total > 0) {
-                const worst = chosen.reduce((most, lift) => result.conflicts(lift) > result.conflicts(most) ? lift : most);
-                chosen = chosen.filter(lift => lift !== worst);
-                result = plan(chosen);
-            }
-            const ordered = result.ordered;
+                }
+                ordered.splice(best, 0, lift);
+            });
             ordered.forEach((lift, order) => {
                 const across = box.y - 12 - (ordered.length - 1 - order) * laneGap;
                 const start = lift.points[0];
@@ -1048,6 +1094,38 @@
             });
         });
         routes.forEach(route => drawEdge(route.edge, route.points, layers.edges));
+
+        // An end device's Zigbee link to another room is only shown, as an arc, while the pointer is over a device at either end.
+        // The arc runs from the top of one device to the top of the other, rising only as high as the distance needs. When one device is mostly above the other,
+        // it leaves the upper one's bottom and bows out to the side instead.
+        const arcsByNode = new Map();
+        (graph.zigbeeArcs ?? []).filter(edge => boxes.has(edge.source) && boxes.has(edge.target)).forEach(edge => {
+            const [a, b] = [boxes.get(edge.source), boxes.get(edge.target)];
+            const centre = box => box.x + box.width / 2;
+            const across = Math.abs(centre(b) - centre(a));
+            let d;
+            if (across >= Math.abs(b.y - a.y)) {
+                // The curve's highest point is a quarter of the way from its ends to the apex, and it shouldn't leave the top of the map.
+                const apex = Math.max(Math.min(a.y, b.y) - Math.max(30, across * 0.25), (8 - 0.25 * Math.min(a.y, b.y)) / 0.75);
+                d = `M ${centre(a)} ${a.y} C ${centre(a)} ${apex}, ${centre(b)} ${apex}, ${centre(b)} ${b.y}`;
+            } else {
+                const [upper, lower] = a.y < b.y ? [a, b] : [b, a];
+                const from = { x: centre(upper), y: upper.y + upper.height };
+                const to = { x: centre(lower), y: lower.y };
+                const down = to.y - from.y;
+                const bow = (to.x >= from.x ? 1 : -1) * Math.max(40, down * 0.2);
+                d = `M ${from.x} ${from.y} C ${from.x + bow} ${from.y + down / 3}, ${to.x + bow} ${to.y - down / 3}, ${to.x} ${to.y}`;
+            }
+            const group = create('g', { class: 'map-edge zigbee map-hover-arc' + (edge.online ? '' : ' offline'), 'data-edge': edge.id }, layers.trunks);
+            create('path', { d: d, class: 'map-edge-line', stroke: colours.zigbee }, group);
+            [edge.source, edge.target].forEach(nodeId => arcsByNode.set(nodeId, [...(arcsByNode.get(nodeId) ?? []), group]));
+        });
+        arcsByNode.forEach((arcs, nodeId) => {
+            const node = layers.nodes.querySelector(`[data-node="${CSS.escape(nodeId)}"]`);
+            node?.addEventListener('mouseenter', () => arcs.forEach(arc => arc.classList.add('shown')));
+            node?.addEventListener('mouseleave', () => arcs.forEach(arc => arc.classList.remove('shown')));
+        });
+        return { width: Math.max(0, ox - groupGap), height: top + Math.max(0, ...placed.map(place => place.box.height)) };
     };
 
     // Floor Plan view: rooms exactly as saved, floors side by side. Each room's devices are a small tree of name-only chips, all shrunk by the same amount so every room matches.
@@ -1289,7 +1367,12 @@
             return current;
         };
         const edges = nodes.filter(node => shownParent(node.id)).map(node => ({ ...linkTo.get(node.id), source: shownParent(node.id) }));
-        return { ...collapsed, nodes: [...collapsed.nodes, ...nodes], edges: [...collapsed.edges, ...edges, ...cable] };
+        const roomOf = new Map(nodes.map(node => [node.id, node.room]));
+        // Links inside a room, and the backbone between the coordinator and routers, are laid out with everything else like cables.
+        // An end device's link to another room is left for an arc that only shows on hover.
+        const kindOf = new Map(nodes.map(node => [node.id, node.kind]));
+        const laidOut = edge => roomOf.get(edge.source) === roomOf.get(edge.target) || kindOf.get(edge.target) !== 'client';
+        return { ...collapsed, nodes: [...collapsed.nodes, ...nodes], edges: [...collapsed.edges, ...edges.filter(laidOut), ...cable], zigbeeArcs: edges.filter(edge => !laidOut(edge)) };
     };
 
     // The Zigbee view on its own. A coordinator without a room is put in its host's room so it lands on the right floor.
@@ -1348,9 +1431,9 @@
             if (id !== renderId) {
                 return;
             }
-            drawNested(layout, layers);
-            bounds.width = layout.width;
-            bounds.height = layout.height;
+            const size = drawNested(layout, layers);
+            bounds.width = size.width;
+            bounds.height = size.height;
         } else if (!await drawFloorPlan(layers, bounds, id)) {
             return;
         }

@@ -1285,6 +1285,15 @@ body:has(.map-layout) .details {
     color: #7b8794;
 }
 
+.map-hover-arc {
+    display: none;
+    pointer-events: none;
+}
+
+.map-hover-arc.shown {
+    display: inline;
+}
+
 .map-edge.zigbee .map-edge-line {
     stroke-dasharray: 1 5;
     stroke-linecap: round;
