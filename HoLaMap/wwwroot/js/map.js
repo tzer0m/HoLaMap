@@ -1513,10 +1513,24 @@
 
     // The Zigbee view on its own. A coordinator without a room is put in its host's room so it lands on the right floor.
     // Hue devices are shown on their floors without links, since the bridge says nothing about its mesh.
+    // The picker at its top left shows both networks, just ZHA, or just the Hue Bridge and its devices.
+    const zigbeeSelect = document.getElementById('zigbee-select');
     const zigbeeView = () => {
         const host = zigbee.nodes.find(node => node.id === zigbee.edges.find(edge => !edge.zigbee)?.source);
-        return { ...raw, nodes: zigbee.nodes.map(node => node.kind === 'coordinator' && !roomsById.has(node.room) && host ? { ...node, room: host.room } : node), edges: zigbee.edges.filter(edge => !edge.zigbee || edge.source.startsWith('z')) };
+        // The Hue Bridge is the one coordinator that's a device on the map rather than a Zigbee device of its own.
+        const isHue = node => node.hue || (node.kind === 'coordinator' && !node.id.startsWith('z'));
+        const nodes = zigbee.nodes.filter(node => zigbeeSelect.value === 'hue' ? isHue(node) : zigbeeSelect.value === 'zha' ? !isHue(node) : true);
+        const shown = new Set(nodes.map(node => node.id));
+        return { ...raw, nodes: nodes.map(node => node.kind === 'coordinator' && !roomsById.has(node.room) && host ? { ...node, room: host.room } : node), edges: zigbee.edges.filter(edge => (!edge.zigbee || edge.source.startsWith('z')) && shown.has(edge.source) && shown.has(edge.target)) };
     };
+    try {
+        const storedZigbee = localStorage.getItem('holamap.zigbee');
+        if ([...zigbeeSelect.options].some(option => option.value === storedZigbee)) {
+            zigbeeSelect.value = storedZigbee;
+        }
+    } catch (error) {
+        // Storage is only a convenience for remembering the choice.
+    }
 
     let renderId = 0;
     const render = async mode => {
@@ -1536,10 +1550,11 @@
         useView(mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? zigbeeView() : mode === 'all' ? withZigbee() : withZigbee(false));
         tabs.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.view === mode));
         vlanSelect.hidden = mode !== 'network' || !raw.networks.length;
+        zigbeeSelect.hidden = mode !== 'zigbee';
         details.textContent = defaultDetails;
         if ((mode === 'network' || mode === 'zigbee') && !graph.nodes.length) {
             container.replaceChildren();
-            container.textContent = mode === 'zigbee' ? 'No Zigbee devices yet. They come from Home Assistant once its URL and token are set.' : 'Nothing found on this network.';
+            container.textContent = mode === 'zigbee' ? zigbeeSelect.value === 'hue' ? 'No Hue devices yet. They come from the Hue Bridge once its app key is set.' : 'No Zigbee devices yet. They come from Home Assistant once its URL and token are set.' : 'Nothing found on this network.';
             return;
         }
         if (mode === 'floorplan' && !graph.floors.length) {
@@ -1581,8 +1596,8 @@
         const apply = () => viewport.setAttribute('transform', `translate(${view.x}, ${view.y}) scale(${view.scale})`);
         const fit = () => {
             const box = container.getBoundingClientRect();
-            // Leave room at the top for the network picker when it's showing.
-            const reserved = vlanSelect.hidden ? 0 : 44;
+            // Leave room at the top for the picker when one is showing.
+            const reserved = vlanSelect.hidden && zigbeeSelect.hidden ? 0 : 44;
             view.scale = Math.min(box.width / (bounds.width + 40), (box.height - reserved) / (bounds.height + 40), 1.5);
             view.x = (box.width - bounds.width * view.scale) / 2;
             view.y = 20 + reserved;
@@ -1658,6 +1673,14 @@
             // Storage is only a convenience for remembering the network.
         }
         render('network');
+    });
+    zigbeeSelect.addEventListener('change', () => {
+        try {
+            localStorage.setItem('holamap.zigbee', zigbeeSelect.value);
+        } catch (error) {
+            // Storage is only a convenience for remembering the choice.
+        }
+        render('zigbee');
     });
     await render(mode);
 })();
