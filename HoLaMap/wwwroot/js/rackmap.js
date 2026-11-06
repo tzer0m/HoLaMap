@@ -161,6 +161,53 @@ window.RackMap = (function () {
         return taken.length;
     };
 
+    // The rack's own key, listing only the kinds of cable and box this rack has.
+    const keyItem = (list, swatch, text) => {
+        const item = document.createElement('li');
+        item.append(swatch, document.createTextNode(text));
+        list.append(item);
+    };
+    const keySwatch = (background, border) => {
+        const swatch = document.createElement('span');
+        swatch.className = border ? 'swatch box' : 'swatch';
+        swatch.style.background = background;
+        if (border) {
+            swatch.style.borderColor = border;
+        }
+        return swatch;
+    };
+    const keySvg = (markup, className) => {
+        const swatch = document.createElementNS(svgNs, 'svg');
+        swatch.setAttribute('viewBox', '0 0 18 10');
+        swatch.setAttribute('class', className);
+        swatch.innerHTML = markup;
+        return swatch;
+    };
+    const drawKey = (cables, devices) => {
+        const key = document.createElement('div');
+        key.className = 'legend-rows rackmap-key';
+        const lines = document.createElement('ul');
+        lines.className = 'legend';
+        const boxes = document.createElement('ul');
+        boxes.className = 'legend';
+        const styles = new Set([...cables.map(cable => cable.edge.style), ...devices.filter(node => node.kind !== 'patch').flatMap(node => node.ports.map(port => port.style))]);
+        [['port-1000', '1 Gbps'], ['port-100', '100 Mbps'], ['port-10', '10 Mbps'], ['port-wan', 'WAN'], ['port-down', 'Down'], ['patch', 'Patch Cable']].filter(([style]) => styles.has(style)).forEach(([style, text]) => keyItem(lines, keySwatch(colours[style]), text));
+        if (cables.some(cable => cable.edge.poE)) {
+            keyItem(lines, keySvg('<polyline points="0,5 3,2 6,8 9,2 12,8 15,2 18,5" />', 'swatch-zigzag'), 'PoE');
+        }
+        if (cables.some(cable => cable.edge.splitter)) {
+            keyItem(lines, keySvg('<rect x="4" y="0" width="10" height="10" rx="3" fill="#b0b4bc" /><polygon points="10,1.5 6.5,5.5 8.5,5.5 7.5,8.5 11.5,4.5 9.5,4.5" fill="#1b1f27" />', 'swatch-splitter'), 'PoE Splitter');
+        }
+        if (cables.some(cable => cable.edge.back)) {
+            keyItem(lines, keySvg('<line x1="0" y1="5" x2="18" y2="5" stroke-dasharray="4 2" />', 'swatch-zigzag'), 'Rear Cable');
+        }
+        // Panels are left out, since they're obvious from the drawing.
+        const kinds = new Set(devices.filter(node => node.kind !== 'patch').map(node => ['gateway', 'switch', 'accesspoint'].includes(node.kind) ? 'unifi' : 'device'));
+        [['unifi', 'UniFi', '#2f5d94', '#6f9bd1'], ['device', 'Device', '#4a5068', '#8a90b0']].filter(([kind]) => kinds.has(kind)).forEach(([, text, background, border]) => keyItem(boxes, keySwatch(background, border), text));
+        [lines, boxes].filter(list => list.children.length).forEach(list => key.append(list));
+        return key;
+    };
+
     const draw = (host, raw, rackId) => {
         host.replaceChildren();
         const rack = raw.racks.find(item => item.id === rackId);
@@ -631,7 +678,7 @@ window.RackMap = (function () {
         info.className = 'rackmap-info';
         const defaultInfo = 'Select a cable, port or device to see its details.';
         info.textContent = defaultInfo;
-        host.append(svg, info);
+        host.append(drawKey(cables, devices), svg, info);
 
         // The rack frame, the U numbers on its left rail, and a faint line at each unit.
         create('rect', { x: 0, y: 0, width: frameRight, height: frameBottom, rx: 8, class: 'rackmap-frame' }, svg);

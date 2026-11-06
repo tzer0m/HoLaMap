@@ -858,6 +858,15 @@ body:has(.map-layout) .details {
     height: auto;
 }
 
+.rackmap-key {
+    margin-bottom: 12px;
+}
+
+.swatch-splitter {
+    width: 18px;
+    height: 10px;
+}
+
 .rackmap-info {
     margin: 8px 0 0;
     color: #9aa3b5;
