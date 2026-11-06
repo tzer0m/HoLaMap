@@ -6,25 +6,25 @@
 
 <header class="page-header">
     <h1>Map</h1>
-    <div class="legend-rows">
+    <div id="legend" class="legend-rows">
         <ul class="legend">
-            <li><span class="swatch port-1000"></span>1 Gbps</li>
-            <li><span class="swatch port-100"></span>100 Mbps</li>
-            <li><span class="swatch port-10"></span>10 Mbps</li>
-            <li><span class="swatch port-wan"></span>WAN</li>
-            <li><span class="swatch port-down"></span>Down</li>
-            <li><svg class="swatch-zigzag" viewBox="0 0 18 10"><polyline points="0,5 3,2 6,8 9,2 12,8 15,2 18,5" /></svg>PoE</li>
-            <li><svg class="swatch-wave" viewBox="0 0 18 10"><path d="M 0 5 Q 2.5 0 5 5 Q 7.5 10 10 5 Q 12.5 0 15 5 Q 16.5 8 18 5" /></svg>Wi-Fi</li>
-            <li><svg class="swatch-zigbee" viewBox="0 0 18 10"><line x1="1" y1="5" x2="17" y2="5" /></svg>Zigbee</li>
+            <li data-key="port-1000"><span class="swatch port-1000"></span>1 Gbps</li>
+            <li data-key="port-100"><span class="swatch port-100"></span>100 Mbps</li>
+            <li data-key="port-10"><span class="swatch port-10"></span>10 Mbps</li>
+            <li data-key="port-wan"><span class="swatch port-wan"></span>WAN</li>
+            <li data-key="port-down"><span class="swatch port-down"></span>Down</li>
+            <li data-key="poe"><svg class="swatch-zigzag" viewBox="0 0 18 10"><polyline points="0,5 3,2 6,8 9,2 12,8 15,2 18,5" /></svg>PoE</li>
+            <li data-key="wifi"><svg class="swatch-wave" viewBox="0 0 18 10"><path d="M 0 5 Q 2.5 0 5 5 Q 7.5 10 10 5 Q 12.5 0 15 5 Q 16.5 8 18 5" /></svg>Wi-Fi</li>
+            <li data-key="zigbee"><svg class="swatch-zigbee" viewBox="0 0 18 10"><line x1="1" y1="5" x2="17" y2="5" /></svg>Zigbee</li>
         </ul>
         <ul class="legend">
-            <li><span class="swatch box box-unifi"></span>UniFi</li>
-            <li><span class="swatch box box-client"></span>Client</li>
-            <li><span class="swatch box box-rack"></span>Rack</li>
-            <li><span class="swatch box box-coordinator"></span>Coordinator</li>
-            <li><span class="swatch box box-router"></span>Router</li>
-            <li><span class="swatch box box-zigbee"></span>End Device</li>
-            <li><span class="swatch box box-hue"></span>Hue Device</li>
+            <li data-key="unifi"><span class="swatch box box-unifi"></span>UniFi</li>
+            <li data-key="client"><span class="swatch box box-client"></span>Client</li>
+            <li data-key="rack"><span class="swatch box box-rack"></span>Rack</li>
+            <li data-key="coordinator"><span class="swatch box box-coordinator"></span>Coordinator</li>
+            <li data-key="router"><span class="swatch box box-router"></span>Router</li>
+            <li data-key="end-device"><span class="swatch box box-zigbee"></span>End Device</li>
+            <li data-key="hue"><span class="swatch box box-hue"></span>Hue Device</li>
         </ul>
     </div>
 </header>

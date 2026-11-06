@@ -35,6 +35,11 @@ body {
     gap: 6px;
 }
 
+.legend[hidden],
+.legend [hidden] {
+    display: none;
+}
+
 .swatch {
     display: inline-block;
     width: 14px;

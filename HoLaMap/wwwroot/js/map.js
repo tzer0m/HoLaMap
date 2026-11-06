@@ -1532,6 +1532,30 @@
         // Storage is only a convenience for remembering the choice.
     }
 
+    // The key only lists what the current view can show. Port colours count too where ports are drawn, which isn't on the Floor Plan's name-only chips.
+    const legend = document.getElementById('legend');
+    const updateKey = mode => {
+        if (!legend) {
+            return;
+        }
+        const shown = new Set();
+        const lines = [...graph.edges, ...(graph.zigbeeArcs ?? [])];
+        // The coordinator's USB cable is drawn grey but isn't a cable that's down, so it isn't counted.
+        lines.filter(edge => edge.id !== 'zl-usb').forEach(edge => shown.add(edge.zigbee ? 'zigbee' : edge.wireless ? 'wifi' : edge.style));
+        if (lines.some(edge => edge.poE)) {
+            shown.add('poe');
+        }
+        if (mode !== 'floorplan') {
+            graph.nodes.forEach(node => node.ports.forEach(port => shown.add(port.style)));
+        }
+        graph.nodes.forEach(node => {
+            const zigbeeOnly = zigbeeById.has(node.id) && !rawById.has(node.id);
+            shown.add(node.hue ? 'hue' : ['gateway', 'switch', 'accesspoint'].includes(node.kind) ? 'unifi' : node.kind === 'client' ? zigbeeOnly ? 'end-device' : 'client' : node.kind);
+        });
+        legend.querySelectorAll('[data-key]').forEach(item => item.hidden = !shown.has(item.dataset.key));
+        legend.querySelectorAll('ul').forEach(list => list.hidden = !list.querySelector('[data-key]:not([hidden])'));
+    };
+
     let renderId = 0;
     const render = async mode => {
         const id = ++renderId;
@@ -1549,6 +1573,7 @@
         }
         useView(mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? zigbeeView() : mode === 'all' ? withZigbee() : withZigbee(false));
         tabs.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.view === mode));
+        updateKey(mode);
         vlanSelect.hidden = mode !== 'network' || !raw.networks.length;
         zigbeeSelect.hidden = mode !== 'zigbee';
         details.textContent = defaultDetails;
