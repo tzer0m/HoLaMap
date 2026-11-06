@@ -482,6 +482,9 @@ namespace HoLaMap.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("Network")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PowerSource")
                         .HasColumnType("text");
 

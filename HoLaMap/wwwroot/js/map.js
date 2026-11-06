@@ -1357,8 +1357,9 @@
         if (!links) {
             return { ...collapsed, nodes: [...collapsed.nodes, ...nodes], edges: [...collapsed.edges, ...cable] };
         }
+        // Only the ZHA mesh is linked up here. Hue devices all hang straight off the bridge, which says nothing about the mesh, so they're left unlinked.
         const shown = new Set(nodes.map(node => node.id));
-        const linkTo = new Map(zigbee.edges.filter(edge => edge.zigbee).map(edge => [edge.target, edge]));
+        const linkTo = new Map(zigbee.edges.filter(edge => edge.zigbee && edge.source.startsWith('z')).map(edge => [edge.target, edge]));
         const shownParent = id => {
             let current = linkTo.get(id)?.source;
             while (current && !shown.has(current)) {
@@ -1376,9 +1377,10 @@
     };
 
     // The Zigbee view on its own. A coordinator without a room is put in its host's room so it lands on the right floor.
+    // Hue devices are shown on their floors without links, since the bridge says nothing about its mesh.
     const zigbeeView = () => {
         const host = zigbee.nodes.find(node => node.id === zigbee.edges.find(edge => !edge.zigbee)?.source);
-        return { ...raw, nodes: zigbee.nodes.map(node => node.kind === 'coordinator' && !roomsById.has(node.room) && host ? { ...node, room: host.room } : node), edges: zigbee.edges };
+        return { ...raw, nodes: zigbee.nodes.map(node => node.kind === 'coordinator' && !roomsById.has(node.room) && host ? { ...node, room: host.room } : node), edges: zigbee.edges.filter(edge => !edge.zigbee || edge.source.startsWith('z')) };
     };
 
     let renderId = 0;

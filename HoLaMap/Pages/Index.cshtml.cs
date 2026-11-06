@@ -65,10 +65,10 @@ namespace HoLaMap.Pages
         public async Task<JsonResult> OnGetZigbeeAsync()
         {
             List<ZigbeeDevice> devices = await context.ZigbeeDevices.Include(device => device.Neighbors).OrderBy(device => device.Name).ToListAsync();
-            Dictionary<int, (ZigbeeDevice Parent, int? Lqi)> parents = ZigbeeMesh.Parents(devices);
+            Dictionary<int, (ZigbeeDevice Parent, int? Lqi)> parents = ZigbeeMesh.Parents([.. devices.Where(device => device.Network == ZigbeeNetwork.Zha)]);
             string hostName = configuration["HomeAssistant:CoordinatorHost"] ?? string.Empty;
             Device? host = hostName.Length == 0 ? null : await context.Devices.FirstOrDefaultAsync(device => device.Name == hostName);
-            ZigbeeDevice? coordinator = devices.FirstOrDefault(device => device.Role == "Coordinator");
+            ZigbeeDevice? coordinator = devices.FirstOrDefault(device => device.Network == ZigbeeNetwork.Zha && device.Role == "Coordinator");
             DateTime onlineSince = DateTime.UtcNow.AddMinutes(-configuration.GetValue<int>("Map:OfflineAfterMinutes"));
             GraphData graph = new()
             {
@@ -79,6 +79,15 @@ namespace HoLaMap.Pages
             {
                 graph.Nodes.Insert(0, new GraphNode { Id = $"d{host.Id}", Label = host.Name, Kind = "client", Online = host.LastSeen >= onlineSince, Room = host.RoomId == null ? string.Empty : $"r{host.RoomId}", Model = host.Model ?? string.Empty, Ip = host.Ip ?? string.Empty, Mac = host.Mac, LastSeen = host.LastSeen.ToLocalTime().ToString("d MMM HH:mm") });
                 graph.Edges.Insert(0, new GraphEdge { Id = "zl-usb", Source = $"d{host.Id}", Target = $"z{coordinator.Id}", Label = "USB", Style = "port-down", Online = true, Detail = "Zigbee coordinator plugged into the host" });
+            }
+            string bridgeName = configuration["Hue:BridgeHost"] ?? string.Empty;
+            Device? bridge = bridgeName.Length == 0 ? null : await context.Devices.FirstOrDefaultAsync(device => device.Name == bridgeName);
+            List<ZigbeeDevice> hueDevices = [.. devices.Where(device => device.Network == ZigbeeNetwork.Hue)];
+            if (bridge != null && hueDevices.Count > 0)
+            {
+                // The Hue Bridge is the coordinator of its own network. Its API doesn't share the mesh, so every device hangs straight off it.
+                graph.Nodes.Add(new GraphNode { Id = $"d{bridge.Id}", Label = bridge.Name, Kind = "coordinator", Online = bridge.LastSeen >= onlineSince, Room = bridge.RoomId == null ? string.Empty : $"r{bridge.RoomId}", Model = bridge.Model ?? string.Empty, Ip = bridge.Ip ?? string.Empty, Mac = bridge.Mac, LastSeen = bridge.LastSeen.ToLocalTime().ToString("d MMM HH:mm") });
+                graph.Edges.AddRange(hueDevices.Select(device => new GraphEdge { Id = $"zl{device.Id}", Source = $"d{bridge.Id}", Target = $"z{device.Id}", Label = "Zigbee", Style = "port-1000", Zigbee = true, Online = device.Available, Detail = "On the Hue Bridge's network" }));
             }
             return new JsonResult(graph);
         }

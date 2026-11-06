@@ -1,4 +1,5 @@
 using HoLaMap.Data;
+using HoLaMap.Hue;
 using HoLaMap.UniFi;
 using HoLaMap.Zigbee;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,10 @@ builder.Services.Configure<HomeAssistantOptions>(builder.Configuration.GetSectio
 builder.Services.AddScoped<HomeAssistantClient>();
 builder.Services.AddScoped<ZigbeeSyncService>();
 builder.Services.AddHostedService<ZigbeeSyncWorker>();
+builder.Services.Configure<HueOptions>(builder.Configuration.GetSection("Hue"));
+builder.Services.AddHttpClient<HueClient>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator });
+builder.Services.AddScoped<HueSyncService>();
+builder.Services.AddHostedService<HueSyncWorker>();
 
 WebApplication app = builder.Build();
 app.UseRouting();

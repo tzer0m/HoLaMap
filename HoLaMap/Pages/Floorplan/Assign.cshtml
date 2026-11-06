@@ -1,4 +1,4 @@
-@page
+﻿@page
 @using Microsoft.AspNetCore.Mvc.Rendering
 @model AssignModel
 @{
@@ -57,6 +57,7 @@ else
             <thead>
                 <tr>
                     <th>Device</th>
+                    <th>Network</th>
                     <th>Role</th>
                     <th>Room</th>
                 </tr>
@@ -66,6 +67,7 @@ else
                 {
                     <tr>
                         <td>@device.Name</td>
+                        <td>@(device.Network == ZigbeeNetwork.Hue ? "Hue" : "ZHA")</td>
                         <td>@(device.Role == "EndDevice" ? "End Device" : device.Role)</td>
                         <td>
                             <form method="post" asp-page-handler="SaveZigbee" asp-route-id="@device.Id">

@@ -1,7 +1,7 @@
 namespace HoLaMap.Models
 {
     /// <summary>
-    /// A Zigbee device read from Home Assistant's ZHA integration.
+    /// A Zigbee device read from Home Assistant's ZHA integration or from a Hue Bridge.
     /// </summary>
     public class ZigbeeDevice
     {
@@ -14,6 +14,11 @@ namespace HoLaMap.Models
         /// Gets or sets the IEEE address, which identifies the device across syncs.
         /// </summary>
         public string Ieee { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the network the device is on. Stored as a number so devices synced before Hue default to ZHA.
+        /// </summary>
+        public ZigbeeNetwork Network { get; set; }
 
         /// <summary>
         /// Gets or sets the device name.

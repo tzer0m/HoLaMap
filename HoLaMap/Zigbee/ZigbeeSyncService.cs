@@ -20,7 +20,7 @@ namespace HoLaMap.Zigbee
         public async Task SyncAsync(CancellationToken cancellationToken)
         {
             List<ZhaDevice> zhaDevices = await client.GetZhaDevicesAsync(cancellationToken);
-            List<ZigbeeDevice> known = await context.ZigbeeDevices.Include(device => device.Neighbors).ToListAsync(cancellationToken);
+            List<ZigbeeDevice> known = await context.ZigbeeDevices.Where(device => device.Network == ZigbeeNetwork.Zha).Include(device => device.Neighbors).ToListAsync(cancellationToken);
             HashSet<string> seen = [.. zhaDevices.Select(device => device.Ieee)];
             context.ZigbeeDevices.RemoveRange(known.Where(device => !seen.Contains(device.Ieee)));
             foreach (ZhaDevice zhaDevice in zhaDevices)

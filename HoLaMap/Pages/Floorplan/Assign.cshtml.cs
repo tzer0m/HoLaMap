@@ -36,7 +36,7 @@ namespace HoLaMap.Pages.Floorplan
         {
             List<Device> devices = await context.Devices.ToListAsync();
             Devices = [.. devices.OrderBy(device => device.Kind == DeviceKind.Client).ThenBy(device => device.Kind).ThenBy(device => device.Name)];
-            ZigbeeDevices = await context.ZigbeeDevices.OrderBy(device => device.Role).ThenBy(device => device.Name).ToListAsync();
+            ZigbeeDevices = await context.ZigbeeDevices.OrderBy(device => device.Network).ThenBy(device => device.Role).ThenBy(device => device.Name).ToListAsync();
             List<Room> rooms = await context.Rooms.Include(room => room.Floor).ToListAsync();
             Dictionary<int, SelectListGroup> groups = rooms.Select(room => room.Floor).DistinctBy(floor => floor.Id).ToDictionary(floor => floor.Id, floor => new SelectListGroup { Name = floor.Name });
             RoomOptions = [.. rooms.OrderBy(room => room.Floor.SortOrder).ThenBy(room => room.Name).Select(room => new SelectListItem(room.Name, room.Id.ToString()) { Group = groups[room.FloorId] })];
