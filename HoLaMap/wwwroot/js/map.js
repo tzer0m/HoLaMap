@@ -605,7 +605,7 @@
 
     // A device with its ports, or just its name when compact.
     const drawNode = (node, x, y, width, height, parent, compact, scale) => {
-        const group = create('g', { class: `map-node ${node.kind}${zigbeeById.has(node.id) && !rawById.has(node.id) ? ' zigbee' : ''}${node.online ? '' : ' offline'}`, transform: `translate(${x}, ${y}) scale(${scale ?? 1})`, 'data-node': node.id }, parent);
+        const group = create('g', { class: `map-node ${node.kind}${zigbeeById.has(node.id) && !rawById.has(node.id) ? ' zigbee' : ''}${node.hue ? ' hue' : ''}${node.online ? '' : ' offline'}`, transform: `translate(${x}, ${y}) scale(${scale ?? 1})`, 'data-node': node.id }, parent);
         create('rect', { width: width, height: height, rx: compact ? 4 : 8, class: 'map-node-box' }, group);
         const label = create('text', { x: width / 2, y: !compact && node.ports.length ? 18 : height / 2 + 4, class: 'map-node-label' }, group);
         label.textContent = node.label;
@@ -923,24 +923,94 @@
             if (port) {
                 return port;
             }
+            if (nodeId === edge.target && stackOfEdge.has(edge.id)) {
+                const stacked = stackOfEdge.get(edge.id);
+                return `${stacked.stack.id}-lane-${stacked.item.lane}`;
+            }
             if (nodesById.get(nodeId).ports.length) {
                 return `${nodeId}-${crossing.has(edge.id) || nodeId === edge.target ? 'in' : 'out'}`;
             }
             return `${edge.id}-${nodeId === edge.target ? 'to' : 'from'}`;
         };
-        const room = (id, nodes, edges) => ({ id: id, layoutOptions: { ...groupOptions, 'elk.padding': `[top=${roomHeader + 20},left=16,bottom=${portSize + 16},right=16]` }, children: nodes.map(node => device(node, edges)) });
+        // Zigbee end devices hanging off the same parent are stacked in a column under it, like clients under a switch on the Network view.
+        // The lanes run down the right of the column and each line turns into its device from that side, so the devices sit on the left.
+        const stacks = new Map();
+        const stackOfEdge = new Map();
+        const makeStack = (parentId, edges) => {
+            edges.sort((a, b) => a.source.localeCompare(b.source) || nodesById.get(a.target).label.localeCompare(nodesById.get(b.target).label));
+            const leafWidth = Math.max(...edges.map(edge => sizeOf(nodesById.get(edge.target)).width));
+            let y = 0;
+            const items = edges.map((edge, lane) => {
+                const size = sizeOf(nodesById.get(edge.target));
+                const item = { edge: edge, node: nodesById.get(edge.target), lane: lane, x: leafWidth - size.width, y: y, width: size.width, height: size.height };
+                y += size.height + stackGap;
+                return item;
+            });
+            // The top device takes the lane nearest the devices so no two lines cross.
+            const stack = { id: `stack-${parentId}`, items: items, laneX: lane => leafWidth + 16 + lane * laneGap, entryX: leafWidth, width: leafWidth + edges.length * laneGap + 16, height: y - stackGap };
+            stacks.set(stack.id, stack);
+            items.forEach(item => stackOfEdge.set(item.edge.id, { stack: stack, item: item }));
+            return stack;
+        };
+        // Hue devices have no lines, so they're kept out of the layout and stacked in a column down the right of their room or floor, in space kept for them.
+        const hueColumns = new Map();
+        const needsSpace = new Set();
+        const hueColumn = (id, nodes) => {
+            const hue = nodes.filter(node => node.hue).sort((a, b) => a.label.localeCompare(b.label));
+            if (!hue.length) {
+                return null;
+            }
+            const column = { nodes: hue, width: Math.max(...hue.map(node => sizeOf(node).width)), height: hue.reduce((total, node) => total + sizeOf(node).height + stackGap, -stackGap) };
+            hueColumns.set(id, column);
+            return column;
+        };
+        const roomSpace = (column, top, bottom) => column ? { 'elk.padding': `[top=${top},left=16,bottom=${bottom},right=${column.width + 40}]`, 'elk.nodeSize.constraints': 'MINIMUM_SIZE', 'elk.nodeSize.minimum': `(${column.width + 56}, ${top + column.height + bottom})` } : { 'elk.padding': `[top=${top},left=16,bottom=${bottom},right=16]` };
+        // Other Zigbee devices with no lines here are stacked in a column of their own at the bottom of their room or floor instead of spreading out in one long row.
+        const loose = (node, edges) => zigbeeById.has(node.id) && !rawById.has(node.id) && !edges.some(edge => edge.source === node.id || edge.target === node.id);
+        const contents = (id, nodes, edges) => {
+            const rest = nodes.filter(node => !node.hue);
+            const here = new Set(rest.map(node => node.id));
+            const byParent = new Map();
+            // Every end device is stacked, even an only child. Those whose parents are on other floors share one stack, grouped by parent, which their lines reach through the top of the floor.
+            const away = `away-${id}`;
+            edges.filter(edge => edge.zigbee && (here.has(edge.source) || crossing.has(edge.id)) && here.has(edge.target) && nodesById.get(edge.target).kind === 'client' && edges.filter(other => other.source === edge.target || other.target === edge.target).length === 1).forEach(edge => {
+                const key = here.has(edge.source) ? edge.source : away;
+                byParent.set(key, [...(byParent.get(key) ?? []), edge]);
+            });
+            const made = [...byParent].map(([parentId, list]) => makeStack(parentId, list));
+            const stacked = new Set(made.flatMap(stack => stack.items.map(item => item.node.id)));
+            const packed = rest.filter(node => !stacked.has(node.id) && loose(node, edges));
+            const pack = { id: `loose-${id}`, layoutOptions: { 'elk.algorithm': 'box', 'elk.hierarchyHandling': 'SEPARATE_CHILDREN', 'elk.layered.layering.layerConstraint': 'LAST', 'elk.aspectRatio': '0.01', 'elk.spacing.nodeNode': '8', 'elk.padding': '[top=0,left=0,bottom=0,right=0]' }, children: packed.map(node => device(node, edges)) };
+            const column = hueColumns.get(id);
+            return [
+                ...(column && needsSpace.has(id) ? [{ id: `space-${id}`, width: 1, height: column.height, layoutOptions: { 'elk.layered.layering.layerConstraint': 'FIRST' } }] : []),
+                ...rest.filter(node => !stacked.has(node.id) && !loose(node, edges)).map(node => device(node, edges)),
+                ...made.map(stack => ({ id: stack.id, width: stack.width, height: stack.height, layoutOptions: { 'elk.portConstraints': 'FIXED_POS' }, ports: stack.items.map(item => ({ id: `${stack.id}-lane-${item.lane}`, x: stack.laneX(item.lane), y: 0, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } })) })),
+                ...(packed.length ? [pack] : [])
+            ];
+        };
+        const room = (id, nodes, edges) => {
+            const column = hueColumn(id, nodes);
+            const children = contents(id, nodes, edges);
+            const top = roomHeader + 20;
+            const bottom = portSize + 16;
+            // A room with only Hue devices has nothing for ELK to size it by, so it takes the column's size.
+            const size = children.length ? {} : { width: column.width + 56, height: top + column.height + bottom };
+            return { id: id, layoutOptions: { ...groupOptions, ...roomSpace(column, top, bottom) }, children: children, ...size };
+        };
         // Each floor is the one child of its own root, with a port on its top edge for every line leaving it. The lines inside run from that port to the device.
         const results = await Promise.all(groups.map(async group => {
             const outside = graph.edges.filter(edge => crossing.has(edge.id) && (groupOf.get(edge.source) === group.id || groupOf.get(edge.target) === group.id));
             const run = inside => {
                 const touching = [...inside, ...outside];
-                const children = withRooms && group.rooms.length ? group.rooms.map(item => room(`room-${item.id}`, group.nodes.filter(node => node.room === item.id), touching)).filter(item => item.children.length) : group.nodes.map(node => device(node, touching));
+                const children = withRooms && group.rooms.length ? group.rooms.map(item => ({ id: `room-${item.id}`, nodes: group.nodes.filter(node => node.room === item.id) })).filter(item => item.nodes.length).map(item => room(item.id, item.nodes, touching)) : contents(group.id, group.nodes, touching);
+                const floorColumn = withRooms && group.rooms.length ? null : hueColumn(group.id, group.nodes);
                 return new ELK().layout({
                     id: 'root',
                     layoutOptions: { ...groupOptions, 'elk.padding': '[top=0,left=0,bottom=0,right=0]' },
                     children: [{
                         id: group.id,
-                        layoutOptions: { ...groupOptions, 'elk.portConstraints': 'FIXED_SIDE', 'elk.padding': `[top=${titleHeight + 12},left=16,bottom=${group.rooms.length ? 16 : portSize + 16},right=16]` },
+                        layoutOptions: { ...groupOptions, 'elk.portConstraints': 'FIXED_SIDE', ...roomSpace(floorColumn, titleHeight + 12, withRooms && group.rooms.length ? 16 : portSize + 16) },
                         ports: outside.map(edge => ({ id: `${edge.id}@${group.id}`, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'NORTH' } })),
                         children: children
                     }],
@@ -953,8 +1023,27 @@
             const inside = graph.edges.filter(edge => groupOf.get(edge.source) === group.id && groupOf.get(edge.target) === group.id);
             // The Zigbee view is one tree already running downwards from the coordinator, so it needs no turning.
             const loose = edge => withRooms && (edge.wireless || edge.zigbee) && roomsById.get(nodesById.get(edge.source).room) !== roomsById.get(nodesById.get(edge.target).room);
+            // ELK doesn't hold a room to a minimum size, so a room too short for its Hue column is laid out again with a spacer as tall as the column.
+            // A floor is simply drawn taller.
+            const fit = async edges => {
+                const layout = await run(edges);
+                const short = [];
+                const check = box => (box.children ?? []).forEach(child => {
+                    const column = hueColumns.get(child.id);
+                    if (column && child.id !== group.id && child.height < roomHeader + 20 + column.height + 16) {
+                        short.push(child.id);
+                    }
+                    check(child);
+                });
+                check(layout);
+                if (!short.length) {
+                    return layout;
+                }
+                short.forEach(id => needsSpace.add(id));
+                return run(edges);
+            };
             if (!inside.some(loose)) {
-                return run(inside);
+                return fit(inside);
             }
             // Wi-Fi and Zigbee links between rooms have no real direction, but ELK runs every line downwards and loops any line pointing back up the long way round.
             // So the floor is laid out first without them, then each one is turned to run from the higher device to the lower before the real layout.
@@ -965,9 +1054,9 @@
                 walk(child, y + child.y);
             });
             walk(first, 0);
-            return run(inside.map(edge => loose(edge) && heights.get(edge.source) > heights.get(edge.target) ? { ...edge, source: edge.target, target: edge.source, sourcePort: edge.targetPort, targetPort: edge.sourcePort } : edge));
+            return fit(inside.map(edge => loose(edge) && heights.get(edge.source) > heights.get(edge.target) ? { ...edge, source: edge.target, target: edge.source, sourcePort: edge.targetPort, targetPort: edge.sourcePort } : edge));
         }));
-        return { groups: groups.map((group, index) => ({ ...group, layout: results[index] })), groupOf: groupOf, crossing: crossing };
+        return { groups: groups.map((group, index) => ({ ...group, layout: results[index] })), groupOf: groupOf, crossing: crossing, stacks: stacks, stackOfEdge: stackOfEdge, hueColumns: hueColumns };
     };
 
     const drawNested = (nested, layers) => {
@@ -977,7 +1066,8 @@
         let ox = 0;
         const placed = nested.groups.map(group => {
             const box = group.layout.children[0];
-            const place = { ...group, box: box, x: ox };
+            const column = nested.hueColumns.get(group.id);
+            const place = { ...group, box: box, x: ox, height: Math.max(box.height, column ? titleHeight + 12 + column.height + 16 : 0) };
             ox += box.width + groupGap;
             return place;
         });
@@ -1009,7 +1099,19 @@
         const routes = [];
         // ELK gives each line relative to the innermost box holding both its ends: the floor, or a room when both ends are in it.
         const roomOfNode = new Map();
-        placed.forEach(place => (place.box.children ?? []).filter(child => roomNames.has(child.id)).forEach(child => (child.children ?? []).forEach(item => roomOfNode.set(item.id, child))));
+        placed.forEach(place => (place.box.children ?? []).filter(child => roomNames.has(child.id)).forEach(child => (child.children ?? []).forEach(item => [item.id, ...(nested.stacks.get(item.id)?.items.map(stacked => stacked.node.id) ?? [])].forEach(nodeId => roomOfNode.set(nodeId, child)))));
+        const stackBoxes = new Map();
+        // Draws a column of Hue devices down the right of a room or floor, in the space kept for it.
+        const drawHue = (containerId, right, y) => {
+            const column = nested.hueColumns.get(containerId);
+            let at = y;
+            column?.nodes.forEach(node => {
+                const size = sizeOf(node);
+                drawNode(node, right - 16 - column.width, at, size.width, size.height, layers.nodes, false);
+                boxes.set(node.id, { x: right - 16 - column.width, y: at, width: size.width, height: size.height });
+                at += size.height + stackGap;
+            });
+        };
         const pointsOf = (layoutEdge, place, edge) => {
             const inRoom = edge && roomOfNode.get(edge.source) && roomOfNode.get(edge.source) === roomOfNode.get(edge.target) ? roomOfNode.get(edge.source) : null;
             const origin = { x: place.x + (inRoom?.x ?? 0), y: top + (inRoom?.y ?? 0) };
@@ -1017,24 +1119,51 @@
         };
         placed.forEach(place => {
             const floor = place.box;
-            drawFrame(floorNames.get(place.id) ?? 'Unplaced', place.x, top, floor.width, floor.height, layers.boxes);
+            drawFrame(floorNames.get(place.id) ?? 'Unplaced', place.x, top, floor.width, place.height, layers.boxes);
             (floor.children ?? []).forEach(child => {
                 const x = place.x + child.x;
                 const y = top + child.y;
+                // Draws a device, each device in a packed box of loose ones, or each device in a stack.
+                const draw = (item, left, top) => {
+                    if (item.id.startsWith('space-')) {
+                        return;
+                    }
+                    const stack = nested.stacks.get(item.id);
+                    if (stack) {
+                        stackBoxes.set(item.id, { x: left + item.x, y: top + item.y });
+                        stack.items.forEach(stacked => {
+                            drawNode(stacked.node, left + item.x + stacked.x, top + item.y + stacked.y, stacked.width, stacked.height, layers.nodes, false);
+                            boxes.set(stacked.node.id, { x: left + item.x + stacked.x, y: top + item.y + stacked.y, width: stacked.width, height: stacked.height });
+                        });
+                        return;
+                    }
+                    if (item.id.startsWith('loose-')) {
+                        (item.children ?? []).forEach(inner => draw(inner, left + item.x, top + item.y));
+                        return;
+                    }
+                    drawNode(nodesById.get(item.id), left + item.x, top + item.y, item.width, item.height, layers.nodes, false);
+                    boxes.set(item.id, { x: left + item.x, y: top + item.y, width: item.width, height: item.height });
+                };
                 if (roomNames.has(child.id)) {
                     drawRoom(roomNames.get(child.id), x, y, child.width, child.height, layers.boxes);
-                    (child.children ?? []).forEach(item => {
-                        drawNode(nodesById.get(item.id), x + item.x, y + item.y, item.width, item.height, layers.nodes, false);
-                        boxes.set(item.id, { x: x + item.x, y: y + item.y, width: item.width, height: item.height });
-                    });
+                    (child.children ?? []).forEach(item => draw(item, x, y));
+                    drawHue(child.id, x + child.width, y + roomHeader + 20);
                 } else {
-                    drawNode(nodesById.get(child.id), x, y, child.width, child.height, layers.nodes, false);
-                    boxes.set(child.id, { x: x, y: y, width: child.width, height: child.height });
+                    draw(child, place.x, top);
                 }
             });
+            drawHue(place.id, place.x + floor.width, top + titleHeight + 12);
             (place.layout.edges ?? []).filter(layoutEdge => !layoutEdge.id.includes('@')).forEach(layoutEdge => {
                 const edge = graph.edges.find(item => item.id === layoutEdge.id);
-                routes.push({ edge: edge, points: pointsOf(layoutEdge, place, edge) });
+                const points = pointsOf(layoutEdge, place, edge);
+                // A line into a stack carries on down its lane, then turns into the side of its device.
+                const stacked = nested.stackOfEdge.get(edge.id);
+                if (stacked && points.length && stackBoxes.has(stacked.stack.id)) {
+                    const at = stackBoxes.get(stacked.stack.id);
+                    const centreY = at.y + stacked.item.y + stacked.item.height / 2;
+                    points.push({ x: points[points.length - 1].x, y: centreY }, { x: at.x + stacked.stack.entryX, y: centreY });
+                }
+                routes.push({ edge: edge, points: points });
             });
         });
         // A line between floors: from its device out of the top of the floor, across its lane, and down into the other floor to its other device.
@@ -1047,6 +1176,12 @@
             const back = half(nested.groupOf.get(edge.target));
             if (!out.length || !back.length) {
                 return;
+            }
+            const stacked = nested.stackOfEdge.get(edge.id);
+            if (stacked && stackBoxes.has(stacked.stack.id)) {
+                const at = stackBoxes.get(stacked.stack.id);
+                const centreY = at.y + stacked.item.y + stacked.item.height / 2;
+                back.push({ x: back[back.length - 1].x, y: centreY }, { x: at.x + stacked.stack.entryX, y: centreY });
             }
             const y = laneY(edge.id);
             routes.push({ edge: edge, points: [...out, { x: out[out.length - 1].x, y: y }, { x: back[0].x, y: y }, ...back] });
@@ -1125,7 +1260,7 @@
             node?.addEventListener('mouseenter', () => arcs.forEach(arc => arc.classList.add('shown')));
             node?.addEventListener('mouseleave', () => arcs.forEach(arc => arc.classList.remove('shown')));
         });
-        return { width: Math.max(0, ox - groupGap), height: top + Math.max(0, ...placed.map(place => place.box.height)) };
+        return { width: Math.max(0, ox - groupGap), height: top + Math.max(0, ...placed.map(place => place.height)) };
     };
 
     // Floor Plan view: rooms exactly as saved, floors side by side. Each room's devices are a small tree of name-only chips, all shrunk by the same amount so every room matches.

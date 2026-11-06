@@ -86,6 +86,11 @@ namespace HoLaMap.Graph
         public int? Rssi { get; set; }
 
         /// <summary>
+        /// Whether this is a Zigbee device on the Hue Bridge's network.
+        /// </summary>
+        public bool Hue { get; set; }
+
+        /// <summary>
         /// The lowest rack unit the device occupies, counting from 1 at the bottom, or 0 if it isn't in a rack.
         /// </summary>
         public int RackU { get; set; }
