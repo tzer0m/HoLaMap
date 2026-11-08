@@ -39,7 +39,8 @@ namespace HoLaMap.UniFi
         {
             if (!string.IsNullOrEmpty(port.NetworkName))
             {
-                return port.NetworkName.Equals(port.NetworkName, StringComparison.InvariantCultureIgnoreCase) ? port.NetworkName.ToUpperInvariant() : port.NetworkName;
+                // Gateway ports report their own lowercase labels like lan and wan, so those are shown in capitals; a name matching a known network uses that network's own spelling.
+                return NetworkNames.Values.FirstOrDefault(name => name.Equals(port.NetworkName, StringComparison.OrdinalIgnoreCase)) ?? port.NetworkName.ToUpperInvariant();
             }
             string? profileId = portOverride?.PortProfileId ?? port.PortProfileId;
             string? networkId = port.NativeNetworkId ?? portOverride?.NativeNetworkId ?? (profileId != null && Profiles.TryGetValue(profileId, out UniFiPortProfile? profile) ? profile.NativeNetworkId : null);

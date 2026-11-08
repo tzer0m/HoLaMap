@@ -2,6 +2,7 @@ using HoLaMap.Data;
 using HoLaMap.Models;
 using HoLaMap.Zigbee.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace HoLaMap.Zigbee
 {
@@ -10,7 +11,8 @@ namespace HoLaMap.Zigbee
     /// </summary>
     /// <param name="context">The database context.</param>
     /// <param name="client">The Home Assistant client.</param>
-    public class ZigbeeSyncService(HoLaMapContext context, HomeAssistantClient client)
+    /// <param name="options">The Home Assistant settings.</param>
+    public class ZigbeeSyncService(HoLaMapContext context, HomeAssistantClient client, IOptions<HomeAssistantOptions> options)
     {
         /// <summary>
         /// Runs one sync.
@@ -22,7 +24,19 @@ namespace HoLaMap.Zigbee
             List<ZhaDevice> zhaDevices = await client.GetZhaDevicesAsync(cancellationToken);
             List<ZigbeeDevice> known = await context.ZigbeeDevices.Where(device => device.Network == ZigbeeNetwork.Zha).Include(device => device.Neighbors).ToListAsync(cancellationToken);
             HashSet<string> seen = [.. zhaDevices.Select(device => device.Ieee)];
-            context.ZigbeeDevices.RemoveRange(known.Where(device => !seen.Contains(device.Ieee)));
+            // A device that has left ZHA stays greyed out with its room in case it comes back, and is forgotten once it hasn't been heard from for a while.
+            int forgetAfterDays = options.Value.ForgetAfterDays;
+            foreach (ZigbeeDevice missing in known.Where(device => !seen.Contains(device.Ieee)))
+            {
+                if (forgetAfterDays > 0 && (missing.LastSeen == null || missing.LastSeen < DateTime.UtcNow.AddDays(-forgetAfterDays)))
+                {
+                    context.ZigbeeDevices.Remove(missing);
+                    continue;
+                }
+                missing.Available = false;
+                context.ZigbeeNeighbors.RemoveRange(missing.Neighbors);
+                missing.Neighbors = [];
+            }
             foreach (ZhaDevice zhaDevice in zhaDevices)
             {
                 ZigbeeDevice? device = known.FirstOrDefault(item => item.Ieee == zhaDevice.Ieee);

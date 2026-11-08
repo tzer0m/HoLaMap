@@ -24,5 +24,10 @@ namespace HoLaMap.Zigbee
         /// Gets or sets the name of the device the Zigbee coordinator is plugged into, so the mesh hangs off it on the map.
         /// </summary>
         public string CoordinatorHost { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets how many days a device that has gone from ZHA is kept before it's forgotten, or 0 to keep it forever.
+        /// </summary>
+        public int ForgetAfterDays { get; set; } = 30;
     }
 }

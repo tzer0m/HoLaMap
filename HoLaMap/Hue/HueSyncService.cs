@@ -33,7 +33,17 @@ namespace HoLaMap.Hue
             List<HueDevice> onNetwork = [.. hueDevices.Where(device => radios.ContainsKey(device.Id) && device.Metadata.Archetype?.StartsWith("bridge", StringComparison.Ordinal) != true)];
             List<ZigbeeDevice> known = await context.ZigbeeDevices.Where(device => device.Network == ZigbeeNetwork.Hue).ToListAsync(cancellationToken);
             HashSet<string> seen = [.. onNetwork.Select(device => radios[device.Id].MacAddress!)];
-            context.ZigbeeDevices.RemoveRange(known.Where(device => !seen.Contains(device.Ieee)));
+            // A device that has left the bridge stays greyed out with its room in case it comes back, and is forgotten once it hasn't been connected for a while.
+            int forgetAfterDays = options.Value.ForgetAfterDays;
+            foreach (ZigbeeDevice missing in known.Where(device => !seen.Contains(device.Ieee)))
+            {
+                if (forgetAfterDays > 0 && (missing.LastSeen == null || missing.LastSeen < DateTime.UtcNow.AddDays(-forgetAfterDays)))
+                {
+                    context.ZigbeeDevices.Remove(missing);
+                    continue;
+                }
+                missing.Available = false;
+            }
             foreach (HueDevice hueDevice in onNetwork)
             {
                 HueZigbeeConnectivity radio = radios[hueDevice.Id];

@@ -2,6 +2,7 @@ using HoLaMap.Data;
 using HoLaMap.Models;
 using HoLaMap.UniFi.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace HoLaMap.UniFi
 {
@@ -10,7 +11,8 @@ namespace HoLaMap.UniFi
     /// </summary>
     /// <param name="client">The UniFi API client.</param>
     /// <param name="context">The database context.</param>
-    public class UniFiSyncService(UniFiClient client, HoLaMapContext context)
+    /// <param name="options">The UniFi settings.</param>
+    public class UniFiSyncService(UniFiClient client, HoLaMapContext context, IOptions<UniFiOptions> options)
     {
         /// <summary>
         /// Runs a full sync.
@@ -66,6 +68,23 @@ namespace HoLaMap.UniFi
             }
             await context.SaveChangesAsync(cancellationToken);
             await SyncLinksAsync(devices, unifiDevices, stations, now, cancellationToken);
+            await ForgetClientsAsync(now, cancellationToken);
+        }
+
+        /// <summary>
+        /// Forgets clients that haven't been seen for a while and were never placed, linked by hand, patched or merged, so changing Wi-Fi MACs don't pile up.
+        /// </summary>
+        /// <param name="now">The time of this sync (UTC).</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>A task that completes when the clients have been deleted.</returns>
+        private async Task ForgetClientsAsync(DateTime now, CancellationToken cancellationToken)
+        {
+            if (options.Value.ForgetAfterDays <= 0)
+            {
+                return;
+            }
+            DateTime forgetBefore = now.AddDays(-options.Value.ForgetAfterDays);
+            await context.Devices.Where(device => device.Kind == DeviceKind.Client && device.LastSeen < forgetBefore && device.RoomId == null && device.RackId == null && !device.Macs.Any() && !context.Links.Any(link => link.ToDeviceId == device.Id && link.Source == LinkSource.Manual) && !context.PatchConnections.Any(connection => connection.DeviceId == device.Id)).ExecuteDeleteAsync(cancellationToken);
         }
 
         /// <summary>

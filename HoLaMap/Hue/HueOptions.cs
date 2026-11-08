@@ -19,5 +19,10 @@ namespace HoLaMap.Hue
         /// Gets or sets the number of minutes between syncs.
         /// </summary>
         public int SyncIntervalMinutes { get; set; }
+
+        /// <summary>
+        /// Gets or sets how many days a device that has gone from the bridge is kept before it's forgotten, or 0 to keep it forever.
+        /// </summary>
+        public int ForgetAfterDays { get; set; } = 30;
     }
 }
