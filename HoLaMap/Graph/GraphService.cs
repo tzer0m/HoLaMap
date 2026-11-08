@@ -16,6 +16,11 @@ namespace HoLaMap.Graph
         public string Label { get; set; } = string.Empty;
 
         /// <summary>
+        /// The full name the host reports, when the label shortens it.
+        /// </summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
         /// How it runs, e.g. Systemd.
         /// </summary>
         public string Kind { get; set; } = string.Empty;

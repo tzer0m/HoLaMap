@@ -357,7 +357,7 @@
     const showService = nodeId => {
         const service = servicesById.get(nodeId);
         heading(service.label, [[serviceKindNames[service.kind] ?? service.kind], service.online ? ['Reported', 'online'] : ['Missing', 'offline']]);
-        rows(section(), [['Host', rawById.has(service.host.id) ? deviceButton(service.host.id) : service.host.label], ['Category', service.category], ['Owner', service.mine ? 'Mine' : 'Third Party'], ['Source', service.manual ? 'Added by Hand' : 'Reported by Host'], ['Last Reported', service.lastSeen]]);
+        rows(section(), [['Unit', service.name !== service.label ? service.name : ''], ['Host', rawById.has(service.host.id) ? deviceButton(service.host.id) : service.host.label], ['Category', service.category], ['Owner', service.mine ? 'Mine' : 'Third Party'], ['Source', service.manual ? 'Added by Hand' : 'Reported by Host'], ['Last Reported', service.lastSeen]]);
     };
 
     const showDevice = nodeId => {
@@ -1546,10 +1546,9 @@
         // Storage is only a convenience for remembering the choice.
     }
 
-    // The Services view: each host as a box holding every service, or just the chosen category's, in columns of up to ten.
-    const servicesSelect = document.getElementById('services-select');
+    // The Services view: each host as a box holding its services, in columns of up to ten.
     const servicesView = () => {
-        const hosts = services.map(host => ({ ...host, services: host.services.filter(service => !servicesSelect.value || service.category === servicesSelect.value) })).filter(host => host.services.length);
+        const hosts = services.filter(host => host.services.length);
         return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: service.label, kind: service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
     };
     const drawServices = (layers, bounds) => {
@@ -1572,14 +1571,6 @@
         });
         bounds.width = left - groupGap;
     };
-    try {
-        const storedServices = localStorage.getItem('holamap.services');
-        if ([...servicesSelect.options].some(option => option.value === storedServices)) {
-            servicesSelect.value = storedServices;
-        }
-    } catch (error) {
-        // Storage is only a convenience for remembering the category.
-    }
 
     // The key only lists what the current view can show. Port colours count too where ports are drawn, which isn't on the Floor Plan's name-only chips.
     const legend = document.getElementById('legend');
@@ -1636,11 +1627,10 @@
         updateKey(mode);
         vlanSelect.hidden = mode !== 'network' || !raw.networks.length;
         zigbeeSelect.hidden = mode !== 'zigbee';
-        servicesSelect.hidden = mode !== 'services';
         details.textContent = defaultDetails;
         if (mode === 'services' && !graph.nodes.length) {
             container.replaceChildren();
-            container.textContent = services.length ? 'No services in this category yet.' : 'No services yet. Hosts report them to /api/services/{host}/systemd.';
+            container.textContent = 'No services yet. Hosts report them to /api/services/{host}/systemd.';
             return;
         }
         if ((mode === 'network' || mode === 'zigbee') && !graph.nodes.length) {
@@ -1690,7 +1680,7 @@
         const fit = () => {
             const box = container.getBoundingClientRect();
             // Leave room at the top for the picker when one is showing.
-            const reserved = vlanSelect.hidden && zigbeeSelect.hidden && servicesSelect.hidden ? 0 : 44;
+            const reserved = vlanSelect.hidden && zigbeeSelect.hidden ? 0 : 44;
             view.scale = Math.min(box.width / (bounds.width + 40), (box.height - reserved) / (bounds.height + 40), 1.5);
             view.x = (box.width - bounds.width * view.scale) / 2;
             view.y = 20 + reserved;
@@ -1774,14 +1764,6 @@
             // Storage is only a convenience for remembering the choice.
         }
         render('zigbee');
-    });
-    servicesSelect.addEventListener('change', () => {
-        try {
-            localStorage.setItem('holamap.services', servicesSelect.value);
-        } catch (error) {
-            // Storage is only a convenience for remembering the category.
-        }
-        render('services');
     });
     await render(mode);
 })();
