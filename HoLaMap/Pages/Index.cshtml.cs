@@ -72,12 +72,12 @@ namespace HoLaMap.Pages
             DateTime onlineSince = DateTime.UtcNow.AddMinutes(-configuration.GetValue<int>("Map:OfflineAfterMinutes"));
             GraphData graph = new()
             {
-                Nodes = [.. devices.Select(device => new GraphNode { Id = $"z{device.Id}", Label = device.Name, Kind = device.Role switch { "Coordinator" => "coordinator", "Router" => "router", _ => "client" }, Online = device.Available, Room = device.RoomId == null ? string.Empty : $"r{device.RoomId}", Model = device.Model ?? string.Empty, Mac = device.Ieee, Manufacturer = device.Manufacturer ?? string.Empty, Power = device.PowerSource ?? string.Empty, Lqi = device.Lqi, Rssi = device.Rssi, Hue = device.Network == ZigbeeNetwork.Hue, LastSeen = device.LastSeen?.ToLocalTime().ToString("d MMM HH:mm") ?? string.Empty })],
+                Nodes = [.. devices.Select(device => new GraphNode { Id = $"z{device.Id}", Label = device.Name, Kind = device.Role switch { "Coordinator" => "coordinator", "Router" => "router", _ => "client" }, Online = device.Available, Room = device.RoomId == null ? string.Empty : $"r{device.RoomId}", Model = device.Model ?? string.Empty, Mac = device.Ieee, Manufacturer = device.Manufacturer ?? string.Empty, Power = device.PowerSource ?? string.Empty, Lqi = device.Lqi, Rssi = device.Rssi, Hue = device.Network == ZigbeeNetwork.Hue, LastSeen = device.LastSeen == null ? string.Empty : Time(device.LastSeen.Value) })],
                 Edges = [.. parents.Select(pair => new GraphEdge { Id = $"zl{pair.Key}", Source = $"z{pair.Value.Parent.Id}", Target = $"z{pair.Key}", Label = pair.Value.Lqi == null ? "Zigbee" : $"LQI {pair.Value.Lqi}", Style = pair.Value.Lqi >= 150 ? "port-1000" : pair.Value.Lqi >= 80 ? "port-100" : "port-10", Zigbee = true, Lqi = pair.Value.Lqi, Online = devices.First(device => device.Id == pair.Key).Available })]
             };
             if (host != null && coordinator != null)
             {
-                graph.Nodes.Insert(0, new GraphNode { Id = $"d{host.Id}", Label = host.Name, Kind = "client", Online = host.LastSeen >= onlineSince, Room = host.RoomId == null ? string.Empty : $"r{host.RoomId}", Model = host.Model ?? string.Empty, Ip = host.Ip ?? string.Empty, Mac = host.Mac, LastSeen = host.LastSeen.ToLocalTime().ToString("d MMM HH:mm") });
+                graph.Nodes.Insert(0, ToNode(host, "client", host.LastSeen >= onlineSince));
                 graph.Edges.Insert(0, new GraphEdge { Id = "zl-usb", Source = $"d{host.Id}", Target = $"z{coordinator.Id}", Label = "USB", Style = "port-down", Online = true, Detail = "Zigbee coordinator plugged into the host" });
             }
             string bridgeName = configuration["Hue:BridgeHost"] ?? string.Empty;
@@ -86,7 +86,7 @@ namespace HoLaMap.Pages
             if (bridge != null && hueDevices.Count > 0)
             {
                 // The Hue Bridge is the coordinator of its own network. Its API doesn't share the mesh, so every device hangs straight off it.
-                graph.Nodes.Add(new GraphNode { Id = $"d{bridge.Id}", Label = bridge.Name, Kind = "coordinator", Online = bridge.LastSeen >= onlineSince, Room = bridge.RoomId == null ? string.Empty : $"r{bridge.RoomId}", Model = bridge.Model ?? string.Empty, Ip = bridge.Ip ?? string.Empty, Mac = bridge.Mac, LastSeen = bridge.LastSeen.ToLocalTime().ToString("d MMM HH:mm") });
+                graph.Nodes.Add(ToNode(bridge, "coordinator", bridge.LastSeen >= onlineSince));
                 graph.Edges.AddRange(hueDevices.Select(device => new GraphEdge { Id = $"zl{device.Id}", Source = $"d{bridge.Id}", Target = $"z{device.Id}", Label = "Zigbee", Style = "port-1000", Zigbee = true, Online = device.Available, Detail = "On the Hue Bridge's network" }));
             }
             return new JsonResult(graph);
@@ -133,13 +133,85 @@ namespace HoLaMap.Pages
             List<Network> networks = await context.Networks.OrderBy(network => network.VlanId ?? 0).ThenBy(network => network.Name).ToListAsync();
             GraphData graph = new()
             {
-                Nodes = [.. devices.Select(device => new GraphNode { Id = $"d{device.Id}", Label = device.Name, Kind = device.Kind.ToString().ToLowerInvariant(), Detail = string.Join(" · ", new[] { device.Model, device.Ip, device.Room == null ? null : $"{device.Room.Floor.Name} / {device.Room.Name}", device.Rack == null ? null : $"{device.Rack.Name} U{device.RackU}", device.Mac, $"Last Seen {device.LastSeen.ToLocalTime():d MMM HH:mm}" }.Where(part => !string.IsNullOrEmpty(part))), Room = device.RoomId == null ? string.Empty : $"r{device.RoomId}", Rack = device.RackId == null ? string.Empty : $"k{device.RackId}", Ip = device.Ip ?? string.Empty, Model = device.Model ?? string.Empty, Mac = device.Mac, LastSeen = device.LastSeen.ToLocalTime().ToString("d MMM HH:mm"), RackU = device.RackU ?? 0, RackColumn = device.RackColumn ?? 0, RackWidth = device.RackWidth, RackHeight = device.RackHeight, Online = device.LastSeen >= onlineSince && !portDownIds.Contains(device.Id), Ports = [.. device.Ports.OrderBy(port => port.Index).Select(port => new GraphPort { Id = $"p{port.Id}", Index = port.Index, Style = PortStyle.Class(port), Detail = PortStyle.Tooltip(port), Network = port.NetworkName ?? string.Empty, Tagged = port.TaggedNetworks, Name = port.Name ?? string.Empty, Up = port.Up, Speed = port.Speed, PoECapable = port.PoE, PoEPower = port.PoEPower })] })],
-                Edges = [.. links.Select(link => new GraphEdge { Id = $"l{link.Id}", Source = $"d{link.FromPort.DeviceId}", Target = $"d{link.ToDeviceId}", SourcePort = $"p{link.FromPortId}", TargetPort = link.ToPortId != null ? $"p{link.ToPortId}" : string.Empty, Label = link.ToPort == null ? $"{link.FromPort.Index}" : $"{link.FromPort.Index} → {link.ToPort.Index}", Style = PortStyle.Class(link.FromPort), Manual = link.Source == LinkSource.Manual, PoE = PortStyle.IsPoE(link.FromPort), Splitter = link.PoESplitter, Notes = link.Notes ?? string.Empty, Online = link.ToDevice.LastSeen >= onlineSince && (link.FromPort.Up || link.FromPort.DeviceId == link.ToDeviceId), Detail = string.Join(" · ", new[] { PortStyle.Tooltip(link.FromPort), link.PoESplitter ? "PoE Splitter" : null, link.Notes }.Where(part => !string.IsNullOrEmpty(part))) }), .. wireless.Select(device => new GraphEdge { Id = $"w{device.Id}", Source = $"d{device.WirelessApId}", Target = $"d{device.Id}", Label = device.WifiBand ?? "Wi-Fi", Style = "wifi", Wireless = true, Ssid = device.Ssid ?? string.Empty, Band = device.WifiBand ?? string.Empty, Channel = device.WifiChannel, Signal = device.WifiSignal, Rate = device.WifiRate, Online = device.LastSeen >= onlineSince, Detail = string.Join(" · ", new[] { device.Ssid, device.WifiBand, device.WifiChannel == null ? null : $"Channel {device.WifiChannel}", device.WifiSignal == null ? null : $"{device.WifiSignal} dBm", device.WifiRate == null ? null : $"{device.WifiRate} Mbps" }.Where(part => !string.IsNullOrEmpty(part))) })],
+                Nodes = [.. devices.Select(device => ToMapNode(device, device.LastSeen >= onlineSince && !portDownIds.Contains(device.Id)))],
+                Edges = [.. links.Select(link => ToEdge(link, onlineSince)), .. wireless.Select(device => ToWirelessEdge(device, onlineSince))],
                 Floors = [.. floors.Where(floor => floor.Rooms.Count > 0).Select(floor => new GraphFloor { Id = $"f{floor.Id}", Name = floor.Name, Rooms = [.. floor.Rooms.OrderBy(room => room.Name).Select(room => new GraphRoom { Id = $"r{room.Id}", Name = room.Name, X = room.X, Y = room.Y, Width = room.Width, Height = room.Height })] })],
-                Racks = [.. racks.Select(rack => new GraphRack { Id = $"k{rack.Id}", Name = rack.Name, Room = $"r{rack.RoomId}", HeightU = rack.HeightU, Panels = [.. rack.Panels.Select(panel => new GraphPanel { Id = $"q{panel.Id}", Kind = panel.Kind.ToString().ToLowerInvariant(), Name = panel.Name ?? $"{panel.Kind} Panel", Ports = panel.PortCount, Patches = [.. panel.Connections.Select(connection => new GraphPatch { Number = connection.Number, Side = connection.Side.ToString().ToLowerInvariant(), Node = connection.DeviceId == null ? string.Empty : $"d{connection.DeviceId}", Port = connection.PortId == null ? string.Empty : $"p{connection.PortId}", Panel = connection.TargetPanelId == null ? string.Empty : $"q{connection.TargetPanelId}", TargetNumber = connection.TargetNumber ?? 0, TargetSide = connection.TargetSide?.ToString().ToLowerInvariant() ?? string.Empty })], RackU = panel.RackU, RackColumn = panel.RackColumn, RackWidth = panel.RackWidth, RackHeight = panel.RackHeight })], Detail = $"{rack.Room.Floor.Name} / {rack.Room.Name} · {rack.HeightU}U · {(rack.Devices.Count == 0 ? "Empty" : string.Join(", ", rack.Devices.OrderByDescending(device => device.RackU).Select(device => device.Name)))}", Online = rack.Devices.Count == 0 || rack.Devices.Any(device => device.LastSeen >= onlineSince && !portDownIds.Contains(device.Id)) })],
+                Racks = [.. racks.Select(rack => ToRack(rack, onlineSince, portDownIds))],
                 Networks = [.. networks.Select(network => new GraphNetwork { Name = network.Name, VlanId = network.VlanId, Subnet = network.Subnet ?? string.Empty })]
             };
             return new JsonResult(graph);
         }
+
+        /// <summary>
+        /// Builds a device's node with the details every view shows.
+        /// </summary>
+        /// <param name="device">The device.</param>
+        /// <param name="kind">The kind of node to draw it as.</param>
+        /// <param name="online">Whether to show it as online.</param>
+        /// <returns>The node.</returns>
+        private static GraphNode ToNode(Device device, string kind, bool online)
+        {
+            return new GraphNode { Id = $"d{device.Id}", Label = device.Name, Kind = kind, Online = online, Room = device.RoomId == null ? string.Empty : $"r{device.RoomId}", Model = device.Model ?? string.Empty, Ip = device.Ip ?? string.Empty, Mac = device.Mac, LastSeen = Time(device.LastSeen) };
+        }
+
+        /// <summary>
+        /// Builds a device's node for the main map, adding its rack position and ports.
+        /// </summary>
+        /// <param name="device">The device, with its ports, room, floor and rack loaded.</param>
+        /// <param name="online">Whether to show it as online.</param>
+        /// <returns>The node.</returns>
+        private static GraphNode ToMapNode(Device device, bool online)
+        {
+            GraphNode node = ToNode(device, device.Kind.ToString().ToLowerInvariant(), online);
+            node.Detail = string.Join(" · ", new[] { device.Model, device.Ip, device.Room == null ? null : $"{device.Room.Floor.Name} / {device.Room.Name}", device.Rack == null ? null : $"{device.Rack.Name} U{device.RackU}", device.Mac, $"Last Seen {Time(device.LastSeen)}" }.Where(part => !string.IsNullOrEmpty(part)));
+            node.Rack = device.RackId == null ? string.Empty : $"k{device.RackId}";
+            node.RackU = device.RackU ?? 0;
+            node.RackColumn = device.RackColumn ?? 0;
+            node.RackWidth = device.RackWidth;
+            node.RackHeight = device.RackHeight;
+            node.Ports = [.. device.Ports.OrderBy(port => port.Index).Select(port => new GraphPort { Id = $"p{port.Id}", Index = port.Index, Style = PortStyle.Class(port), Detail = PortStyle.Tooltip(port), Network = port.NetworkName ?? string.Empty, Tagged = port.TaggedNetworks, Name = port.Name ?? string.Empty, Up = port.Up, Speed = port.Speed, PoECapable = port.PoE, PoEPower = port.PoEPower })];
+            return node;
+        }
+
+        /// <summary>
+        /// Builds the edge for a cable.
+        /// </summary>
+        /// <param name="link">The link, with its ports and far device loaded.</param>
+        /// <param name="onlineSince">Devices seen since this time (UTC) count as online.</param>
+        /// <returns>The edge.</returns>
+        private static GraphEdge ToEdge(Link link, DateTime onlineSince)
+        {
+            return new GraphEdge { Id = $"l{link.Id}", Source = $"d{link.FromPort.DeviceId}", Target = $"d{link.ToDeviceId}", SourcePort = $"p{link.FromPortId}", TargetPort = link.ToPortId != null ? $"p{link.ToPortId}" : string.Empty, Label = link.ToPort == null ? $"{link.FromPort.Index}" : $"{link.FromPort.Index} → {link.ToPort.Index}", Style = PortStyle.Class(link.FromPort), Manual = link.Source == LinkSource.Manual, PoE = PortStyle.IsPoE(link.FromPort), Splitter = link.PoESplitter, Notes = link.Notes ?? string.Empty, Online = link.ToDevice.LastSeen >= onlineSince && (link.FromPort.Up || link.FromPort.DeviceId == link.ToDeviceId), Detail = string.Join(" · ", new[] { PortStyle.Tooltip(link.FromPort), link.PoESplitter ? "PoE Splitter" : null, link.Notes }.Where(part => !string.IsNullOrEmpty(part))) };
+        }
+
+        /// <summary>
+        /// Builds the Wi-Fi edge from a client's access point to the client.
+        /// </summary>
+        /// <param name="device">The wireless client.</param>
+        /// <param name="onlineSince">Devices seen since this time (UTC) count as online.</param>
+        /// <returns>The edge.</returns>
+        private static GraphEdge ToWirelessEdge(Device device, DateTime onlineSince)
+        {
+            return new GraphEdge { Id = $"w{device.Id}", Source = $"d{device.WirelessApId}", Target = $"d{device.Id}", Label = device.WifiBand ?? "Wi-Fi", Style = "wifi", Wireless = true, Ssid = device.Ssid ?? string.Empty, Band = device.WifiBand ?? string.Empty, Channel = device.WifiChannel, Signal = device.WifiSignal, Rate = device.WifiRate, Online = device.LastSeen >= onlineSince, Detail = string.Join(" · ", new[] { device.Ssid, device.WifiBand, device.WifiChannel == null ? null : $"Channel {device.WifiChannel}", device.WifiSignal == null ? null : $"{device.WifiSignal} dBm", device.WifiRate == null ? null : $"{device.WifiRate} Mbps" }.Where(part => !string.IsNullOrEmpty(part))) };
+        }
+
+        /// <summary>
+        /// Builds a rack with its panels and patches.
+        /// </summary>
+        /// <param name="rack">The rack, with its room, floor, devices, panels and connections loaded.</param>
+        /// <param name="onlineSince">Devices seen since this time (UTC) count as online.</param>
+        /// <param name="portDownIds">Devices whose cables are all down.</param>
+        /// <returns>The rack.</returns>
+        private static GraphRack ToRack(Rack rack, DateTime onlineSince, HashSet<int> portDownIds)
+        {
+            return new GraphRack { Id = $"k{rack.Id}", Name = rack.Name, Room = $"r{rack.RoomId}", HeightU = rack.HeightU, Panels = [.. rack.Panels.Select(panel => new GraphPanel { Id = $"q{panel.Id}", Kind = panel.Kind.ToString().ToLowerInvariant(), Name = panel.Name ?? $"{panel.Kind} Panel", Ports = panel.PortCount, Patches = [.. panel.Connections.Select(connection => new GraphPatch { Number = connection.Number, Side = connection.Side.ToString().ToLowerInvariant(), Node = connection.DeviceId == null ? string.Empty : $"d{connection.DeviceId}", Port = connection.PortId == null ? string.Empty : $"p{connection.PortId}", Panel = connection.TargetPanelId == null ? string.Empty : $"q{connection.TargetPanelId}", TargetNumber = connection.TargetNumber ?? 0, TargetSide = connection.TargetSide?.ToString().ToLowerInvariant() ?? string.Empty })], RackU = panel.RackU, RackColumn = panel.RackColumn, RackWidth = panel.RackWidth, RackHeight = panel.RackHeight })], Detail = $"{rack.Room.Floor.Name} / {rack.Room.Name} · {rack.HeightU}U · {(rack.Devices.Count == 0 ? "Empty" : string.Join(", ", rack.Devices.OrderByDescending(device => device.RackU).Select(device => device.Name)))}", Online = rack.Devices.Count == 0 || rack.Devices.Any(device => device.LastSeen >= onlineSince && !portDownIds.Contains(device.Id)) };
+        }
+
+        /// <summary>
+        /// Formats a time for the details box.
+        /// </summary>
+        /// <param name="value">The time (UTC).</param>
+        /// <returns>The local time as text.</returns>
+        private static string Time(DateTime value) => value.ToLocalTime().ToString("d MMM HH:mm");
     }
 }
