@@ -56,6 +56,7 @@ namespace HoLaMap.Hosts
                     service.LastSeen = now;
                     service.Category = CategoryOf(item.Name);
                     service.Mine = item.Custom && service.Category == ServiceCategory.App;
+                    service.Group = item.Group;
                 }
             }
             await context.SaveChangesAsync(cancellationToken);

@@ -357,7 +357,7 @@
     const showService = nodeId => {
         const service = servicesById.get(nodeId);
         heading(service.label, [[serviceKindNames[service.kind] ?? service.kind], service.online ? ['Reported', 'online'] : ['Missing', 'offline']]);
-        rows(section(), [['Unit', service.name !== service.label ? service.name : ''], ['Host', rawById.has(service.host.id) ? deviceButton(service.host.id) : service.host.label], ['Category', service.category], ['Owner', service.mine ? 'Mine' : 'Third Party'], ['Source', service.manual ? 'Added by Hand' : 'Reported by Host'], ['Last Reported', service.lastSeen]]);
+        rows(section(), [['Unit', service.name !== service.label ? service.name : ''], ['Host', rawById.has(service.host.id) ? deviceButton(service.host.id) : service.host.label], ['Category', service.category], ['Compose Project', service.group], ['Owner', service.mine ? 'Mine' : 'Third Party'], ['Source', service.manual ? 'Added by Hand' : 'Reported by Host'], ['Last Reported', service.lastSeen]]);
     };
 
     const showDevice = nodeId => {
@@ -1546,25 +1546,65 @@
         // Storage is only a convenience for remembering the choice.
     }
 
-    // The Services view: each host as a box holding its services, in columns of up to ten.
+    // The Services view: each host as a box holding its services. Containers from the same Docker Compose project share a box inside the host, titled with the project.
+    // Services and project boxes fill columns top to bottom, about ten chips tall, in name order.
     const servicesView = () => {
         const hosts = services.filter(host => host.services.length);
-        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: service.label, kind: service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
+        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: service.label, kind: service.kind === 'Docker' ? 'docker' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
     };
     const drawServices = (layers, bounds) => {
-        const rowsPerColumn = 10;
+        const maxHeight = 10 * (chipHeight + stackGap) - stackGap;
         let left = 0;
         graph.hosts.forEach(host => {
+            const counts = new Map();
+            host.services.filter(service => service.group).forEach(service => counts.set(service.group, (counts.get(service.group) ?? 0) + 1));
+            const items = [];
+            host.services.forEach(service => {
+                const node = nodesById.get(service.id);
+                if (counts.get(service.group) > 1) {
+                    let item = items.find(entry => entry.group === service.group);
+                    if (!item) {
+                        item = { group: service.group, label: service.group, nodes: [] };
+                        items.push(item);
+                    }
+                    item.nodes.push(node);
+                } else {
+                    items.push({ label: service.label, nodes: [node] });
+                }
+            });
+            items.sort((a, b) => a.label.localeCompare(b.label));
+            items.forEach(item => {
+                const chipWidth = Math.max(...item.nodes.map(node => chipSize(node).width));
+                item.width = item.group ? Math.max(chipWidth, textWidth(item.label, true) + 16) + roomPadding * 2 : chipWidth;
+                item.height = item.group ? roomHeader + item.nodes.length * (chipHeight + stackGap) - stackGap + roomPadding : chipHeight;
+            });
             const columns = [];
-            host.services.forEach((service, index) => (columns[Math.floor(index / rowsPerColumn)] ??= []).push(nodesById.get(service.id)));
-            const widths = columns.map(column => Math.max(...column.map(node => chipSize(node).width)));
-            const innerWidth = Math.max(widths.reduce((sum, width) => sum + width, 0) + (columns.length - 1) * groupPadding, textWidth(host.label, true) * 14 / 12 + groupPadding);
-            const innerHeight = Math.min(host.services.length, rowsPerColumn) * (chipHeight + stackGap) - stackGap;
+            items.forEach(item => {
+                const column = columns[columns.length - 1];
+                if (column && column.height + stackGap + item.height <= maxHeight) {
+                    column.items.push(item);
+                    column.height += stackGap + item.height;
+                } else {
+                    columns.push({ items: [item], height: item.height });
+                }
+            });
+            columns.forEach(column => column.width = Math.max(...column.items.map(item => item.width)));
+            const innerWidth = Math.max(columns.reduce((sum, column) => sum + column.width, 0) + (columns.length - 1) * groupPadding, textWidth(host.label, true) * 14 / 12 + groupPadding);
+            const innerHeight = Math.max(...columns.map(column => column.height));
             drawFrame(host.label, left, 0, innerWidth + groupPadding * 2, titleHeight + innerHeight + groupPadding, layers.boxes);
             let x = left + groupPadding;
-            columns.forEach((column, index) => {
-                column.forEach((node, row) => drawNode(node, x, titleHeight + row * (chipHeight + stackGap), widths[index], chipHeight, layers.nodes, true));
-                x += widths[index] + groupPadding;
+            columns.forEach(column => {
+                let y = titleHeight;
+                column.items.forEach(item => {
+                    if (item.group) {
+                        drawRoom(item.label, x, y, column.width, item.height, layers.boxes);
+                        item.nodes.forEach((node, row) => drawNode(node, x + roomPadding, y + roomHeader + row * (chipHeight + stackGap), column.width - roomPadding * 2, chipHeight, layers.nodes, true));
+                    } else {
+                        drawNode(item.nodes[0], x, y, column.width, chipHeight, layers.nodes, true);
+                    }
+                    y += item.height + stackGap;
+                });
+                x += column.width + groupPadding;
             });
             bounds.height = Math.max(bounds.height, titleHeight + innerHeight + groupPadding);
             left += innerWidth + groupPadding * 2 + groupGap;

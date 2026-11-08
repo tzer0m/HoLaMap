@@ -17,4 +17,5 @@
 ## Next Up
 - More layers: services and dependencies, firewall zones, Tailscale, and policies, public exposure.
 - Pocket ID sign-in (OIDC in the app) when it's deployed to Tyrion.
+- New `Hosts:Token` for the services endpoint when it's deployed (the dev one has been shared).
 - README (what it does, settings, secrets) when it's deployed.

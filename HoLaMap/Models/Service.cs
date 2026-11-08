@@ -41,6 +41,11 @@ namespace HoLaMap.Models
         public bool Mine { get; set; }
 
         /// <summary>
+        /// Gets or sets the group it was started with, such as its Docker Compose project, if any.
+        /// </summary>
+        public string? Group { get; set; }
+
+        /// <summary>
         /// Gets or sets where it came from.
         /// </summary>
         public ServiceSource Source { get; set; }

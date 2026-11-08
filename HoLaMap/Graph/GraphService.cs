@@ -41,6 +41,11 @@ namespace HoLaMap.Graph
         public bool Mine { get; set; }
 
         /// <summary>
+        /// The group it was started with, such as its Docker Compose project, if any.
+        /// </summary>
+        public string Group { get; set; } = string.Empty;
+
+        /// <summary>
         /// Whether it was in its host's latest report, or was added by hand.
         /// </summary>
         public bool Online { get; set; }

@@ -466,6 +466,9 @@ namespace HoLaMap.Migrations
                     b.Property<int>("DeviceId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Group")
+                        .HasColumnType("text");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasColumnType("text");

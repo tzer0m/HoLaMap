@@ -1122,6 +1122,11 @@ body:has(.map-layout) .details {
     border-color: #9ea3ad;
 }
 
+.swatch.box-docker {
+    background: #183a63;
+    border-color: #2496ed;
+}
+
 .swatch-wave {
     width: 18px;
     height: 10px;
@@ -1357,6 +1362,11 @@ body:has(.map-layout) .details {
 .map-node.service .map-node-box {
     fill: #33363d;
     stroke: #9ea3ad;
+}
+
+.map-node.docker .map-node-box {
+    fill: #183a63;
+    stroke: #2496ed;
 }
 
 .map-node.coordinator .map-node-label,

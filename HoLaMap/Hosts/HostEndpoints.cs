@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using HoLaMap.Hosts.Models;
 using HoLaMap.Models;
 using Microsoft.Extensions.Options;
 
@@ -17,6 +18,7 @@ namespace HoLaMap.Hosts
         public static void MapHostEndpoints(this WebApplication app)
         {
             app.MapPost("/api/services/{host}/systemd", ReportSystemdAsync);
+            app.MapPost("/api/services/{host}/docker", ReportDockerAsync);
         }
 
         /// <summary>
@@ -28,15 +30,45 @@ namespace HoLaMap.Hosts
         /// <param name="options">The host report settings.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The number of services, unauthorised, or not found if the host isn't on the map.</returns>
-        private static async Task<IResult> ReportSystemdAsync(string host, HttpRequest request, HostSyncService sync, IOptionsSnapshot<HostReportOptions> options, CancellationToken cancellationToken)
+        private static Task<IResult> ReportSystemdAsync(string host, HttpRequest request, HostSyncService sync, IOptionsSnapshot<HostReportOptions> options, CancellationToken cancellationToken)
         {
-            if (!IsAuthorised(request, options.Value.Token))
+            return ReportAsync(host, request, sync, options.Value.Token, ServiceKind.Systemd, output => SystemdParser.Services(output, options.Value.SystemdInclude), cancellationToken);
+        }
+
+        /// <summary>
+        /// Syncs a host's Docker containers from the output of docker ps --format '{{json .}}', sent as the request body.
+        /// </summary>
+        /// <param name="host">The host's device name or MAC address.</param>
+        /// <param name="request">The request.</param>
+        /// <param name="sync">The host sync service.</param>
+        /// <param name="options">The host report settings.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The number of services, unauthorised, or not found if the host isn't on the map.</returns>
+        private static Task<IResult> ReportDockerAsync(string host, HttpRequest request, HostSyncService sync, IOptionsSnapshot<HostReportOptions> options, CancellationToken cancellationToken)
+        {
+            return ReportAsync(host, request, sync, options.Value.Token, ServiceKind.Docker, DockerParser.Services, cancellationToken);
+        }
+
+        /// <summary>
+        /// Checks the token, reads the report from the request body, and syncs one kind of service on the host.
+        /// </summary>
+        /// <param name="host">The host's device name or MAC address.</param>
+        /// <param name="request">The request.</param>
+        /// <param name="sync">The host sync service.</param>
+        /// <param name="token">The expected token.</param>
+        /// <param name="kind">The kind of service reported.</param>
+        /// <param name="parse">Turns the report into services.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The number of services, unauthorised, or not found if the host isn't on the map.</returns>
+        private static async Task<IResult> ReportAsync(string host, HttpRequest request, HostSyncService sync, string token, ServiceKind kind, Func<string, List<ReportedService>> parse, CancellationToken cancellationToken)
+        {
+            if (!IsAuthorised(request, token))
             {
                 return Results.Unauthorized();
             }
             using StreamReader reader = new(request.Body);
             string output = await reader.ReadToEndAsync(cancellationToken);
-            int? count = await sync.SyncAsync(host, ServiceKind.Systemd, SystemdParser.Services(output, options.Value.SystemdInclude), cancellationToken);
+            int? count = await sync.SyncAsync(host, kind, parse(output), cancellationToken);
             return count == null ? Results.NotFound($"No device called {host}.") : Results.Ok(new { Services = count });
         }
 
