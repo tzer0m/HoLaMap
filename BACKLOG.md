@@ -9,8 +9,14 @@
 - PoE splitters as a property on links, drawn inline with PoE before and plain Ethernet after.
 - Wi-Fi links from each client's current AP, shown for clients with a room (SSID, band, channel, signal, rate in the details).
 - VLAN filter on the UniFi view (membership by IP subnet, untagged solid, tagged dashed, tagged lists synced from port overrides/profiles).
+- Zigbee view from ZHA over the Home Assistant WebSocket API: devices and neighbour tables, drawn as a tree (routers back to the coordinator along their strongest links, end devices under their parents), coordinator hung off its host by USB, LQI on the links, rooms set by hand, grouped by floor, and shown on the All view.
+- Hue Bridge as a second Zigbee network over its local API, every device hanging off the bridge, with All, Zigbee and Hue tabs on the Zigbee view.
+- Key that only lists what the current view shows, including the rack view.
+- Devices that leave ZHA or the Hue Bridge stay greyed out with their room, and untouched UniFi clients (no room, rack, manual link, patch or merge) are forgotten, both after `ForgetAfterDays` (30 by default).
 
 ## Next Up
+- Pocket ID sign-in (OIDC in the app) when it's deployed to Tyrion.
+- README (what it does, settings, secrets) when it's deployed.
 
 ## Later
 - Separate colours for 2.5 and 10 Gbps (not needed while everything is 1 Gbps).
