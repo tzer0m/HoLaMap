@@ -75,6 +75,11 @@ namespace HoLaMap.Data
         public DbSet<ZigbeeNeighbor> ZigbeeNeighbors => Set<ZigbeeNeighbor>();
 
         /// <summary>
+        /// Gets the services running on devices.
+        /// </summary>
+        public DbSet<Service> Services => Set<Service>();
+
+        /// <summary>
         /// Configures keys, indexes and relationships.
         /// </summary>
         /// <param name="modelBuilder">The model builder.</param>
@@ -111,6 +116,10 @@ namespace HoLaMap.Data
             modelBuilder.Entity<PatchConnection>().HasOne(connection => connection.TargetPanel).WithMany().HasForeignKey(connection => connection.TargetPanelId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<PatchConnection>().Property(connection => connection.TargetSide).HasConversion<string>();
             modelBuilder.Entity<Device>().HasOne(device => device.Room).WithMany(room => room.Devices).HasForeignKey(device => device.RoomId).OnDelete(DeleteBehavior.SetNull);
+            modelBuilder.Entity<Service>().HasOne(service => service.Device).WithMany(device => device.Services).HasForeignKey(service => service.DeviceId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<Service>().HasIndex(service => new { service.DeviceId, service.Kind, service.Name }).IsUnique();
+            modelBuilder.Entity<Service>().Property(service => service.Kind).HasConversion<string>();
+            modelBuilder.Entity<Service>().Property(service => service.Source).HasConversion<string>();
         }
     }
 }

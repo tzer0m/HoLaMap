@@ -72,7 +72,7 @@ namespace HoLaMap.UniFi
         }
 
         /// <summary>
-        /// Forgets clients that haven't been seen for a while and were never placed, linked by hand, patched or merged, so changing Wi-Fi MACs don't pile up.
+        /// Forgets clients that haven't been seen for a while and were never placed, linked by hand, patched, merged or given services, so changing Wi-Fi MACs don't pile up.
         /// </summary>
         /// <param name="now">The time of this sync (UTC).</param>
         /// <param name="cancellationToken">Cancellation token.</param>
@@ -84,7 +84,7 @@ namespace HoLaMap.UniFi
                 return;
             }
             DateTime forgetBefore = now.AddDays(-options.Value.ForgetAfterDays);
-            await context.Devices.Where(device => device.Kind == DeviceKind.Client && device.LastSeen < forgetBefore && device.RoomId == null && device.RackId == null && !device.Macs.Any() && !context.Links.Any(link => link.ToDeviceId == device.Id && link.Source == LinkSource.Manual) && !context.PatchConnections.Any(connection => connection.DeviceId == device.Id)).ExecuteDeleteAsync(cancellationToken);
+            await context.Devices.Where(device => device.Kind == DeviceKind.Client && device.LastSeen < forgetBefore && device.RoomId == null && device.RackId == null && !device.Macs.Any() && !context.Links.Any(link => link.ToDeviceId == device.Id && link.Source == LinkSource.Manual) && !context.PatchConnections.Any(connection => connection.DeviceId == device.Id) && !device.Services.Any()).ExecuteDeleteAsync(cancellationToken);
         }
 
         /// <summary>

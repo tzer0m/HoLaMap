@@ -51,6 +51,11 @@ namespace HoLaMap.Models
         public List<DeviceMac> Macs { get; set; } = [];
 
         /// <summary>
+        /// Gets or sets the services running on the device.
+        /// </summary>
+        public List<Service> Services { get; set; } = [];
+
+        /// <summary>
         /// Gets or sets the identifier of the room the device is in, if placed.
         /// </summary>
         public int? RoomId { get; set; }

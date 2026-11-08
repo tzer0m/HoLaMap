@@ -451,6 +451,40 @@ namespace HoLaMap.Migrations
                     b.ToTable("Rooms");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.Service", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DeviceId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastSeen")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId", "Kind", "Name")
+                        .IsUnique();
+
+                    b.ToTable("Services");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.ZigbeeDevice", b =>
                 {
                     b.Property<int>("Id")
@@ -692,6 +726,17 @@ namespace HoLaMap.Migrations
                     b.Navigation("Floor");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.Service", b =>
+                {
+                    b.HasOne("HoLaMap.Models.Device", "Device")
+                        .WithMany("Services")
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.ZigbeeDevice", b =>
                 {
                     b.HasOne("HoLaMap.Models.Room", "Room")
@@ -718,6 +763,8 @@ namespace HoLaMap.Migrations
                     b.Navigation("Macs");
 
                     b.Navigation("Ports");
+
+                    b.Navigation("Services");
                 });
 
             modelBuilder.Entity("HoLaMap.Models.Floor", b =>
