@@ -120,6 +120,7 @@ namespace HoLaMap.Data
             modelBuilder.Entity<Service>().HasIndex(service => new { service.DeviceId, service.Kind, service.Name }).IsUnique();
             modelBuilder.Entity<Service>().Property(service => service.Kind).HasConversion<string>();
             modelBuilder.Entity<Service>().Property(service => service.Source).HasConversion<string>();
+            modelBuilder.Entity<Service>().Property(service => service.Category).HasConversion<string>();
         }
     }
 }

@@ -31,6 +31,11 @@ namespace HoLaMap.Models
         public ServiceKind Kind { get; set; }
 
         /// <summary>
+        /// Gets or sets what it's for.
+        /// </summary>
+        public ServiceCategory Category { get; set; }
+
+        /// <summary>
         /// Gets or sets where it came from.
         /// </summary>
         public ServiceSource Source { get; set; }

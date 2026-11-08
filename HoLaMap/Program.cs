@@ -1,4 +1,5 @@
 using HoLaMap.Data;
+using HoLaMap.Hosts;
 using HoLaMap.Hue;
 using HoLaMap.UniFi;
 using HoLaMap.Zigbee;
@@ -21,9 +22,12 @@ builder.Services.Configure<HueOptions>(builder.Configuration.GetSection("Hue"));
 builder.Services.AddHttpClient<HueClient>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator });
 builder.Services.AddScoped<HueSyncService>();
 builder.Services.AddHostedService<HueSyncWorker>();
+builder.Services.Configure<HostReportOptions>(builder.Configuration.GetSection("Hosts"));
+builder.Services.AddScoped<HostSyncService>();
 
 WebApplication app = builder.Build();
 app.UseRouting();
 app.MapStaticAssets();
 app.MapRazorPages().WithStaticAssets();
+app.MapHostEndpoints();
 app.Run();
