@@ -40,15 +40,22 @@ namespace HoLaMap.Hosts
         }
 
         /// <summary>
-        /// Gets the names of the services set up by hand, plus any packaged ones asked for, without the .service suffix.
+        /// Gets the services set up by hand, plus any packaged ones asked for, named without the .service suffix.
         /// </summary>
         /// <param name="output">The output of systemctl show.</param>
         /// <param name="include">Packaged services to keep as well.</param>
-        /// <returns>The service names.</returns>
-        public static List<string> ServiceNames(string output, List<string> include)
+        /// <returns>The services.</returns>
+        public static List<ReportedService> Services(string output, List<string> include)
         {
-            return [.. Parse(output).Where(unit => unit.FragmentPath?.StartsWith(LocalUnitPath, StringComparison.Ordinal) == true || (!string.IsNullOrEmpty(unit.FragmentPath) && include.Contains(Name(unit), StringComparer.OrdinalIgnoreCase))).Select(Name).Distinct().OrderBy(name => name)];
+            return [.. Parse(output).Where(unit => IsCustom(unit) || (!string.IsNullOrEmpty(unit.FragmentPath) && include.Contains(Name(unit), StringComparer.OrdinalIgnoreCase))).DistinctBy(Name).OrderBy(Name).Select(unit => new ReportedService { Name = Name(unit), Custom = IsCustom(unit) })];
         }
+
+        /// <summary>
+        /// Checks whether a unit was set up by hand, from where its unit file lives.
+        /// </summary>
+        /// <param name="unit">The unit.</param>
+        /// <returns>Whether its unit file is in /etc/systemd/system.</returns>
+        private static bool IsCustom(SystemdUnit unit) => unit.FragmentPath?.StartsWith(LocalUnitPath, StringComparison.Ordinal) == true;
 
         /// <summary>
         /// Gets a unit's name without the .service suffix.

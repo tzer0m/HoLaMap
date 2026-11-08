@@ -357,7 +357,7 @@
     const showService = nodeId => {
         const service = servicesById.get(nodeId);
         heading(service.label, [[serviceKindNames[service.kind] ?? service.kind], service.online ? ['Reported', 'online'] : ['Missing', 'offline']]);
-        rows(section(), [['Host', rawById.has(service.host.id) ? deviceButton(service.host.id) : service.host.label], ['Category', service.category], ['Source', service.manual ? 'Added by Hand' : 'Reported by Host'], ['Last Reported', service.lastSeen]]);
+        rows(section(), [['Host', rawById.has(service.host.id) ? deviceButton(service.host.id) : service.host.label], ['Category', service.category], ['Owner', service.mine ? 'Mine' : 'Third Party'], ['Source', service.manual ? 'Added by Hand' : 'Reported by Host'], ['Last Reported', service.lastSeen]]);
     };
 
     const showDevice = nodeId => {
@@ -1550,7 +1550,7 @@
     const servicesSelect = document.getElementById('services-select');
     const servicesView = () => {
         const hosts = services.map(host => ({ ...host, services: host.services.filter(service => !servicesSelect.value || service.category === servicesSelect.value) })).filter(host => host.services.length);
-        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: service.label, kind: 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
+        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: service.label, kind: service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
     };
     const drawServices = (layers, bounds) => {
         const rowsPerColumn = 10;

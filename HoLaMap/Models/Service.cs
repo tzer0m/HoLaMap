@@ -36,6 +36,11 @@ namespace HoLaMap.Models
         public ServiceCategory Category { get; set; }
 
         /// <summary>
+        /// Gets or sets whether it's one of your own apps rather than third-party software.
+        /// </summary>
+        public bool Mine { get; set; }
+
+        /// <summary>
         /// Gets or sets where it came from.
         /// </summary>
         public ServiceSource Source { get; set; }

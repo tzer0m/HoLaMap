@@ -36,7 +36,7 @@ namespace HoLaMap.Hosts
             }
             using StreamReader reader = new(request.Body);
             string output = await reader.ReadToEndAsync(cancellationToken);
-            int? count = await sync.SyncAsync(host, ServiceKind.Systemd, SystemdParser.ServiceNames(output, options.Value.SystemdInclude), cancellationToken);
+            int? count = await sync.SyncAsync(host, ServiceKind.Systemd, SystemdParser.Services(output, options.Value.SystemdInclude), cancellationToken);
             return count == null ? Results.NotFound($"No device called {host}.") : Results.Ok(new { Services = count });
         }
 

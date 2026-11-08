@@ -1,4 +1,5 @@
 using HoLaMap.Data;
+using HoLaMap.Hosts.Models;
 using HoLaMap.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -17,10 +18,10 @@ namespace HoLaMap.Hosts
         /// </summary>
         /// <param name="host">The host's device name or MAC address.</param>
         /// <param name="kind">The kind of service reported.</param>
-        /// <param name="names">The names of the services running.</param>
+        /// <param name="reported">The services running.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The number of services reported, or null if no device matches the host.</returns>
-        public async Task<int?> SyncAsync(string host, ServiceKind kind, List<string> names, CancellationToken cancellationToken)
+        public async Task<int?> SyncAsync(string host, ServiceKind kind, List<ReportedService> reported, CancellationToken cancellationToken)
         {
             string name = host.Trim().ToLowerInvariant();
             string mac = name.Replace('-', ':');
@@ -30,33 +31,35 @@ namespace HoLaMap.Hosts
                 return null;
             }
             DateTime now = DateTime.UtcNow;
-            HashSet<string> reported = [.. names];
+            HashSet<string> names = [.. reported.Select(item => item.Name)];
 
             // A service that has gone from its host stays greyed out in case it comes back, and is forgotten once it hasn't been reported for a while.
             int forgetAfterDays = options.Value.ForgetAfterDays;
-            foreach (Service missing in device.Services.Where(service => service.Kind == kind && service.Source == ServiceSource.Synced && !reported.Contains(service.Name)).ToList())
+            foreach (Service missing in device.Services.Where(service => service.Kind == kind && service.Source == ServiceSource.Synced && !names.Contains(service.Name)).ToList())
             {
                 if (forgetAfterDays > 0 && missing.LastSeen < now.AddDays(-forgetAfterDays))
                 {
                     context.Services.Remove(missing);
                 }
             }
-            foreach (string serviceName in reported)
+            foreach (ReportedService item in reported)
             {
-                Service? service = device.Services.FirstOrDefault(item => item.Kind == kind && item.Name == serviceName);
+                Service? service = device.Services.FirstOrDefault(existing => existing.Kind == kind && existing.Name == item.Name);
                 if (service == null)
                 {
-                    service = new Service { Name = serviceName, Kind = kind, Source = ServiceSource.Synced };
+                    service = new Service { Name = item.Name, Kind = kind, Source = ServiceSource.Synced };
                     device.Services.Add(service);
                 }
                 if (service.Source == ServiceSource.Synced)
                 {
+                    // It's one of your own apps if it was set up by hand and isn't a known tool with its own category.
                     service.LastSeen = now;
-                    service.Category = CategoryOf(serviceName);
+                    service.Category = CategoryOf(item.Name);
+                    service.Mine = item.Custom && service.Category == ServiceCategory.App;
                 }
             }
             await context.SaveChangesAsync(cancellationToken);
-            return reported.Count;
+            return names.Count;
         }
 
         /// <summary>

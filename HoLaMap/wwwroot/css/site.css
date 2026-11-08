@@ -1112,9 +1112,14 @@ body:has(.map-layout) .details {
     border-color: #e0a84a;
 }
 
-.swatch.box-service {
+.swatch.box-app {
     background: #24402c;
     border-color: #5cb85c;
+}
+
+.swatch.box-service {
+    background: #33363d;
+    border-color: #9ea3ad;
 }
 
 .swatch-wave {
@@ -1344,9 +1349,14 @@ body:has(.map-layout) .details {
     stroke: #e0a84a;
 }
 
-.map-node.service .map-node-box {
+.map-node.app .map-node-box {
     fill: #24402c;
     stroke: #5cb85c;
+}
+
+.map-node.service .map-node-box {
+    fill: #33363d;
+    stroke: #9ea3ad;
 }
 
 .map-node.coordinator .map-node-label,

@@ -31,6 +31,11 @@ namespace HoLaMap.Graph
         public bool Manual { get; set; }
 
         /// <summary>
+        /// Whether it's one of your own apps rather than third-party software.
+        /// </summary>
+        public bool Mine { get; set; }
+
+        /// <summary>
         /// Whether it was in its host's latest report, or was added by hand.
         /// </summary>
         public bool Online { get; set; }

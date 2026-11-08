@@ -473,6 +473,9 @@ namespace HoLaMap.Migrations
                     b.Property<DateTime?>("LastSeen")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("Mine")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
