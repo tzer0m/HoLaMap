@@ -15,9 +15,6 @@
 - Devices that leave ZHA or the Hue Bridge stay greyed out with their room, and untouched UniFi clients (no room, rack, manual link, patch or merge) are forgotten, both after `ForgetAfterDays` (30 by default).
 
 ## Next Up
+- More layers: services and dependencies, firewall zones and policies, public exposure.
 - Pocket ID sign-in (OIDC in the app) when it's deployed to Tyrion.
 - README (what it does, settings, secrets) when it's deployed.
-
-## Later
-- Separate colours for 2.5 and 10 Gbps (not needed while everything is 1 Gbps).
-- More layers: services and dependencies, firewall zones and policies, public exposure.
