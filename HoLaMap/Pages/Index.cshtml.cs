@@ -143,6 +143,30 @@ namespace HoLaMap.Pages
         }
 
         /// <summary>
+        /// Returns each host with the services running on it.
+        /// </summary>
+        /// <returns>The hosts and their services as JSON.</returns>
+        public async Task<JsonResult> OnGetServicesAsync()
+        {
+            List<Device> hosts = await context.Devices.Where(device => device.Services.Any()).Include(device => device.Services).OrderBy(device => device.Name).ToListAsync();
+            DateTime onlineSince = DateTime.UtcNow.AddMinutes(-configuration.GetValue<int>("Map:OfflineAfterMinutes"));
+            List<GraphHost> result = [.. hosts.Select(host => ToHost(host, onlineSince))];
+            return new JsonResult(result);
+        }
+
+        /// <summary>
+        /// Builds the Services view's box for a host. A synced service counts as there if it was in the host's latest report of its kind.
+        /// </summary>
+        /// <param name="host">The host, with its services loaded.</param>
+        /// <param name="onlineSince">Devices seen since this time (UTC) count as online.</param>
+        /// <returns>The host.</returns>
+        private static GraphHost ToHost(Device host, DateTime onlineSince)
+        {
+            Dictionary<ServiceKind, DateTime?> latest = host.Services.Where(service => service.Source == ServiceSource.Synced).GroupBy(service => service.Kind).ToDictionary(group => group.Key, group => group.Max(service => service.LastSeen));
+            return new GraphHost { Id = $"d{host.Id}", Label = host.Name, Online = host.LastSeen >= onlineSince, Services = [.. host.Services.OrderBy(service => service.Name).Select(service => new GraphService { Id = $"s{service.Id}", Label = service.Name, Kind = service.Kind.ToString(), Category = service.Category.ToString(), Manual = service.Source == ServiceSource.Manual, Online = service.Source == ServiceSource.Manual || service.LastSeen == latest.GetValueOrDefault(service.Kind), LastSeen = service.LastSeen == null ? string.Empty : Time(service.LastSeen.Value) })] };
+        }
+
+        /// <summary>
         /// Builds a device's node with the details every view shows.
         /// </summary>
         /// <param name="device">The device.</param>

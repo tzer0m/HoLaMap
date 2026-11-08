@@ -25,6 +25,7 @@
             <li data-key="router"><span class="swatch box box-router"></span>Router</li>
             <li data-key="end-device"><span class="swatch box box-zigbee"></span>End Device</li>
             <li data-key="hue"><span class="swatch box box-hue"></span>Hue Device</li>
+            <li data-key="service"><span class="swatch box box-service"></span>Service</li>
         </ul>
     </div>
 </header>
@@ -34,16 +35,26 @@
     <button type="button" data-view="floorplan">Floor Plan</button>
     <button type="button" data-view="network">Network</button>
     <button type="button" data-view="zigbee">Zigbee</button>
+    <button type="button" data-view="services">Services</button>
 </nav>
 
 <div class="map-layout">
     <div class="map-wrap">
-        <div id="map" class="map" data-graph-url="@Url.Page("/Index", "Graph")" data-zigbee-url="@Url.Page("/Index", "Zigbee")"></div>
+        <div id="map" class="map" data-graph-url="@Url.Page("/Index", "Graph")" data-zigbee-url="@Url.Page("/Index", "Zigbee")" data-services-url="@Url.Page("/Index", "Services")"></div>
         <select id="vlan-select" class="vlan-select" title="Network" hidden></select>
         <select id="zigbee-select" class="vlan-select" title="Zigbee Network" hidden>
             <option value="">All</option>
             <option value="zha">Zigbee</option>
             <option value="hue">Hue</option>
+        </select>
+        <select id="services-select" class="vlan-select" title="Category" hidden>
+            <option value="">All</option>
+            <option value="Asterisk">Asterisk</option>
+            <option value="Cloudflared">Cloudflared</option>
+            <option value="Exporter">Exporter</option>
+            <option value="GitHub">GitHub</option>
+            <option value="Semaphore">Semaphore</option>
+            <option value="Tailscale">Tailscale</option>
         </select>
     </div>
     <aside id="details" class="details" data-splitter-url="@Url.Page("/Index", "Splitter")" data-room-url="@Url.Page("/Index", "Room")" data-zigbee-room-url="@Url.Page("/Index", "ZigbeeRoom")">Select a device or link to see its details.</aside>

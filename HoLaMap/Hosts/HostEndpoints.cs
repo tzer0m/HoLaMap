@@ -28,7 +28,7 @@ namespace HoLaMap.Hosts
         /// <param name="options">The host report settings.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The number of services, unauthorised, or not found if the host isn't on the map.</returns>
-        private static async Task<IResult> ReportSystemdAsync(string host, HttpRequest request, HostSyncService sync, IOptions<HostReportOptions> options, CancellationToken cancellationToken)
+        private static async Task<IResult> ReportSystemdAsync(string host, HttpRequest request, HostSyncService sync, IOptionsSnapshot<HostReportOptions> options, CancellationToken cancellationToken)
         {
             if (!IsAuthorised(request, options.Value.Token))
             {

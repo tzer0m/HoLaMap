@@ -33,6 +33,11 @@ namespace HoLaMap.Models
         /// <summary>
         /// A GitHub Actions runner.
         /// </summary>
-        GitHub
+        GitHub,
+
+        /// <summary>
+        /// The Asterisk phone system.
+        /// </summary>
+        Asterisk
     }
 }

@@ -350,7 +350,21 @@
         }
     };
 
+    // Services view: what each host reports running, fetched the first time the tab is opened.
+    let services = null;
+    const servicesById = new Map();
+    const serviceKindNames = { Systemd: 'systemd', Docker: 'Docker', TrueNasApp: 'TrueNAS App', Other: 'Other' };
+    const showService = nodeId => {
+        const service = servicesById.get(nodeId);
+        heading(service.label, [[serviceKindNames[service.kind] ?? service.kind], service.online ? ['Reported', 'online'] : ['Missing', 'offline']]);
+        rows(section(), [['Host', rawById.has(service.host.id) ? deviceButton(service.host.id) : service.host.label], ['Category', service.category], ['Source', service.manual ? 'Added by Hand' : 'Reported by Host'], ['Last Reported', service.lastSeen]]);
+    };
+
     const showDevice = nodeId => {
+        if (servicesById.has(nodeId)) {
+            showService(nodeId);
+            return;
+        }
         if (zigbeeById.has(nodeId) && !rawById.has(nodeId)) {
             showZigbee(nodeId);
             return;
@@ -1532,6 +1546,41 @@
         // Storage is only a convenience for remembering the choice.
     }
 
+    // The Services view: each host as a box holding every service, or just the chosen category's, in columns of up to ten.
+    const servicesSelect = document.getElementById('services-select');
+    const servicesView = () => {
+        const hosts = services.map(host => ({ ...host, services: host.services.filter(service => !servicesSelect.value || service.category === servicesSelect.value) })).filter(host => host.services.length);
+        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: service.label, kind: 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
+    };
+    const drawServices = (layers, bounds) => {
+        const rowsPerColumn = 10;
+        let left = 0;
+        graph.hosts.forEach(host => {
+            const columns = [];
+            host.services.forEach((service, index) => (columns[Math.floor(index / rowsPerColumn)] ??= []).push(nodesById.get(service.id)));
+            const widths = columns.map(column => Math.max(...column.map(node => chipSize(node).width)));
+            const innerWidth = Math.max(widths.reduce((sum, width) => sum + width, 0) + (columns.length - 1) * groupPadding, textWidth(host.label, true) * 14 / 12 + groupPadding);
+            const innerHeight = Math.min(host.services.length, rowsPerColumn) * (chipHeight + stackGap) - stackGap;
+            drawFrame(host.label, left, 0, innerWidth + groupPadding * 2, titleHeight + innerHeight + groupPadding, layers.boxes);
+            let x = left + groupPadding;
+            columns.forEach((column, index) => {
+                column.forEach((node, row) => drawNode(node, x, titleHeight + row * (chipHeight + stackGap), widths[index], chipHeight, layers.nodes, true));
+                x += widths[index] + groupPadding;
+            });
+            bounds.height = Math.max(bounds.height, titleHeight + innerHeight + groupPadding);
+            left += innerWidth + groupPadding * 2 + groupGap;
+        });
+        bounds.width = left - groupGap;
+    };
+    try {
+        const storedServices = localStorage.getItem('holamap.services');
+        if ([...servicesSelect.options].some(option => option.value === storedServices)) {
+            servicesSelect.value = storedServices;
+        }
+    } catch (error) {
+        // Storage is only a convenience for remembering the category.
+    }
+
     // The key only lists what the current view can show. Port colours count too where ports are drawn, which isn't on the Floor Plan's name-only chips.
     const legend = document.getElementById('legend');
     const updateKey = mode => {
@@ -1571,12 +1620,29 @@
                 return;
             }
         }
-        useView(mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? zigbeeView() : mode === 'all' ? withZigbee() : withZigbee(false));
+        if (mode === 'services' && !services) {
+            try {
+                services = await (await fetch(container.dataset.servicesUrl)).json();
+            } catch (error) {
+                services = [];
+            }
+            services.forEach(host => host.services.forEach(service => servicesById.set(service.id, { ...service, host: host })));
+            if (id !== renderId) {
+                return;
+            }
+        }
+        useView(mode === 'services' ? servicesView() : mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? zigbeeView() : mode === 'all' ? withZigbee() : withZigbee(false));
         tabs.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.view === mode));
         updateKey(mode);
         vlanSelect.hidden = mode !== 'network' || !raw.networks.length;
         zigbeeSelect.hidden = mode !== 'zigbee';
+        servicesSelect.hidden = mode !== 'services';
         details.textContent = defaultDetails;
+        if (mode === 'services' && !graph.nodes.length) {
+            container.replaceChildren();
+            container.textContent = services.length ? 'No services in this category yet.' : 'No services yet. Hosts report them to /api/services/{host}/systemd.';
+            return;
+        }
         if ((mode === 'network' || mode === 'zigbee') && !graph.nodes.length) {
             container.replaceChildren();
             container.textContent = mode === 'zigbee' ? zigbeeSelect.value === 'hue' ? 'No Hue devices yet. They come from the Hue Bridge once its app key is set.' : 'No Zigbee devices yet. They come from Home Assistant once its URL and token are set.' : 'Nothing found on this network.';
@@ -1593,7 +1659,9 @@
         labelLayer = layers.labels;
         const bounds = { width: 0, height: 0 };
 
-        if (mode === 'network' || !graph.floors.length) {
+        if (mode === 'services') {
+            drawServices(layers, bounds);
+        } else if (mode === 'network' || !graph.floors.length) {
             // The network on its own, laid out and routed by ELK.
             const result = await layoutGroup({ nodes: graph.nodes, edges: graph.edges });
             if (id !== renderId) {
@@ -1622,7 +1690,7 @@
         const fit = () => {
             const box = container.getBoundingClientRect();
             // Leave room at the top for the picker when one is showing.
-            const reserved = vlanSelect.hidden && zigbeeSelect.hidden ? 0 : 44;
+            const reserved = vlanSelect.hidden && zigbeeSelect.hidden && servicesSelect.hidden ? 0 : 44;
             view.scale = Math.min(box.width / (bounds.width + 40), (box.height - reserved) / (bounds.height + 40), 1.5);
             view.x = (box.width - bounds.width * view.scale) / 2;
             view.y = 20 + reserved;
@@ -1670,7 +1738,7 @@
         svg.addEventListener('dblclick', fit);
     };
 
-    const modes = ['all', 'floorplan', 'network', 'zigbee'];
+    const modes = ['all', 'floorplan', 'network', 'zigbee', 'services'];
     let stored = null;
     try {
         stored = localStorage.getItem('holamap.view');
@@ -1706,6 +1774,14 @@
             // Storage is only a convenience for remembering the choice.
         }
         render('zigbee');
+    });
+    servicesSelect.addEventListener('change', () => {
+        try {
+            localStorage.setItem('holamap.services', servicesSelect.value);
+        } catch (error) {
+            // Storage is only a convenience for remembering the category.
+        }
+        render('services');
     });
     await render(mode);
 })();

@@ -9,8 +9,8 @@ namespace HoLaMap.Hosts
     /// Saves the services a host reports. Services added by hand are left alone.
     /// </summary>
     /// <param name="context">The database context.</param>
-    /// <param name="options">The host report settings.</param>
-    public class HostSyncService(HoLaMapContext context, IOptions<HostReportOptions> options)
+    /// <param name="options">The host report settings, read fresh for each report so changes to the categories apply without a restart.</param>
+    public class HostSyncService(HoLaMapContext context, IOptionsSnapshot<HostReportOptions> options)
     {
         /// <summary>
         /// Updates one kind of synced service on a host to match what it just reported.
