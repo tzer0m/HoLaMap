@@ -1,0 +1,63 @@
+@page
+@model HoLaMap.Pages.Services.IndexModel
+@{
+    ViewData["Title"] = "Services";
+}
+
+<header class="page-header">
+    <h1>Services</h1>
+    <a class="button" asp-page="Edit">Add Service</a>
+</header>
+
+@if (Model.Hosts.Count == 0)
+{
+    <p class="empty">No services yet. Hosts report them to /api/services/{host}/systemd, or add one by hand.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th>Group</th>
+                <th>Owner</th>
+                <th>Source</th>
+                <th>Last Reported</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (Device host in Model.Hosts)
+            {
+                <tr class="table-group">
+                    <th colspan="8">@host.Name</th>
+                </tr>
+                @foreach (Service service in host.Services.OrderBy(service => service.Group).ThenBy(service => service.Name))
+                {
+                    <tr>
+                        <td>@service.Name</td>
+                        <td>@service.Kind</td>
+                        <td>@service.Category</td>
+                        <td>@service.Group</td>
+                        <td>@(service.Mine ? "Mine" : "Third Party")</td>
+                        <td>@(service.Source == ServiceSource.Manual ? "Added by Hand" : "Reported by Host")</td>
+                        <td>@service.LastSeen?.ToLocalTime().ToString("d MMM HH:mm")</td>
+                        <td>
+                            @if (service.Source == ServiceSource.Manual)
+                            {
+                                <div class="form-actions">
+                                    <a class="button button-secondary" asp-page="Edit" asp-route-id="@service.Id">Edit</a>
+                                    <form method="post" asp-page-handler="Delete" asp-route-id="@service.Id">
+                                        <button type="submit" class="button button-danger">Delete</button>
+                                    </form>
+                                </div>
+                            }
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+}

@@ -1,0 +1,44 @@
+@page "{id:int?}"
+@model HoLaMap.Pages.Services.EditModel
+@{
+    ViewData["Title"] = Model.Id == null ? "Add Service" : "Edit Service";
+}
+
+<header class="page-header">
+    <h1>@ViewData["Title"]</h1>
+</header>
+
+<form method="post" class="form">
+    <label>
+        Host
+        <select asp-for="DeviceId" asp-items="Model.DeviceOptions">
+            <option value="">Choose a device…</option>
+        </select>
+        <span asp-validation-for="DeviceId" class="field-error"></span>
+    </label>
+    <label>
+        Name
+        <input asp-for="Name" placeholder="e.g. Home Assistant" />
+        <span asp-validation-for="Name" class="field-error"></span>
+    </label>
+    <label>
+        Type
+        <select asp-for="Kind" asp-items="Html.GetEnumSelectList<ServiceKind>()"></select>
+    </label>
+    <label>
+        Category
+        <select asp-for="Category" asp-items="Html.GetEnumSelectList<ServiceCategory>()"></select>
+    </label>
+    <label>
+        Group
+        <input asp-for="Group" placeholder="Optional, shows it in a box with the rest of its group" />
+    </label>
+    <label class="form-check">
+        <input asp-for="Mine" />
+        One of my own apps
+    </label>
+    <div class="form-actions">
+        <button type="submit" class="button">Save</button>
+        <a asp-page="Index">Cancel</a>
+    </div>
+</form>

@@ -297,6 +297,17 @@ body:has(.map-layout) .details {
     gap: 12px;
 }
 
+.form .form-check {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.table-group th {
+    padding-top: 20px;
+    color: #a0a6b4;
+}
+
 .field-error {
     color: #f08080;
     font-size: 0.85rem;
