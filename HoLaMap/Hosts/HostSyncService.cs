@@ -31,11 +31,12 @@ namespace HoLaMap.Hosts
                 return null;
             }
             DateTime now = DateTime.UtcNow;
-            HashSet<string> names = [.. reported.Select(item => item.Name)];
+            // A service is known by its group and name, since containers in different Compose projects can share a name like postgres.
+            HashSet<(string, string)> keys = [.. reported.Select(item => (item.Group ?? string.Empty, item.Name))];
 
             // A service that has gone from its host stays greyed out in case it comes back, and is forgotten once it hasn't been reported for a while.
             int forgetAfterDays = options.Value.ForgetAfterDays;
-            foreach (Service missing in device.Services.Where(service => service.Kind == kind && service.Source == ServiceSource.Synced && !names.Contains(service.Name)).ToList())
+            foreach (Service missing in device.Services.Where(service => service.Kind == kind && service.Source == ServiceSource.Synced && !keys.Contains((service.Group ?? string.Empty, service.Name))).ToList())
             {
                 if (forgetAfterDays > 0 && missing.LastSeen < now.AddDays(-forgetAfterDays))
                 {
@@ -44,10 +45,10 @@ namespace HoLaMap.Hosts
             }
             foreach (ReportedService item in reported)
             {
-                Service? service = device.Services.FirstOrDefault(existing => existing.Kind == kind && existing.Name == item.Name);
+                Service? service = device.Services.FirstOrDefault(existing => existing.Kind == kind && existing.Name == item.Name && (existing.Group ?? string.Empty) == (item.Group ?? string.Empty));
                 if (service == null)
                 {
-                    service = new Service { Name = item.Name, Kind = kind, Source = ServiceSource.Synced };
+                    service = new Service { Name = item.Name, Kind = kind, Source = ServiceSource.Synced, Group = item.Group };
                     device.Services.Add(service);
                 }
                 if (service.Source == ServiceSource.Synced)
@@ -56,11 +57,10 @@ namespace HoLaMap.Hosts
                     service.LastSeen = now;
                     service.Category = CategoryOf(item.Name);
                     service.Mine = item.Custom && service.Category == ServiceCategory.App;
-                    service.Group = item.Group;
                 }
             }
             await context.SaveChangesAsync(cancellationToken);
-            return names.Count;
+            return keys.Count;
         }
 
         /// <summary>

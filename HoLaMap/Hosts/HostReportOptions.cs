@@ -23,6 +23,11 @@ namespace HoLaMap.Hosts
         public List<string> SystemdInclude { get; set; } = [];
 
         /// <summary>
+        /// Gets or sets Docker Compose service names to leave out, such as one-off helpers that run at start-up and exit.
+        /// </summary>
+        public List<string> DockerIgnore { get; set; } = [];
+
+        /// <summary>
         /// Gets or sets the category of each service by name, where a trailing * matches the start of the name. Anything else is an app.
         /// </summary>
         public Dictionary<string, ServiceCategory> Categories { get; set; } = [];

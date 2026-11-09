@@ -1548,9 +1548,11 @@
 
     // The Services view: each host as a box holding its services. Containers from the same Docker Compose project share a box inside the host, titled with the project.
     // Services and project boxes fill columns top to bottom, about ten chips tall, in name order.
+    // A project with just one container shows as a chip named after the project, since its container can have a generic name like postgres.
     const servicesView = () => {
         const hosts = services.filter(host => host.services.length);
-        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: service.label, kind: service.kind === 'Docker' ? 'docker' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
+        const single = host => service => service.group && host.services.filter(other => other.group === service.group).length === 1;
+        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: single(host)(service) ? service.group : service.label, kind: service.kind === 'Docker' ? 'docker' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
     };
     const drawServices = (layers, bounds) => {
         const maxHeight = 10 * (chipHeight + stackGap) - stackGap;

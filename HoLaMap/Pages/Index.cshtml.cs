@@ -163,8 +163,15 @@ namespace HoLaMap.Pages
         private static GraphHost ToHost(Device host, DateTime onlineSince)
         {
             Dictionary<ServiceKind, DateTime?> latest = host.Services.Where(service => service.Source == ServiceSource.Synced).GroupBy(service => service.Kind).ToDictionary(group => group.Key, group => group.Max(service => service.LastSeen));
-            return new GraphHost { Id = $"d{host.Id}", Label = host.Name, Online = host.LastSeen >= onlineSince, Services = [.. host.Services.OrderBy(service => service.Name).Select(service => new GraphService { Id = $"s{service.Id}", Label = DisplayName(service), Name = service.Name, Kind = service.Kind.ToString(), Category = service.Category.ToString(), Manual = service.Source == ServiceSource.Manual, Mine = service.Mine, Group = service.Group ?? string.Empty, Online = service.Source == ServiceSource.Manual || service.LastSeen == latest.GetValueOrDefault(service.Kind), LastSeen = service.LastSeen == null ? string.Empty : Time(service.LastSeen.Value) })] };
+            return new GraphHost { Id = $"d{host.Id}", Label = host.Name, Online = host.LastSeen >= onlineSince, Services = [.. host.Services.OrderBy(service => service.Name).Select(service => new GraphService { Id = $"s{service.Id}", Label = DisplayName(service), Name = service.Name, Kind = service.Kind.ToString(), Category = service.Category.ToString(), Manual = service.Source == ServiceSource.Manual, Mine = service.Mine, Group = GroupName(service.Group), Online = service.Source == ServiceSource.Manual || service.LastSeen == latest.GetValueOrDefault(service.Kind), LastSeen = service.LastSeen == null ? string.Empty : Time(service.LastSeen.Value) })] };
         }
+
+        /// <summary>
+        /// Gets the name to show for a service's group, dropping the ix- that TrueNAS puts in front of its apps' Compose projects.
+        /// </summary>
+        /// <param name="group">The group, if any.</param>
+        /// <returns>The name to show, or empty if there's no group.</returns>
+        private static string GroupName(string? group) => group == null ? string.Empty : group.StartsWith("ix-", StringComparison.Ordinal) ? group["ix-".Length..] : group;
 
         /// <summary>
         /// Gets the name to show for a service, shortening a GitHub runner's actions.runner.Owner.name to Owner Runner.

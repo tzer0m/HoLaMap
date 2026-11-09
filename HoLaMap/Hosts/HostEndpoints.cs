@@ -46,7 +46,7 @@ namespace HoLaMap.Hosts
         /// <returns>The number of services, unauthorised, or not found if the host isn't on the map.</returns>
         private static Task<IResult> ReportDockerAsync(string host, HttpRequest request, HostSyncService sync, IOptionsSnapshot<HostReportOptions> options, CancellationToken cancellationToken)
         {
-            return ReportAsync(host, request, sync, options.Value.Token, ServiceKind.Docker, DockerParser.Services, cancellationToken);
+            return ReportAsync(host, request, sync, options.Value.Token, ServiceKind.Docker, output => DockerParser.Services(output, options.Value.DockerIgnore), cancellationToken);
         }
 
         /// <summary>

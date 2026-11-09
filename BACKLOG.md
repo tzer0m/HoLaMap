@@ -16,6 +16,8 @@
 
 ## Next Up
 - More layers: services and dependencies, firewall zones, Tailscale, and policies, public exposure.
+- Schedule page (own nav link): everything scheduled across the fleet on three bars. Daily runs noon to noon so overnight jobs sit in the middle, weekly Mon to Sun, monthly 1 to 31. Overlapping jobs stack, block width from run duration where known (fixed minimum otherwise), click for host, command and schedule in words. Own `ScheduledTask` table reported per host like services; sources: TrueNAS cron jobs first (RebelBackup on Davos), then Semaphore schedules, TrueNAS Cloud Syncs and systemd timers.
 - Pocket ID sign-in (OIDC in the app) when it's deployed to Tyrion.
 - New `Hosts:Token` for the services endpoint when it's deployed (the dev one has been shared).
 - README (what it does, settings, secrets) when it's deployed.
+- Install node_exporter on Jorah, the only host reporting services without one (spotted on the Services view).

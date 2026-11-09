@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using HoLaMap.Hosts.Models;
 
@@ -9,39 +10,45 @@ namespace HoLaMap.Hosts
     public static class DockerParser
     {
         /// <summary>
-        /// Reads every container, one JSON object per line. Lines that aren't JSON are skipped.
+        /// Reads every container. Each is a JSON object, whether one per line, spread over several lines, or inside an array. Reading stops at anything that isn't JSON.
         /// </summary>
         /// <param name="output">The output of docker ps.</param>
         /// <returns>The containers.</returns>
         public static List<DockerContainer> Parse(string output)
         {
             List<DockerContainer> containers = [];
-            foreach (string line in output.ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            Utf8JsonReader reader = new(Encoding.UTF8.GetBytes(output), new JsonReaderOptions { AllowMultipleValues = true });
+            try
             {
-                try
+                while (reader.Read())
                 {
-                    DockerContainer? container = JsonSerializer.Deserialize<DockerContainer>(line);
+                    if (reader.TokenType != JsonTokenType.StartObject)
+                    {
+                        continue;
+                    }
+                    DockerContainer? container = JsonSerializer.Deserialize<DockerContainer>(ref reader);
                     if (!string.IsNullOrEmpty(container?.Names))
                     {
                         containers.Add(container);
                     }
                 }
-                catch (JsonException)
-                {
-                    continue;
-                }
+            }
+            catch (JsonException)
+            {
+                return containers;
             }
             return containers;
         }
 
         /// <summary>
-        /// Gets each container as a service, named by its container name.
+        /// Gets each container as a service in its Compose project, leaving out one-off helpers like TrueNAS's permissions containers.
         /// </summary>
         /// <param name="output">The output of docker ps.</param>
+        /// <param name="ignore">Compose service names to leave out.</param>
         /// <returns>The services.</returns>
-        public static List<ReportedService> Services(string output)
+        public static List<ReportedService> Services(string output, List<string> ignore)
         {
-            return [.. Parse(output).DistinctBy(Name).OrderBy(Name).Select(container => new ReportedService { Name = Name(container), Group = Labels(container).GetValueOrDefault("com.docker.compose.project") })];
+            return [.. Parse(output).Where(container => !ignore.Contains(Labels(container).GetValueOrDefault("com.docker.compose.service") ?? string.Empty, StringComparer.OrdinalIgnoreCase)).Select(container => new ReportedService { Name = Name(container), Group = Labels(container).GetValueOrDefault("com.docker.compose.project") }).DistinctBy(service => (service.Group, service.Name)).OrderBy(service => service.Group).ThenBy(service => service.Name)];
         }
 
         /// <summary>

@@ -489,7 +489,7 @@ namespace HoLaMap.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DeviceId", "Kind", "Name")
+                    b.HasIndex("DeviceId", "Kind", "Group", "Name")
                         .IsUnique();
 
                     b.ToTable("Services");

@@ -86,7 +86,7 @@ namespace HoLaMap.Pages.Devices
             List<Service> services = await context.Services.Where(service => mergingIds.Contains(service.DeviceId) || service.DeviceId == keep!.Id).ToListAsync();
             foreach (Service service in services.Where(service => mergingIds.Contains(service.DeviceId)).ToList())
             {
-                if (services.Any(other => other.DeviceId == keep!.Id && other.Kind == service.Kind && other.Name == service.Name))
+                if (services.Any(other => other.DeviceId == keep!.Id && other.Kind == service.Kind && other.Group == service.Group && other.Name == service.Name))
                 {
                     context.Services.Remove(service);
                 }

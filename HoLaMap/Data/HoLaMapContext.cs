@@ -117,7 +117,7 @@ namespace HoLaMap.Data
             modelBuilder.Entity<PatchConnection>().Property(connection => connection.TargetSide).HasConversion<string>();
             modelBuilder.Entity<Device>().HasOne(device => device.Room).WithMany(room => room.Devices).HasForeignKey(device => device.RoomId).OnDelete(DeleteBehavior.SetNull);
             modelBuilder.Entity<Service>().HasOne(service => service.Device).WithMany(device => device.Services).HasForeignKey(service => service.DeviceId).OnDelete(DeleteBehavior.Cascade);
-            modelBuilder.Entity<Service>().HasIndex(service => new { service.DeviceId, service.Kind, service.Name }).IsUnique();
+            modelBuilder.Entity<Service>().HasIndex(service => new { service.DeviceId, service.Kind, service.Group, service.Name }).IsUnique();
             modelBuilder.Entity<Service>().Property(service => service.Kind).HasConversion<string>();
             modelBuilder.Entity<Service>().Property(service => service.Source).HasConversion<string>();
             modelBuilder.Entity<Service>().Property(service => service.Category).HasConversion<string>();
