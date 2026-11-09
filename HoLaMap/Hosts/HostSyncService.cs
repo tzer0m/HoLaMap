@@ -20,8 +20,9 @@ namespace HoLaMap.Hosts
         /// <param name="kind">The kind of service reported.</param>
         /// <param name="reported">The services running.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
+        /// <param name="scope">The one group the report covers, such as one API's routes, or null if it covers every service of its kind on the host.</param>
         /// <returns>The number of services reported, or null if no device matches the host.</returns>
-        public async Task<int?> SyncAsync(string host, ServiceKind kind, List<ReportedService> reported, CancellationToken cancellationToken)
+        public async Task<int?> SyncAsync(string host, ServiceKind kind, List<ReportedService> reported, CancellationToken cancellationToken, string? scope = null)
         {
             string name = host.Trim().ToLowerInvariant();
             string mac = name.Replace('-', ':');
@@ -36,7 +37,7 @@ namespace HoLaMap.Hosts
 
             // A service that has gone from its host stays greyed out in case it comes back, and is forgotten once it hasn't been reported for a while.
             int forgetAfterDays = options.Value.ForgetAfterDays;
-            foreach (Service missing in device.Services.Where(service => service.Kind == kind && service.Source == ServiceSource.Synced && !keys.Contains((service.Group ?? string.Empty, service.Name))).ToList())
+            foreach (Service missing in device.Services.Where(service => service.Kind == kind && service.Source == ServiceSource.Synced && (scope == null || service.Group == scope) && !keys.Contains((service.Group ?? string.Empty, service.Name))).ToList())
             {
                 if (forgetAfterDays > 0 && missing.LastSeen < now.AddDays(-forgetAfterDays))
                 {

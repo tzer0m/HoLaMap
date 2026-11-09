@@ -24,6 +24,9 @@ builder.Services.AddScoped<HueSyncService>();
 builder.Services.AddHostedService<HueSyncWorker>();
 builder.Services.Configure<HostReportOptions>(builder.Configuration.GetSection("Hosts"));
 builder.Services.AddScoped<HostSyncService>();
+builder.Services.Configure<OpenApiOptions>(builder.Configuration.GetSection("OpenApi"));
+builder.Services.AddHttpClient<OpenApiSyncService>();
+builder.Services.AddHostedService<OpenApiSyncWorker>();
 
 WebApplication app = builder.Build();
 app.UseRouting();

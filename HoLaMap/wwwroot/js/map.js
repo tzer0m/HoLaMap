@@ -353,7 +353,7 @@
     // Services view: what each host reports running, fetched the first time the tab is opened.
     let services = null;
     const servicesById = new Map();
-    const serviceKindNames = { Systemd: 'Systemd', Docker: 'Docker', TrueNasApp: 'TrueNAS App', PythonScript: 'Python Script', Other: 'Other' };
+    const serviceKindNames = { Systemd: 'Systemd', Docker: 'Docker', TrueNasApp: 'TrueNAS App', PythonScript: 'Python Script', ApiRoute: 'API Route', Other: 'Other' };
     const showService = nodeId => {
         const service = servicesById.get(nodeId);
         heading(service.label, [[serviceKindNames[service.kind] ?? service.kind], service.online ? ['Reported', 'online'] : ['Missing', 'offline']]);
@@ -1549,8 +1549,12 @@
     // The Services view: each host as a box holding its services. Containers from the same Docker Compose project share a box inside the host, titled with the project.
     // Services and project boxes fill columns top to bottom, about ten chips tall, in name order.
     // A project with just one container shows as a chip named after the project, since its container can have a generic name like postgres.
+    // A service named the same as a group on its host, like the Api app and its routes, is the group's box itself, so it isn't drawn again as a chip.
     const servicesView = () => {
-        const hosts = services.filter(host => host.services.length);
+        const hosts = services.filter(host => host.services.length).map(host => {
+            const groups = new Set(host.services.map(service => service.group).filter(group => group));
+            return { ...host, services: host.services.filter(service => service.group || !groups.has(service.label)) };
+        });
         const single = host => service => service.group && host.services.filter(other => other.group === service.group).length === 1;
         return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: single(host)(service) ? service.group : service.label, kind: service.kind === 'Docker' ? 'docker' : service.kind === 'PythonScript' ? 'python' : service.kind === 'Other' ? 'other' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
     };

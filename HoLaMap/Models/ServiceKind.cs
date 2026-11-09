@@ -30,6 +30,12 @@ namespace HoLaMap.Models
         PythonScript,
 
         /// <summary>
+        /// A first-level route of an API, read from its OpenAPI description.
+        /// </summary>
+        [Display(Name = "API Route")]
+        ApiRoute,
+
+        /// <summary>
         /// Anything else, added by hand.
         /// </summary>
         Other
