@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace HoLaMap.Models
 {
     /// <summary>
@@ -18,7 +20,14 @@ namespace HoLaMap.Models
         /// <summary>
         /// An app on TrueNAS.
         /// </summary>
+        [Display(Name = "TrueNAS App")]
         TrueNasApp,
+
+        /// <summary>
+        /// A Python script, added by hand.
+        /// </summary>
+        [Display(Name = "Python Script")]
+        PythonScript,
 
         /// <summary>
         /// Anything else, added by hand.

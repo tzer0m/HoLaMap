@@ -1129,13 +1129,23 @@ body:has(.map-layout) .details {
 }
 
 .swatch.box-service {
-    background: #33363d;
-    border-color: #9ea3ad;
+    background: #3a2d4f;
+    border-color: #b48ee0;
 }
 
 .swatch.box-docker {
     background: #183a63;
     border-color: #2496ed;
+}
+
+.swatch.box-python {
+    background: #45401c;
+    border-color: #ffd43b;
+}
+
+.swatch.box-other {
+    background: #33363d;
+    border-color: #9ea3ad;
 }
 
 .swatch-wave {
@@ -1371,13 +1381,23 @@ body:has(.map-layout) .details {
 }
 
 .map-node.service .map-node-box {
-    fill: #33363d;
-    stroke: #9ea3ad;
+    fill: #3a2d4f;
+    stroke: #b48ee0;
 }
 
 .map-node.docker .map-node-box {
     fill: #183a63;
     stroke: #2496ed;
+}
+
+.map-node.python .map-node-box {
+    fill: #45401c;
+    stroke: #ffd43b;
+}
+
+.map-node.other .map-node-box {
+    fill: #33363d;
+    stroke: #9ea3ad;
 }
 
 .map-node.coordinator .map-node-label,

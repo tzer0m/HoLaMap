@@ -353,7 +353,7 @@
     // Services view: what each host reports running, fetched the first time the tab is opened.
     let services = null;
     const servicesById = new Map();
-    const serviceKindNames = { Systemd: 'systemd', Docker: 'Docker', TrueNasApp: 'TrueNAS App', Other: 'Other' };
+    const serviceKindNames = { Systemd: 'Systemd', Docker: 'Docker', TrueNasApp: 'TrueNAS App', PythonScript: 'Python Script', Other: 'Other' };
     const showService = nodeId => {
         const service = servicesById.get(nodeId);
         heading(service.label, [[serviceKindNames[service.kind] ?? service.kind], service.online ? ['Reported', 'online'] : ['Missing', 'offline']]);
@@ -1552,12 +1552,14 @@
     const servicesView = () => {
         const hosts = services.filter(host => host.services.length);
         const single = host => service => service.group && host.services.filter(other => other.group === service.group).length === 1;
-        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: single(host)(service) ? service.group : service.label, kind: service.kind === 'Docker' ? 'docker' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
+        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: single(host)(service) ? service.group : service.label, kind: service.kind === 'Docker' ? 'docker' : service.kind === 'PythonScript' ? 'python' : service.kind === 'Other' ? 'other' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
     };
     const drawServices = (layers, bounds) => {
         const maxHeight = 10 * (chipHeight + stackGap) - stackGap;
-        let left = 0;
-        graph.hosts.forEach(host => {
+        const hostGap = 32;
+
+        // Measure each host first: its services and project boxes fill columns of about ten chips' height.
+        const measured = graph.hosts.map(host => {
             const counts = new Map();
             host.services.filter(service => service.group).forEach(service => counts.set(service.group, (counts.get(service.group) ?? 0) + 1));
             const items = [];
@@ -1571,7 +1573,7 @@
                     }
                     item.nodes.push(node);
                 } else {
-                    items.push({ label: service.label, nodes: [node] });
+                    items.push({ label: node.label, nodes: [node] });
                 }
             });
             items.sort((a, b) => a.label.localeCompare(b.label));
@@ -1593,25 +1595,64 @@
             columns.forEach(column => column.width = Math.max(...column.items.map(item => item.width)));
             const innerWidth = Math.max(columns.reduce((sum, column) => sum + column.width, 0) + (columns.length - 1) * groupPadding, textWidth(host.label, true) * 14 / 12 + groupPadding);
             const innerHeight = Math.max(...columns.map(column => column.height));
-            drawFrame(host.label, left, 0, innerWidth + groupPadding * 2, titleHeight + innerHeight + groupPadding, layers.boxes);
+            return { host: host, columns: columns, width: innerWidth + groupPadding * 2, height: titleHeight + innerHeight + groupPadding };
+        });
+
+        const drawHost = (item, left, top, width) => {
+            drawFrame(item.host.label, left, top, width, item.height, layers.boxes);
             let x = left + groupPadding;
-            columns.forEach(column => {
-                let y = titleHeight;
-                column.items.forEach(item => {
-                    if (item.group) {
-                        drawRoom(item.label, x, y, column.width, item.height, layers.boxes);
-                        item.nodes.forEach((node, row) => drawNode(node, x + roomPadding, y + roomHeader + row * (chipHeight + stackGap), column.width - roomPadding * 2, chipHeight, layers.nodes, true));
+            item.columns.forEach(column => {
+                let y = top + titleHeight;
+                column.items.forEach(entry => {
+                    if (entry.group) {
+                        drawRoom(entry.label, x, y, column.width, entry.height, layers.boxes);
+                        entry.nodes.forEach((node, row) => drawNode(node, x + roomPadding, y + roomHeader + row * (chipHeight + stackGap), column.width - roomPadding * 2, chipHeight, layers.nodes, true));
                     } else {
-                        drawNode(item.nodes[0], x, y, column.width, chipHeight, layers.nodes, true);
+                        drawNode(entry.nodes[0], x, y, column.width, chipHeight, layers.nodes, true);
                     }
-                    y += item.height + stackGap;
+                    y += entry.height + stackGap;
                 });
                 x += column.width + groupPadding;
             });
-            bounds.height = Math.max(bounds.height, titleHeight + innerHeight + groupPadding);
-            left += innerWidth + groupPadding * 2 + groupGap;
+        };
+
+        // Hosts stack into piles no taller than the tallest host, keeping name order, so small hosts sit on top of each other beside the big ones.
+        const tallest = Math.max(...measured.map(item => item.height));
+        const piles = [];
+        measured.forEach(item => {
+            const pile = piles[piles.length - 1];
+            if (pile && pile.height + hostGap + item.height <= tallest) {
+                pile.items.push(item);
+                pile.height += hostGap + item.height;
+                pile.width = Math.max(pile.width, item.width);
+            } else {
+                piles.push({ items: [item], height: item.height, width: item.width });
+            }
         });
-        bounds.width = left - groupGap;
+
+        // Piles wrap into rows roughly the shape of the map area, so it fills the screen rather than running off to one side.
+        const box = container.getBoundingClientRect();
+        const area = piles.reduce((sum, pile) => sum + (pile.width + hostGap) * (pile.height + hostGap), 0);
+        const rowWidth = Math.max(...piles.map(pile => pile.width), Math.sqrt(area * box.width / Math.max(box.height, 1)));
+        let left = 0;
+        let top = 0;
+        let rowHeight = 0;
+        piles.forEach(pile => {
+            if (left > 0 && left + pile.width > rowWidth) {
+                left = 0;
+                top += rowHeight + hostGap;
+                rowHeight = 0;
+            }
+            let y = top;
+            pile.items.forEach(item => {
+                drawHost(item, left, y, pile.width);
+                y += item.height + hostGap;
+            });
+            bounds.width = Math.max(bounds.width, left + pile.width);
+            bounds.height = Math.max(bounds.height, top + pile.height);
+            rowHeight = Math.max(rowHeight, pile.height);
+            left += pile.width + hostGap;
+        });
     };
 
     // The key only lists what the current view can show. Port colours count too where ports are drawn, which isn't on the Floor Plan's name-only chips.
