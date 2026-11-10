@@ -11,14 +11,14 @@ namespace HoLaMap.Models
         public int Id { get; set; }
 
         /// <summary>
-        /// Gets or sets the identifier of the device it runs on.
+        /// Gets or sets the identifier of the device it runs on, or null for a cloud service.
         /// </summary>
-        public int DeviceId { get; set; }
+        public int? DeviceId { get; set; }
 
         /// <summary>
-        /// Gets or sets the device it runs on.
+        /// Gets or sets the device it runs on, or null for a cloud service.
         /// </summary>
-        public Device Device { get; set; } = null!;
+        public Device? Device { get; set; }
 
         /// <summary>
         /// Gets or sets the name, as the host reports it.

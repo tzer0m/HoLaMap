@@ -83,8 +83,8 @@ namespace HoLaMap.Pages.Devices
             context.ActionItems.RemoveRange(await context.ActionItems.Where(item => mergingIds.Contains(item.DeviceId)).ToListAsync());
 
             // Move services onto the kept device too, dropping any it already has.
-            List<Service> services = await context.Services.Where(service => mergingIds.Contains(service.DeviceId) || service.DeviceId == keep!.Id).ToListAsync();
-            foreach (Service service in services.Where(service => mergingIds.Contains(service.DeviceId)).ToList())
+            List<Service> services = await context.Services.Where(service => (service.DeviceId != null && mergingIds.Contains(service.DeviceId.Value)) || service.DeviceId == keep!.Id).ToListAsync();
+            foreach (Service service in services.Where(service => service.DeviceId != null && mergingIds.Contains(service.DeviceId.Value)).ToList())
             {
                 if (services.Any(other => other.DeviceId == keep!.Id && other.Kind == service.Kind && other.Group == service.Group && other.Name == service.Name))
                 {

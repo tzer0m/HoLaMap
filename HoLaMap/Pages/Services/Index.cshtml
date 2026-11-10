@@ -9,12 +9,18 @@
     <a class="button" asp-page="Edit">Add Service</a>
 </header>
 
-@if (Model.Hosts.Count == 0)
+@if (Model.Hosts.Count == 0 && Model.Cloud.Count == 0)
 {
     <p class="empty">No services yet. Hosts report them to /api/services/{host}/systemd, or add one by hand.</p>
 }
 else
 {
+    List<(string Title, List<Service> Services)> sections = [];
+    if (Model.Cloud.Count > 0)
+    {
+        sections.Add(("Cloud", Model.Cloud));
+    }
+    sections.AddRange(Model.Hosts.Select(host => (host.Name, host.Services)));
     <table class="table">
         <thead>
             <tr>
@@ -29,12 +35,12 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (Device host in Model.Hosts)
+            @foreach ((string title, List<Service> services) in sections)
             {
                 <tr class="table-group">
-                    <th colspan="8">@host.Name</th>
+                    <th colspan="8">@title</th>
                 </tr>
-                @foreach (Service service in host.Services.OrderBy(service => service.Group).ThenBy(service => service.Name))
+                @foreach (Service service in services.OrderBy(service => service.Group).ThenBy(service => service.Name))
                 {
                     <tr>
                         <td>@service.Name</td>

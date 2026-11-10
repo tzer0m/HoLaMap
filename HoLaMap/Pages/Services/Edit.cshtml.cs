@@ -20,10 +20,10 @@ namespace HoLaMap.Pages.Services
         public int? Id { get; set; }
 
         /// <summary>
-        /// The device the service runs on.
+        /// The device the service runs on, 0 for the cloud, or null if none was chosen.
         /// </summary>
         [BindProperty]
-        public int DeviceId { get; set; }
+        public int? DeviceId { get; set; }
 
         /// <summary>
         /// The service name.
@@ -73,7 +73,7 @@ namespace HoLaMap.Pages.Services
                 {
                     return NotFound();
                 }
-                DeviceId = service.DeviceId;
+                DeviceId = service.DeviceId ?? 0;
                 Name = service.Name;
                 Kind = service.Kind;
                 Category = service.Category;
@@ -92,15 +92,21 @@ namespace HoLaMap.Pages.Services
         {
             string name = Name.Trim();
             string? group = string.IsNullOrWhiteSpace(Group) ? null : Group.Trim();
-            if (!await context.Devices.AnyAsync(device => device.Id == DeviceId))
+            // A cloud service has no device, and is always the Cloud type so it gets the cloud colour.
+            int? deviceId = DeviceId == 0 ? null : DeviceId;
+            if (DeviceId == 0)
             {
-                ModelState.AddModelError(nameof(DeviceId), "Choose the device it runs on.");
+                Kind = ServiceKind.Cloud;
+            }
+            else if (DeviceId == null || !await context.Devices.AnyAsync(device => device.Id == DeviceId))
+            {
+                ModelState.AddModelError(nameof(DeviceId), "Choose the device it runs on, or Cloud.");
             }
             if (name.Length == 0)
             {
                 ModelState.AddModelError(nameof(Name), "Give the service a name.");
             }
-            else if (await context.Services.AnyAsync(service => service.Id != (Id ?? 0) && service.DeviceId == DeviceId && service.Kind == Kind && service.Group == group && service.Name == name))
+            else if (await context.Services.AnyAsync(service => service.Id != (Id ?? 0) && service.DeviceId == deviceId && service.Kind == Kind && service.Group == group && service.Name == name))
             {
                 ModelState.AddModelError(nameof(Name), "That device already has a service of this type with that name.");
             }
@@ -119,7 +125,7 @@ namespace HoLaMap.Pages.Services
             {
                 context.Services.Add(service);
             }
-            service.DeviceId = DeviceId;
+            service.DeviceId = deviceId;
             service.Name = name;
             service.Kind = Kind;
             service.Category = Category;
@@ -136,7 +142,7 @@ namespace HoLaMap.Pages.Services
         private async Task LoadOptionsAsync()
         {
             List<Device> devices = await context.Devices.OrderBy(device => device.Name).ThenBy(device => device.Mac).ToListAsync();
-            DeviceOptions = [.. devices.Select(device => new SelectListItem(string.Join(" · ", new[] { device.Name, device.Ip }.Where(part => !string.IsNullOrEmpty(part))), device.Id.ToString()))];
+            DeviceOptions = [new SelectListItem("Cloud (not on a device)", "0"), .. devices.Select(device => new SelectListItem(string.Join(" · ", new[] { device.Name, device.Ip }.Where(part => !string.IsNullOrEmpty(part))), device.Id.ToString()))];
         }
     }
 }

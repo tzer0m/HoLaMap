@@ -36,6 +36,11 @@ namespace HoLaMap.Models
         ApiRoute,
 
         /// <summary>
+        /// A service in the cloud rather than on one of your devices, added by hand.
+        /// </summary>
+        Cloud,
+
+        /// <summary>
         /// Anything else, added by hand.
         /// </summary>
         Other

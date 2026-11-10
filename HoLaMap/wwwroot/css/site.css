@@ -1143,6 +1143,11 @@ body:has(.map-layout) .details {
     border-color: #ffd43b;
 }
 
+.swatch.box-cloud {
+    background: #1d4447;
+    border-color: #5fd4d0;
+}
+
 .swatch.box-other {
     background: #33363d;
     border-color: #9ea3ad;
@@ -1393,6 +1398,11 @@ body:has(.map-layout) .details {
 .map-node.python .map-node-box {
     fill: #45401c;
     stroke: #ffd43b;
+}
+
+.map-node.cloud .map-node-box {
+    fill: #1d4447;
+    stroke: #5fd4d0;
 }
 
 .map-node.other .map-node-box {

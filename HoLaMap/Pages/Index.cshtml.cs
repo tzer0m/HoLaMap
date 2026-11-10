@@ -150,21 +150,35 @@ namespace HoLaMap.Pages
         {
             List<Device> hosts = await context.Devices.Where(device => device.Services.Any()).Include(device => device.Services).OrderBy(device => device.Name).ToListAsync();
             DateTime onlineSince = DateTime.UtcNow.AddMinutes(-configuration.GetValue<int>("Map:OfflineAfterMinutes"));
-            List<GraphHost> result = [.. hosts.Select(host => ToHost(host, onlineSince))];
+            List<Service> cloud = await context.Services.Where(service => service.DeviceId == null).ToListAsync();
+            List<GraphHost> result = [.. hosts.Select(host => ToHost($"d{host.Id}", host.Name, host.LastSeen >= onlineSince, host.Services))];
+            if (cloud.Count > 0)
+            {
+                result.Insert(0, ToHost("cloud", "Cloud", true, cloud));
+            }
             return new JsonResult(result);
         }
 
         /// <summary>
-        /// Builds the Services view's box for a host. A synced service counts as there if it was in the host's latest report of its kind.
+        /// Builds the Services view's box for a host, or for the cloud. A synced service counts as there if it was in the latest report that covers it.
         /// </summary>
-        /// <param name="host">The host, with its services loaded.</param>
-        /// <param name="onlineSince">Devices seen since this time (UTC) count as online.</param>
+        /// <param name="id">The box's ID.</param>
+        /// <param name="label">The box's title.</param>
+        /// <param name="online">Whether the host has been seen recently.</param>
+        /// <param name="services">The services in the box.</param>
         /// <returns>The host.</returns>
-        private static GraphHost ToHost(Device host, DateTime onlineSince)
+        private static GraphHost ToHost(string id, string label, bool online, List<Service> services)
         {
-            Dictionary<ServiceKind, DateTime?> latest = host.Services.Where(service => service.Source == ServiceSource.Synced).GroupBy(service => service.Kind).ToDictionary(group => group.Key, group => group.Max(service => service.LastSeen));
-            return new GraphHost { Id = $"d{host.Id}", Label = host.Name, Online = host.LastSeen >= onlineSince, Services = [.. host.Services.OrderBy(service => service.Name).Select(service => new GraphService { Id = $"s{service.Id}", Label = DisplayName(service), Name = service.Name, Kind = service.Kind.ToString(), Category = service.Category.ToString(), Manual = service.Source == ServiceSource.Manual, Mine = service.Mine, Group = GroupName(service.Group), Online = service.Source == ServiceSource.Manual || service.LastSeen == latest.GetValueOrDefault(service.Kind), LastSeen = service.LastSeen == null ? string.Empty : Time(service.LastSeen.Value) })] };
+            Dictionary<(ServiceKind, string?), DateTime?> latest = services.Where(service => service.Source == ServiceSource.Synced).GroupBy(ReportOf).ToDictionary(group => group.Key, group => group.Max(service => service.LastSeen));
+            return new GraphHost { Id = id, Label = label, Online = online, Services = [.. services.OrderBy(service => service.Name).Select(service => new GraphService { Id = $"s{service.Id}", Label = DisplayName(service), Name = service.Name, Kind = service.Kind.ToString(), Category = service.Category.ToString(), Manual = service.Source == ServiceSource.Manual, Mine = service.Mine, Group = GroupName(service.Group), Online = service.Source == ServiceSource.Manual || service.LastSeen == latest.GetValueOrDefault(ReportOf(service)), LastSeen = service.LastSeen == null ? string.Empty : Time(service.LastSeen.Value) })] };
         }
+
+        /// <summary>
+        /// Gets the report a synced service comes in. Each API's routes are reported on their own, while every other kind covers the whole host at once.
+        /// </summary>
+        /// <param name="service">The service.</param>
+        /// <returns>The kind, plus the group for API routes.</returns>
+        private static (ServiceKind, string?) ReportOf(Service service) => (service.Kind, service.Kind == ServiceKind.ApiRoute ? service.Group : null);
 
         /// <summary>
         /// Gets the name to show for a service's group, dropping the ix- that TrueNAS puts in front of its apps' Compose projects.

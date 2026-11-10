@@ -463,7 +463,7 @@ namespace HoLaMap.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("DeviceId")
+                    b.Property<int?>("DeviceId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Group")
@@ -741,8 +741,7 @@ namespace HoLaMap.Migrations
                     b.HasOne("HoLaMap.Models.Device", "Device")
                         .WithMany("Services")
                         .HasForeignKey("DeviceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Device");
                 });

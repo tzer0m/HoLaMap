@@ -353,7 +353,7 @@
     // Services view: what each host reports running, fetched the first time the tab is opened.
     let services = null;
     const servicesById = new Map();
-    const serviceKindNames = { Systemd: 'Systemd', Docker: 'Docker', TrueNasApp: 'TrueNAS App', PythonScript: 'Python Script', ApiRoute: 'API Route', Other: 'Other' };
+    const serviceKindNames = { Systemd: 'Systemd', Docker: 'Docker', TrueNasApp: 'TrueNAS App', PythonScript: 'Python Script', ApiRoute: 'API Route', Cloud: 'Cloud', Other: 'Other' };
     const showService = nodeId => {
         const service = servicesById.get(nodeId);
         heading(service.label, [[serviceKindNames[service.kind] ?? service.kind], service.online ? ['Reported', 'online'] : ['Missing', 'offline']]);
@@ -1556,7 +1556,7 @@
             return { ...host, services: host.services.filter(service => service.group || !groups.has(service.label)) };
         });
         const single = host => service => service.group && host.services.filter(other => other.group === service.group).length === 1;
-        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: single(host)(service) ? service.group : service.label, kind: service.kind === 'Docker' ? 'docker' : service.kind === 'PythonScript' ? 'python' : service.kind === 'Other' ? 'other' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
+        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: single(host)(service) ? service.group : service.label, kind: service.kind === 'Docker' ? 'docker' : service.kind === 'PythonScript' ? 'python' : service.kind === 'Other' ? 'other' : service.kind === 'Cloud' ? 'cloud' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
     };
     const drawServices = (layers, bounds) => {
         const maxHeight = 10 * (chipHeight + stackGap) - stackGap;
