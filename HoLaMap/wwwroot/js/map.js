@@ -114,29 +114,65 @@
         return path + ` L ${last.x} ${last.y}`;
     };
 
-    // A subtle zigzag along each straight run, used for lines carrying PoE.
-    const zigzagPath = points => {
-        const amplitude = 1.5;
-        const zigStep = 3;
+    // A line with rounded corners like a plain cable, and a pattern along each straight run between them.
+    // Each run keeps a short plain stretch at the line's ends and a shorter one before each corner, and a run too short for the pattern stays plain, so the corners stay clean.
+    // The pattern sits on a grid fixed to the map rather than to the line, so lines sharing a stretch, like Wi-Fi from one AP, draw exactly the same pattern there.
+    // Only runs going up and down get it. The maps run top to bottom, so the runs across are where lines share a track and branch off one by one,
+    // and a pattern there clashes with every branch. The runs down are each line's own.
+    const calmLength = 4;
+    const cornerCalm = 2;
+    const gridRun = (from, to, step, calmFrom, calmTo) => {
+        if (Math.abs(to.x - from.x) >= 0.5) {
+            return null;
+        }
+        const [a, b] = [from.y, to.y];
+        const fixed = from.x;
+        const [low, high] = a <= b ? [calmFrom, calmTo] : [calmTo, calmFrom];
+        const first = Math.ceil((Math.min(a, b) + low) / step);
+        const last = Math.floor((Math.max(a, b) - high) / step);
+        const marks = Array.from({ length: Math.max(0, last - first + 1) }, (_, index) => first + index);
+        return { marks: a <= b ? marks : marks.reverse(), at: (mark, offset) => ({ x: fixed + offset, y: mark * step }) };
+    };
+    const even = mark => ((mark % 2) + 2) % 2 === 0;
+    const patternedPath = (points, pattern) => {
+        const corners = points.map((current, index) => {
+            if (index === 0 || index === points.length - 1) {
+                return { start: current, end: current };
+            }
+            const previous = points[index - 1];
+            const next = points[index + 1];
+            const inLength = Math.hypot(current.x - previous.x, current.y - previous.y);
+            const outLength = Math.hypot(next.x - current.x, next.y - current.y);
+            const radius = Math.min(cornerRadius, inLength / 2, outLength / 2);
+            return { start: { x: current.x - (current.x - previous.x) / inLength * radius, y: current.y - (current.y - previous.y) / inLength * radius }, end: { x: current.x + (next.x - current.x) / outLength * radius, y: current.y + (next.y - current.y) / outLength * radius }, at: current };
+        });
         let path = `M ${points[0].x} ${points[0].y}`;
         for (let i = 1; i < points.length; i++) {
-            const from = points[i - 1];
-            const to = points[i];
+            const from = corners[i - 1].end;
+            const to = corners[i].start;
             const length = Math.hypot(to.x - from.x, to.y - from.y);
-            if (length === 0) {
-                continue;
+            if (length > 0) {
+                path += pattern(from, to, i === 1 ? calmLength : cornerCalm, i === points.length - 1 ? calmLength : cornerCalm) + ` L ${to.x} ${to.y}`;
             }
-            const unitX = (to.x - from.x) / length;
-            const unitY = (to.y - from.y) / length;
-            const steps = Math.floor(length / zigStep);
-            for (let s = 1; s < steps; s++) {
-                const offset = s % 2 === 0 ? -amplitude : amplitude;
-                path += ` L ${from.x + unitX * s * zigStep - unitY * offset} ${from.y + unitY * s * zigStep + unitX * offset}`;
+            if (corners[i].at) {
+                path += ` Q ${corners[i].at.x} ${corners[i].at.y} ${corners[i].end.x} ${corners[i].end.y}`;
             }
-            path += ` L ${to.x} ${to.y}`;
         }
         return path;
     };
+
+    // A subtle zigzag along each straight run, used for lines carrying PoE.
+    const zigzagPath = points => patternedPath(points, (from, to, calmFrom, calmTo) => {
+        const amplitude = 1.5;
+        const run = gridRun(from, to, 3, calmFrom, calmTo);
+        if (!run || run.marks.length < 5) {
+            return '';
+        }
+        return run.marks.map((mark, index) => {
+            const point = run.at(mark, index === 0 || index === run.marks.length - 1 ? 0 : even(mark) ? -amplitude : amplitude);
+            return ` L ${point.x} ${point.y}`;
+        }).join('');
+    });
 
     // A line remembers the corners it was drawn through, or points along its curve, so crossings with other lines can be found later.
     const traced = (element, points) => {
@@ -588,30 +624,20 @@
     };
 
     // A gentle wave along each straight run, used for Wi-Fi connections.
-    const wavePath = points => {
+    const wavePath = points => patternedPath(points, (from, to, calmFrom, calmTo) => {
         const amplitude = 2.5;
-        const halfWave = 5;
-        let path = `M ${points[0].x} ${points[0].y}`;
-        for (let i = 1; i < points.length; i++) {
-            const from = points[i - 1];
-            const to = points[i];
-            const length = Math.hypot(to.x - from.x, to.y - from.y);
-            if (length === 0) {
-                continue;
-            }
-            const unitX = (to.x - from.x) / length;
-            const unitY = (to.y - from.y) / length;
-            const steps = Math.max(1, Math.round(length / halfWave));
-            const step = length / steps;
-            for (let s = 0; s < steps; s++) {
-                const side = s % 2 === 0 ? amplitude * 2 : -amplitude * 2;
-                const middle = (s + 0.5) * step;
-                const end = (s + 1) * step;
-                path += ` Q ${from.x + unitX * middle - unitY * side} ${from.y + unitY * middle + unitX * side} ${from.x + unitX * end} ${from.y + unitY * end}`;
-            }
+        const run = gridRun(from, to, 5, calmFrom, calmTo);
+        if (!run || run.marks.length < 3) {
+            return '';
         }
-        return path;
-    };
+        const start = run.at(run.marks[0], 0);
+        return ` L ${start.x} ${start.y}` + run.marks.slice(1).map((mark, index) => {
+            const before = run.marks[index];
+            const control = run.at((before + mark) / 2, even(Math.min(before, mark)) ? amplitude * 2 : -amplitude * 2);
+            const end = run.at(mark, 0);
+            return ` Q ${control.x} ${control.y} ${end.x} ${end.y}`;
+        }).join('');
+    });
 
     // A PoE splitter sits inline near the end of a cable. The cable carries PoE up to it and plain Ethernet after it.
     const splitAt = (points, distance) => {
