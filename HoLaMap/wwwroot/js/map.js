@@ -198,18 +198,27 @@
         });
     };
 
-    // Clicking a rack opens a drawing of the rack and its cables over the map.
+    // Clicking a rack opens a drawing of the rack and its cables over the map, leaving the details pane beside it.
+    // Clicking a device, port or cable in the drawing shows its details there, and following a link from the details closes the drawing.
     const rackDialog = document.getElementById('rack-dialog');
     const openRack = id => {
         const rack = raw.racks.find(item => item.id === id);
         rackDialog.querySelector('[data-title]').textContent = rack.name;
         rackDialog.querySelector('[data-edit]').href = rackDialog.dataset.rackUrl.replace(/0$/, id.substring(1));
-        window.RackMap.draw(rackDialog.querySelector('[data-body]'), raw, id);
-        rackDialog.showModal();
+        window.RackMap.draw(rackDialog.querySelector('[data-body]'), raw, id, pick => {
+            if (pick.edge) {
+                showEdge(pick.edge);
+            } else if (pick.port && portsById.has(pick.port)) {
+                showPort(pick.node, pick.port);
+            } else if (rawById.has(pick.node)) {
+                showDevice(pick.node);
+            }
+        });
+        rackDialog.show();
     };
     rackDialog.querySelector('[data-close]').addEventListener('click', () => rackDialog.close());
-    rackDialog.addEventListener('click', event => {
-        if (event.target === rackDialog) {
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && rackDialog.open) {
             rackDialog.close();
         }
     });
@@ -287,15 +296,10 @@
         const port = portsById.get(portId);
         return `${rawById.get(nodeId)?.label ?? 'Unknown'}${port ? ` Port ${port.index}` : ''}`;
     };
-    const deviceButton = nodeId => button(rawById.get(nodeId)?.label ?? raw.racks.find(rack => rack.id === nodeId)?.name ?? 'Unknown', () => {
-        showDevice(nodeId);
-        // In a view where racks are drawn as one block, a racked device lights up its rack.
-        focusNode(nodesById.has(nodeId) ? nodeId : rackOf.get(nodeId) ?? nodeId);
-    });
-    const edgeButton = (edge, text) => button(text, () => {
-        showEdge(edge.id);
-        focusEdges([graph.edges.find(item => item.id === edge.id) ?? edge]);
-    });
+    // A device that isn't drawn on its own here, like one inside a rack block, is followed to the Network view. A rack is followed to the Floor Plan.
+    const deviceButton = nodeId => button(rawById.get(nodeId)?.label ?? raw.racks.find(rack => rack.id === nodeId)?.name ?? 'Unknown', () => follow(nodeId.startsWith('k') ? 'floorplan' : 'network', 'node', nodeId, () => showDevice(nodeId), () => focusNode(nodeId)));
+    // A cable bundled into a trunk arc on the Floor Plan is followed to the Network view, and a Zigbee link to the Zigbee view.
+    const edgeButton = (edge, text) => button(text, () => follow(edge.id.startsWith('zl') ? 'zigbee' : 'network', 'edge', edge.id, () => showEdge(edge.id), () => focusEdges([graph.edges.find(item => item.id === edge.id) ?? edge])));
     const meta = (parent, text) => {
         if (text) {
             parent.append(element('span', 'details-meta', text));
@@ -341,10 +345,7 @@
     let zigbee = null;
     const zigbeeById = new Map();
     const roleNames = { coordinator: 'Coordinator', router: 'Router', client: 'End Device' };
-    const zigbeeButton = nodeId => button(zigbeeById.get(nodeId)?.label ?? 'Unknown', () => {
-        showDevice(nodeId);
-        focusNode(nodeId);
-    });
+    const zigbeeButton = nodeId => button(zigbeeById.get(nodeId)?.label ?? 'Unknown', () => follow('zigbee', 'node', nodeId, () => showDevice(nodeId), () => focusNode(nodeId)));
     const lqiText = lqi => lqi === null || lqi === undefined ? '' : `${lqi} (${lqi >= 150 ? 'Good' : lqi >= 80 ? 'Fair' : 'Poor'})`;
     const showZigbee = nodeId => {
         const node = zigbeeById.get(nodeId);
@@ -397,10 +398,22 @@
         }
     };
 
-    // Services view: what each host reports running, fetched the first time the tab is opened.
+    // Services view: what each host reports running, fetched the first time the tab is opened or a device's details need it.
     let services = null;
     let serviceLinks = [];
     const servicesById = new Map();
+    let servicesLoading = null;
+    const loadServices = () => servicesLoading ??= (async () => {
+        try {
+            const data = await (await fetch(container.dataset.servicesUrl)).json();
+            services = data.hosts;
+            serviceLinks = data.links;
+        } catch (error) {
+            services = [];
+            serviceLinks = [];
+        }
+        services.forEach(host => host.services.forEach(service => servicesById.set(service.id, { ...service, host: host })));
+    })();
     const serviceGroupId = (hostId, group) => `group:${hostId}:${group}`;
     const serviceCategoryNames = { Data: 'Documents/Data', ThirdParty: '3rd Party' };
     const serviceKindNames = { Systemd: 'Systemd', Docker: 'Docker', TrueNasApp: 'TrueNAS App', PythonScript: 'Python Script', ApiRoute: 'API Route', Cloud: 'Cloud', Device: 'Device', Other: 'Other' };
@@ -424,12 +437,9 @@
         list('Uses', serviceLinks.filter(link => link.source === nodeId), link => link.target);
         list('Used By', serviceLinks.filter(link => link.target === nodeId), link => link.source);
     };
-    const serviceButton = serviceId => {
+    const serviceButton = (serviceId, text) => {
         const service = servicesById.get(serviceId);
-        return button(service ? `${service.label} (${service.host.label})` : 'Unknown', () => {
-            showService(serviceId);
-            focusNode(serviceId);
-        });
+        return button(text ?? (service ? `${service.label} (${service.host.label})` : 'Unknown'), () => follow('services', 'node', serviceId, () => showService(serviceId), () => focusNode(serviceId)));
     };
     const linkKindNames = { Other: 'Link', Database: 'Database', SignIn: 'Sign-in', Notification: 'Notification', Api: 'API', Monitoring: 'Monitoring', Media: 'Media', Device: 'Device', Email: 'Email' };
     const showServiceLink = linkId => {
@@ -519,6 +529,24 @@
             });
             section('Connections').append(list);
         }
+
+        // What runs on it, a link to each on the Services view.
+        const running = section('Services');
+        loadServices().then(() => {
+            const list = (services.find(host => host.id === nodeId)?.services ?? []).toSorted((a, b) => a.label.localeCompare(b.label));
+            if (!list.length) {
+                running.remove();
+                return;
+            }
+            const items = element('ul', 'details-list');
+            list.forEach(service => {
+                const item = element('li');
+                item.append(serviceButton(service.id, service.label));
+                meta(item, [serviceKindNames[service.kind] ?? service.kind, service.group].filter(part => part).join(' · '));
+                items.append(item);
+            });
+            running.append(items);
+        });
 
         if (node.ports.length) {
             const table = element('table', 'details-table');
@@ -2182,6 +2210,7 @@
         message.className = 'map-message';
         message.textContent = text;
         container.replaceChildren(message);
+        currentSvg = null;
     };
 
     let renderId = 0;
@@ -2200,15 +2229,7 @@
             }
         }
         if (mode === 'services' && !services) {
-            try {
-                const data = await (await fetch(container.dataset.servicesUrl)).json();
-                services = data.hosts;
-                serviceLinks = data.links;
-            } catch (error) {
-                services = [];
-                serviceLinks = [];
-            }
-            services.forEach(host => host.services.forEach(service => servicesById.set(service.id, { ...service, host: host })));
+            await loadServices();
             if (id !== renderId) {
                 return;
             }
@@ -2281,6 +2302,20 @@
         cutGaps(svg, viewport);
         fit();
 
+        // Moves something into the middle of the map, unless it's already in view.
+        reveal = target => {
+            const box = target.getBBox();
+            const centre = new DOMPoint(box.x + box.width / 2, box.y + box.height / 2).matrixTransform(viewport.getCTM().inverse().multiply(target.getCTM()));
+            const area = container.getBoundingClientRect();
+            const onScreen = { x: view.x + centre.x * view.scale, y: view.y + centre.y * view.scale };
+            if (onScreen.x > 40 && onScreen.x < area.width - 40 && onScreen.y > 40 && onScreen.y < area.height - 40) {
+                return;
+            }
+            view.x = area.width / 2 - centre.x * view.scale;
+            view.y = area.height / 2 - centre.y * view.scale;
+            apply();
+        };
+
         svg.addEventListener('wheel', event => {
             event.preventDefault();
             const box = svg.getBoundingClientRect();
@@ -2318,6 +2353,42 @@
             drag = null;
         });
         svg.addEventListener('dblclick', fit);
+    };
+
+    // Following something from the details pane. The map stays on the current view when it shows the item, otherwise it switches to the item's own view,
+    // clearing that view's picker if the item is filtered out. Either way the details stay on the item, which is highlighted and moved into view.
+    // All is only ever switched from, never to.
+    let reveal = null;
+    const pickers = { network: [vlanSelect, 'holamap.vlan'], zigbee: [zigbeeSelect, 'holamap.zigbee'], services: [servicesSelect, 'holamap.services'] };
+    const remember = (key, value) => {
+        try {
+            localStorage.setItem(key, value);
+        } catch (error) {
+            // Storage is only a convenience for remembering choices.
+        }
+    };
+    const follow = async (home, type, id, show, focus) => {
+        if (rackDialog.open) {
+            rackDialog.close();
+        }
+        const find = () => currentSvg?.querySelector(`[data-${type}="${CSS.escape(id)}"]`) ?? null;
+        if (!find()) {
+            mode = home;
+            remember('holamap.view', mode);
+            await render(mode);
+            const [picker, key] = pickers[home] ?? [];
+            if (!find() && picker?.value) {
+                picker.value = '';
+                remember(key, '');
+                await render(mode);
+            }
+        }
+        show();
+        focus();
+        const target = find();
+        if (target && reveal) {
+            reveal(target);
+        }
     };
 
     const modes = ['all', 'floorplan', 'network', 'zigbee', 'services'];

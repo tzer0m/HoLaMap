@@ -77,19 +77,18 @@
             <option value="Other">Other</option>
             <option value="Semaphore">Semaphore</option>
         </select>
+        <dialog id="rack-dialog" class="rack-dialog" data-rack-url="@Url.Page("/Racks/Details", new { id = 0 })">
+            <header class="rack-dialog-header">
+                <strong data-title></strong>
+                <a class="button button-secondary" data-edit>Edit Rack</a>
+                <button type="button" class="button button-secondary" data-close>Close</button>
+            </header>
+            <div class="rackmap" data-body></div>
+        </dialog>
     </div>
     <aside id="details" class="details" data-splitter-url="@Url.Page("/Index", "Splitter")" data-room-url="@Url.Page("/Index", "Room")" data-zigbee-room-url="@Url.Page("/Index", "ZigbeeRoom")">Select a device or link to see its details.</aside>
     @Html.AntiForgeryToken()
 </div>
-
-<dialog id="rack-dialog" class="rack-dialog" data-rack-url="@Url.Page("/Racks/Details", new { id = 0 })">
-    <header class="rack-dialog-header">
-        <strong data-title></strong>
-        <a class="button button-secondary" data-edit>Edit Rack</a>
-        <button type="button" class="button button-secondary" data-close>Close</button>
-    </header>
-    <div class="rackmap" data-body></div>
-</dialog>
 
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>

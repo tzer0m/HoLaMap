@@ -208,7 +208,8 @@ window.RackMap = (function () {
         return key;
     };
 
-    const draw = (host, raw, rackId) => {
+    // onPick, when given, hears about each device, port or cable clicked, so the page can show its details.
+    const draw = (host, raw, rackId, onPick) => {
         host.replaceChildren();
         const rack = raw.racks.find(item => item.id === rackId);
         if (!rack) {
@@ -768,6 +769,7 @@ window.RackMap = (function () {
                 event.stopPropagation();
                 const related = cables.filter(cable => endsOf(cable).includes(box.node.id));
                 focus(related, [box.node.id, ...related.flatMap(endsOf)], `${box.node.label} · ${box.node.detail}`);
+                onPick?.({ node: box.node.id });
             });
             box.sockets.forEach(socket => {
                 const end = socket.end;
@@ -780,6 +782,7 @@ window.RackMap = (function () {
                 square.addEventListener('click', event => {
                     event.stopPropagation();
                     focus(end.cables, [box.node.id, ...end.cables.flatMap(endsOf)], `${box.node.label}${socket.index ? ` Port ${socket.index}` : ''} · ${socket.detail}`);
+                    onPick?.(socket.index ? { node: box.node.id, port: socket.id } : { node: box.node.id });
                 });
             });
         });
@@ -796,6 +799,7 @@ window.RackMap = (function () {
             group.addEventListener('click', event => {
                 event.stopPropagation();
                 focus([cable], endsOf(cable), describe(cable));
+                onPick?.({ edge: cable.edge.id });
             });
             return group;
         };
@@ -810,6 +814,7 @@ window.RackMap = (function () {
                 label.addEventListener('click', event => {
                     event.stopPropagation();
                     focus([cable], endsOf(cable), describe(cable));
+                    onPick?.({ edge: cable.edge.id });
                 });
             }
         });

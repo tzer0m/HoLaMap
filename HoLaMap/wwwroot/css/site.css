@@ -837,18 +837,63 @@ body:has(.map-layout) .details {
     pointer-events: none;
 }
 
+/* The rack drawing covers just the map, so the details pane beside it stays in reach. */
 .rack-dialog {
-    max-width: 95vw;
-    max-height: 92vh;
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
     padding: 16px;
+    overflow: auto;
     border: 1px solid #4a5068;
-    border-radius: 8px;
+    border-radius: 6px;
     background: #12151b;
     color: #e6e6e6;
 }
 
-.rack-dialog::backdrop {
-    background: rgb(0 0 0 / 60%);
+/* Inside it the key sits down the left, and the rack is scaled to fit the space beside it, centred, with the selection's description underneath. */
+.rack-dialog[open] {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.rack-dialog .rackmap {
+    flex: 1;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: 1fr auto;
+    gap: 8px 24px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.rack-dialog .rackmap-key {
+    grid-row: 1 / span 2;
+    flex-direction: column;
+    margin-bottom: 0;
+}
+
+.rack-dialog .rackmap-key .legend {
+    flex-direction: column;
+    gap: 8px;
+}
+
+.rack-dialog .rackmap-svg {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    min-height: 0;
+}
+
+.rack-dialog .rackmap-info {
+    margin: 0;
+    text-align: center;
 }
 
 .rack-dialog-header {
