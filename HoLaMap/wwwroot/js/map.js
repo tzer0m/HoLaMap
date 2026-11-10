@@ -920,6 +920,8 @@
         currentSvg.querySelectorAll('[data-node]').forEach(element => element.classList.toggle('related', nodeIds.has(element.dataset.node)));
         currentSvg.querySelectorAll('[data-edge]').forEach(element => element.classList.toggle('related', edgeIds.has(element.dataset.edge)));
         currentSvg.querySelectorAll('[data-edges]').forEach(element => element.classList.toggle('related', element.dataset.edges.split(' ').some(edgeId => edgeIds.has(edgeId))));
+        // The faded lines are solid, so the picked ones are moved on top of them, or a faded line on the same track would cover them.
+        currentSvg.querySelectorAll('[data-edge].related, [data-edges].related').forEach(element => element.parentNode.appendChild(element));
     };
     const focusNode = nodeId => {
         const edges = graph.edges.filter(edge => edge.source === nodeId || edge.target === nodeId);

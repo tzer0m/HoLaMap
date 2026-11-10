@@ -771,10 +771,14 @@ body:has(.map-layout) .details {
     white-space: pre-line;
 }
 
-.map-svg.focusing .map-node:not(.related),
+.map-svg.focusing .map-node:not(.related) {
+    opacity: 0.15;
+}
+
+/* Lines are darkened rather than made see-through, so faded lines sharing a track don't add up to look bright again. */
 .map-svg.focusing .map-edge:not(.related),
 .map-svg.focusing .map-trunk:not(.related) {
-    opacity: 0.15;
+    filter: brightness(0.2);
 }
 
 .map-trunk {
