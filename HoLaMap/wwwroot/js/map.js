@@ -1668,7 +1668,8 @@
         if (linked.length) {
             const blocks = new Map();
             const ids = new Set();
-            const direction = { 'elk.direction': 'RIGHT' };
+            // Lines into or out of the same service share one point on it, so they join on the way in and split on the way out.
+            const direction = { 'elk.direction': 'RIGHT', 'elk.layered.mergeEdges': 'true' };
             const children = linked.map(entry => {
                 const rest = columnsOf(entry.items.filter(item => !entry.isLinked(item)));
                 const block = rest.length ? { id: `block:${entry.host.id}`, ...sizeOfColumns(rest) } : null;
@@ -1733,7 +1734,7 @@
 
             // A line comes back relative to the box ELK names as its container: a project box, a host, or the whole map.
             const defs = create('defs', {}, layers.edges);
-            const marker = create('marker', { id: 'service-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' }, defs);
+            const marker = create('marker', { id: 'service-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, markerUnits: 'userSpaceOnUse', orient: 'auto-start-reverse' }, defs);
             create('path', { d: 'M 0 0 L 10 5 L 0 10 z', class: 'service-arrow' }, marker);
             (layout.edges ?? []).forEach(layoutEdge => {
                 const edge = edges.find(item => item.id === layoutEdge.id);
