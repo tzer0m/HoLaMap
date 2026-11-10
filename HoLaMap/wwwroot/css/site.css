@@ -1166,19 +1166,6 @@ body:has(.map-layout) .details {
     stroke-width: 1.5;
 }
 
-.map-halo {
-    fill: none;
-    stroke: #1b1f27;
-    stroke-width: 10px;
-    stroke-linejoin: round;
-}
-
-.map-halo-box {
-    fill: #1b1f27;
-    stroke: #1b1f27;
-    stroke-width: 8px;
-}
-
 .map-edge.tagged .map-edge-line {
     stroke-dasharray: 6 4;
 }

@@ -138,6 +138,17 @@
         return path;
     };
 
+    // A line remembers the corners it was drawn through, or points along its curve, so crossings with other lines can be found later.
+    const traced = (element, points) => {
+        element.traced = points;
+        return element;
+    };
+    const curvePoints = (from, controlA, controlB, to) => Array.from({ length: 33 }, (_, index) => {
+        const t = index / 32;
+        const u = 1 - t;
+        return { x: u * u * u * from.x + 3 * u * u * t * controlA.x + 3 * u * t * t * controlB.x + t * t * t * to.x, y: u * u * u * from.y + 3 * u * u * t * controlA.y + 3 * u * t * t * controlB.y + t * t * t * to.y };
+    });
+
     // Drops repeated and collinear points so the path builders only see real corners.
     const tidy = points => {
         const distinct = points.filter((point, index) => index === 0 || point.x !== points[index - 1].x || point.y !== points[index - 1].y);
@@ -359,7 +370,7 @@
     const showService = nodeId => {
         const service = servicesById.get(nodeId);
         heading(service.label, [[serviceKindNames[service.kind] ?? service.kind], service.online ? ['Reported', 'online'] : ['Missing', 'offline']]);
-        rows(section(), [['Unit', service.name !== service.label ? service.name : ''], ['Host', rawById.has(service.host.id) ? deviceButton(service.host.id) : service.host.label], ['Category', service.category], ['Compose Project', service.group], ['Owner', service.mine ? 'Mine' : 'Third Party'], ['Source', service.manual ? 'Added by Hand' : 'Reported by Host'], ['Last Reported', service.lastSeen]]);
+        rows(section(), [['Unit', service.name !== service.label ? service.name : ''], ['Host', rawById.has(service.host.id) ? deviceButton(service.host.id) : service.host.label], ['Category', service.category], [service.kind === 'Docker' ? 'Compose Project' : service.kind === 'Cloud' ? 'Provider' : 'Group', service.group], ['Owner', service.mine ? 'Mine' : 'Third Party'], ['Source', service.manual ? 'Added by Hand' : 'Reported by Host'], ['Last Reported', service.lastSeen]]);
         const list = (title, links, other) => {
             if (!links.length) {
                 return;
@@ -559,14 +570,10 @@
         section().append(list);
     };
 
-    // A halo is a wider copy of a cable or device in the room colour, drawn under everything else but over the arcs, so an arc passing behind disappears instead of crossing it.
-    const drawEdge = (edge, points, parent, halo) => {
+    const drawEdge = (edge, points, parent) => {
         const clean = tidy(points);
         if (clean.length < 2) {
             return;
-        }
-        if (halo) {
-            create('path', { d: roundedPath(clean), class: 'map-halo' }, halo);
         }
         const d = roundedPath(clean);
         const group = create('g', { class: 'map-edge' + (edge.online ? '' : ' offline') + (edge.tagged ? ' tagged' : '') + (edge.zigbee ? ' zigbee' : ''), 'data-edge': edge.id }, parent);
@@ -631,19 +638,19 @@
     const drawLine = (edge, clean, lineClass, parent, splitterAtEnd) => {
         const split = edge.splitter && splitterAtEnd !== null ? splitAt(splitterAtEnd ? clean : [...clean].reverse(), Math.min(40, pathLength(clean) * 0.3)) : null;
         if (edge.wireless) {
-            create('path', { d: wavePath(clean), class: `${lineClass} wireless`, stroke: colours.wifi }, parent);
+            traced(create('path', { d: wavePath(clean), class: `${lineClass} wireless`, stroke: colours.wifi }, parent), clean);
             return;
         }
         if (edge.zigbee) {
-            create('path', { d: roundedPath(clean), class: lineClass, stroke: colours.zigbee }, parent);
+            traced(create('path', { d: roundedPath(clean), class: lineClass, stroke: colours.zigbee }, parent), clean);
             return;
         }
         if (!split) {
-            create('path', { d: edge.poE && !edge.back ? zigzagPath(clean) : roundedPath(clean), class: lineClass, stroke: cableColour(edge) }, parent);
+            traced(create('path', { d: edge.poE && !edge.back ? zigzagPath(clean) : roundedPath(clean), class: lineClass, stroke: cableColour(edge) }, parent), clean);
             return;
         }
-        create('path', { d: edge.back ? roundedPath(split.before) : zigzagPath(split.before), class: lineClass, stroke: colours[edge.style] ?? '#7b8794' }, parent);
-        create('path', { d: roundedPath(split.after), class: lineClass, stroke: cableColour({ ...edge, poE: false }) }, parent);
+        traced(create('path', { d: edge.back ? roundedPath(split.before) : zigzagPath(split.before), class: lineClass, stroke: colours[edge.style] ?? '#7b8794' }, parent), split.before);
+        traced(create('path', { d: roundedPath(split.after), class: lineClass, stroke: cableColour({ ...edge, poE: false }) }, parent), split.after);
         drawSplitter(split.at, split.vertical, colours[edge.style] ?? '#7b8794', parent);
     };
 
@@ -895,13 +902,10 @@
                     const centreY = stackLayout.y + stacked.item.y + stacked.item.height / 2;
                     points.push({ x: section.endPoint.x, y: centreY }, { x: stackLayout.x + stacked.stack.entryX, y: centreY });
                 }
-                drawEdge(edge, points, layers.edges, layers.halos);
+                drawEdge(edge, points, layers.edges);
             });
         });
         result.placements.forEach(placement => {
-            if (layers.halos) {
-                create('rect', { x: placement.x, y: placement.y, width: placement.width, height: placement.height, rx: 4, class: 'map-halo-box' }, layers.halos);
-            }
             drawNode(placement.node, placement.x, placement.y, placement.width, placement.height, layers.nodes, compact);
         });
     };
@@ -1282,21 +1286,22 @@
             const [a, b] = [boxes.get(edge.source), boxes.get(edge.target)];
             const centre = box => box.x + box.width / 2;
             const across = Math.abs(centre(b) - centre(a));
-            let d;
+            let curve;
             if (across >= Math.abs(b.y - a.y)) {
                 // The curve's highest point is a quarter of the way from its ends to the apex, and it shouldn't leave the top of the map.
                 const apex = Math.max(Math.min(a.y, b.y) - Math.max(30, across * 0.25), (8 - 0.25 * Math.min(a.y, b.y)) / 0.75);
-                d = `M ${centre(a)} ${a.y} C ${centre(a)} ${apex}, ${centre(b)} ${apex}, ${centre(b)} ${b.y}`;
+                curve = [{ x: centre(a), y: a.y }, { x: centre(a), y: apex }, { x: centre(b), y: apex }, { x: centre(b), y: b.y }];
             } else {
                 const [upper, lower] = a.y < b.y ? [a, b] : [b, a];
                 const from = { x: centre(upper), y: upper.y + upper.height };
                 const to = { x: centre(lower), y: lower.y };
                 const down = to.y - from.y;
                 const bow = (to.x >= from.x ? 1 : -1) * Math.max(40, down * 0.2);
-                d = `M ${from.x} ${from.y} C ${from.x + bow} ${from.y + down / 3}, ${to.x + bow} ${to.y - down / 3}, ${to.x} ${to.y}`;
+                curve = [from, { x: from.x + bow, y: from.y + down / 3 }, { x: to.x + bow, y: to.y - down / 3 }, to];
             }
+            const d = `M ${curve[0].x} ${curve[0].y} C ${curve[1].x} ${curve[1].y}, ${curve[2].x} ${curve[2].y}, ${curve[3].x} ${curve[3].y}`;
             const group = create('g', { class: 'map-edge zigbee map-hover-arc' + (edge.online ? '' : ' offline'), 'data-edge': edge.id }, layers.trunks);
-            create('path', { d: d, class: 'map-edge-line', stroke: colours.zigbee }, group);
+            traced(create('path', { d: d, class: 'map-edge-line', stroke: colours.zigbee }, group), curvePoints(...curve));
             [edge.source, edge.target].forEach(nodeId => arcsByNode.set(nodeId, [...(arcsByNode.get(nodeId) ?? []), group]));
         });
         arcsByNode.forEach((arcs, nodeId) => {
@@ -1357,7 +1362,7 @@
         let ox = groupPadding;
         const drawContent = (result, left, top) => {
             const transform = `translate(${left}, ${top}) scale(${scale})`;
-            drawGroup(result, { halos: create('g', { transform: transform }, layers.halos), edges: create('g', { transform: transform }, layers.edges), nodes: create('g', { transform: transform }, layers.nodes) }, true);
+            drawGroup(result, { edges: create('g', { transform: transform }, layers.edges), nodes: create('g', { transform: transform }, layers.nodes) }, true);
             result.placements.forEach(placement => centres.set(placement.node.id, { x: left + (placement.x + placement.width / 2) * scale, y: top + (placement.y + placement.height / 2) * scale, top: top + placement.y * scale, bottom: top + (placement.y + placement.height) * scale, left: left + placement.x * scale, right: left + (placement.x + placement.width) * scale }));
         };
         graph.floors.forEach(floor => {
@@ -1399,7 +1404,7 @@
             const d = `M ${from.x} ${from.y} C ${controlA.x} ${controlA.y}, ${controlB.x} ${controlB.y}, ${to.x} ${to.y}`;
             const group = create('g', { class: 'map-trunk' + (trunk.wifi ? ' wifi' : ''), 'data-edges': trunk.edges.map(edge => edge.id).join(' ') }, layers.trunks);
             create('path', { d: d, class: 'map-trunk-hit' }, group);
-            create('path', { d: d, class: 'map-trunk-line', style: `stroke-width: ${Math.min(8, 1.5 + trunk.edges.length)}px` }, group);
+            traced(create('path', { d: d, class: 'map-trunk-line', style: `stroke-width: ${Math.min(8, 1.5 + trunk.edges.length)}px` }, group), curvePoints(from, controlA, controlB, to));
             create('circle', { cx: from.x, cy: from.y, r: 3, class: 'map-trunk-end' }, group);
             create('circle', { cx: to.x, cy: to.y, r: 3, class: 'map-trunk-end' }, group);
             const middle = { x: 0.125 * (from.x + to.x) + 0.375 * (controlA.x + controlB.x), y: 0.125 * (from.y + to.y) + 0.375 * (controlA.y + controlB.y) };
@@ -1589,7 +1594,8 @@
         const ends = new Map();
         services.forEach(host => host.services.forEach(service => ends.set(service.id, !service.group && host.services.some(other => other.group === service.label) ? serviceGroupId(host.id, service.label) : service.id)));
         const edges = serviceLinks.filter(link => ends.has(link.source) && ends.has(link.target)).map(link => ({ ...link, source: ends.get(link.source), target: ends.get(link.target), online: true }));
-        const single = host => service => service.group && host.services.filter(other => other.group === service.group).length === 1;
+        // A cloud service on its own from its provider keeps its own name, since Gemini says more than Google.
+        const single = host => service => service.group && service.kind !== 'Cloud' && host.services.filter(other => other.group === service.group).length === 1;
         return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: single(host)(service) ? service.group : service.label, kind: service.kind === 'Docker' ? 'docker' : service.kind === 'PythonScript' ? 'python' : service.kind === 'Other' ? 'other' : service.kind === 'Cloud' ? 'cloud' : service.kind === 'Device' ? 'hardware' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: edges, hosts: hosts };
     };
     const drawServices = async (layers, bounds, id) => {
@@ -1702,7 +1708,7 @@
             });
             makeChildren(new Map());
             const edges = graph.edges.filter(edge => ids.has(edge.source) && ids.has(edge.target));
-            const run = reversed => {
+            const run = (reversed, seed) => {
                 // A line leaves from its type's point on the right of one service and arrives at its type's point on the left of the other.
                 const ports = new Map();
                 const addPort = (nodeId, portId, side) => {
@@ -1721,7 +1727,7 @@
                 });
                 return new ELK().layout({
                     id: 'root',
-                    layoutOptions: { ...direction, 'elk.algorithm': 'layered', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.layered.spacing.nodeNodeBetweenLayers': '60', 'elk.layered.spacing.edgeNodeBetweenLayers': '20', 'elk.spacing.nodeNode': '32', 'elk.spacing.edgeEdge': '10', 'elk.padding': '[top=0,left=0,bottom=0,right=0]' },
+                    layoutOptions: { ...direction, 'elk.algorithm': 'layered', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.layered.spacing.nodeNodeBetweenLayers': '60', 'elk.layered.spacing.edgeNodeBetweenLayers': '20', 'elk.spacing.nodeNode': '32', 'elk.spacing.edgeEdge': '10', 'elk.padding': '[top=0,left=0,bottom=0,right=0]', 'elk.layered.thoroughness': '25', 'elk.randomSeed': String(seed) },
                     children: makeChildren(ports),
                     edges: elkEdges
                 });
@@ -1738,18 +1744,74 @@
                 return placed;
             };
 
-            // ELK runs every line left to right, so a line pointing back to the left, like Home Assistant to Dashboard, loops right round the map.
-            // So the map is laid out once, then again with those lines turned round, and they're drawn with the arrow at the other end.
-            let layout = await run(new Set());
-            if (id !== renderId) {
-                return false;
+            // How tangled a layout is: each crossing counts once, plus a little for every pixel a line travels beyond the straight up-and-across distance between its ends.
+            const scoreOf = layout => {
+                const boxes = placedIn(layout);
+                const across = [];
+                const down = [];
+                let detour = 0;
+                (layout.edges ?? []).forEach(layoutEdge => {
+                    const origin = boxes.get(layoutEdge.container) ?? { x: 0, y: 0 };
+                    (layoutEdge.sections ?? []).forEach(section => {
+                        const points = [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(point => ({ x: point.x + origin.x, y: point.y + origin.y }));
+                        let length = 0;
+                        points.slice(1).forEach((point, index) => {
+                            const before = points[index];
+                            length += Math.abs(point.x - before.x) + Math.abs(point.y - before.y);
+                            if (before.y === point.y) {
+                                across.push({ id: layoutEdge.id, y: point.y, from: Math.min(before.x, point.x), to: Math.max(before.x, point.x) });
+                            } else {
+                                down.push({ id: layoutEdge.id, x: point.x, from: Math.min(before.y, point.y), to: Math.max(before.y, point.y) });
+                            }
+                        });
+                        detour += length - Math.abs(points[points.length - 1].x - points[0].x) - Math.abs(points[points.length - 1].y - points[0].y);
+                    });
+                });
+                const crossings = across.reduce((total, run) => total + down.filter(other => other.id !== run.id && other.x > run.from + 1 && other.x < run.to - 1 && run.y > other.from + 1 && run.y < other.to - 1).length, 0);
+                return crossings + detour / 10;
+            };
+
+            // ELK's result depends a lot on its random seed, so a few seeds are tried and the tidiest kept. The winner is remembered with a fingerprint of the
+            // services and links, so the next visit lays out once with it, and the search only runs again when something changes.
+            // ELK also runs every line left to right, so a line pointing back to the left, like Home Assistant to Dashboard, loops right round the map.
+            // So a first layout finds those lines, and they're turned round for the real one and drawn with the arrow at the other end.
+            const fingerprint = JSON.stringify([makeChildren(new Map()), edges.map(edge => [edge.id, edge.source, edge.target, edge.kind])]);
+            let remembered = null;
+            try {
+                remembered = JSON.parse(localStorage.getItem('holamap.serviceLayout') ?? 'null');
+            } catch (error) {
+                remembered = null;
             }
-            const first = placedIn(layout);
-            const reversed = new Set(edges.filter(edge => first.get(edge.target).x + first.get(edge.target).width / 2 < first.get(edge.source).x).map(edge => edge.id));
-            if (reversed.size) {
-                layout = await run(reversed);
+            let layout;
+            let reversed;
+            if (remembered?.fingerprint === fingerprint) {
+                reversed = new Set(remembered.reversed);
+                layout = await run(reversed, remembered.seed);
                 if (id !== renderId) {
                     return false;
+                }
+            } else {
+                const first = placedIn(await run(new Set(), 1));
+                if (id !== renderId) {
+                    return false;
+                }
+                reversed = new Set(edges.filter(edge => first.get(edge.target).x + first.get(edge.target).width / 2 < first.get(edge.source).x).map(edge => edge.id));
+                let best = null;
+                for (let seed = 1; seed <= 8; seed++) {
+                    const candidate = await run(reversed, seed);
+                    if (id !== renderId) {
+                        return false;
+                    }
+                    const score = scoreOf(candidate);
+                    if (!best || score < best.score) {
+                        best = { layout: candidate, seed: seed, score: score };
+                    }
+                }
+                layout = best.layout;
+                try {
+                    localStorage.setItem('holamap.serviceLayout', JSON.stringify({ fingerprint: fingerprint, seed: best.seed, reversed: [...reversed] }));
+                } catch (error) {
+                    // Storage is only a convenience for skipping the search next time.
                 }
             }
             const placed = placedIn(layout);
@@ -1787,19 +1849,51 @@
                 const origin = placed.get(layoutEdge.container) ?? { x: 0, y: 0 };
                 return (layoutEdge.sections ?? []).map(section => [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(point => ({ x: point.x + origin.x, y: point.y + origin.y })));
             };
+            const routes = (layout.edges ?? []).flatMap(layoutEdge => pointsOf(layoutEdge).map(points => ({ layoutEdge: layoutEdge, kind: edges.find(item => item.id === layoutEdge.id).kind, points: points })));
+
+            // A line going into a host or project box sometimes enters the box's edge well above or below its service, then doubles back inside it.
+            // Such a line is redrawn the short way, out along its own row, down one of the uprights it already used, and across to its service,
+            // as long as that doesn't run through a service or along a line of another type. Lines sharing an end with it may share its track, as they join anyway.
+            const leaves = [...placed].filter(([key]) => ids.has(key) && !linked.some(entry => entry.host.id === key) && !key.startsWith('group:') || key.startsWith('block:')).map(([, box]) => box);
+            const segmentsOf = points => points.slice(1).map((point, index) => ({ a: points[index], b: point }));
+            const lengthOf = points => segmentsOf(points).reduce((total, segment) => total + Math.abs(segment.b.x - segment.a.x) + Math.abs(segment.b.y - segment.a.y), 0);
+            const hitsService = (a, b) => leaves.some(box => Math.min(a.x, b.x) < box.x + box.width - 1 && Math.max(a.x, b.x) > box.x + 1 && Math.min(a.y, b.y) < box.y + box.height - 1 && Math.max(a.y, b.y) > box.y + 1);
+            const sharesEnd = (route, other) => route.layoutEdge.sources[0] === other.layoutEdge.sources[0] || route.layoutEdge.targets[0] === other.layoutEdge.targets[0];
+            const alongOther = (route, a, b) => routes.some(other => other !== route && !sharesEnd(route, other) && segmentsOf(other.points).some(segment => {
+                if (same(a.y, b.y) && same(segment.a.y, segment.b.y)) {
+                    return Math.abs(segment.a.y - a.y) < 4 && Math.min(Math.max(a.x, b.x), Math.max(segment.a.x, segment.b.x)) - Math.max(Math.min(a.x, b.x), Math.min(segment.a.x, segment.b.x)) > 1;
+                }
+                if (same(a.x, b.x) && same(segment.a.x, segment.b.x)) {
+                    return Math.abs(segment.a.x - a.x) < 4 && Math.min(Math.max(a.y, b.y), Math.max(segment.a.y, segment.b.y)) - Math.max(Math.min(a.y, b.y), Math.min(segment.a.y, segment.b.y)) > 1;
+                }
+                return false;
+            }));
+            routes.forEach(route => {
+                const start = route.points[0];
+                const end = route.points[route.points.length - 1];
+                if (lengthOf(route.points) <= Math.abs(end.x - start.x) + Math.abs(end.y - start.y) + 1 || end.x <= start.x) {
+                    return;
+                }
+                const uprights = [...new Set(segmentsOf(route.points).filter(segment => same(segment.a.x, segment.b.x)).map(segment => segment.a.x))].filter(x => x > start.x + 5 && x < end.x - 5);
+                const candidates = same(start.y, end.y) ? [[start, end]] : uprights.map(x => [start, { x: x, y: start.y }, { x: x, y: end.y }, end]);
+                const shorter = candidates.find(points => segmentsOf(points).every(segment => !hitsService(segment.a, segment.b) && !alongOther(route, segment.a, segment.b)));
+                if (shorter) {
+                    route.points = shorter.map(point => ({ ...point }));
+                }
+            });
+
             const portUse = new Map();
             const portY = new Map();
             const runs = [];
-            (layout.edges ?? []).forEach(layoutEdge => {
-                [layoutEdge.sources[0], layoutEdge.targets[0]].forEach(port => portUse.set(port, (portUse.get(port) ?? 0) + 1));
-                pointsOf(layoutEdge).forEach(points => {
-                    portY.set(layoutEdge.sources[0], points[0].y);
-                    portY.set(layoutEdge.targets[0], points[points.length - 1].y);
-                    points.slice(1).forEach((point, index) => {
-                        if (same(points[index].y, point.y)) {
-                            runs.push({ id: layoutEdge.id, y: point.y, from: Math.min(points[index].x, point.x), to: Math.max(points[index].x, point.x) });
-                        }
-                    });
+            routes.forEach(route => {
+                const points = route.points;
+                [route.layoutEdge.sources[0], route.layoutEdge.targets[0]].forEach(port => portUse.set(port, (portUse.get(port) ?? 0) + 1));
+                portY.set(route.layoutEdge.sources[0], points[0].y);
+                portY.set(route.layoutEdge.targets[0], points[points.length - 1].y);
+                points.slice(1).forEach((point, index) => {
+                    if (same(points[index].y, point.y)) {
+                        runs.push({ id: route.layoutEdge.id, y: point.y, from: Math.min(points[index].x, point.x), to: Math.max(points[index].x, point.x) });
+                    }
                 });
             });
             const fits = (port, y) => {
@@ -1825,9 +1919,9 @@
                 }
                 return points;
             };
-            (layout.edges ?? []).forEach(layoutEdge => {
-                const edge = edges.find(item => item.id === layoutEdge.id);
-                pointsOf(layoutEdge).forEach(points => drawServiceLink(edge, level(points, layoutEdge), layers, reversed.has(edge.id)));
+            routes.forEach(route => {
+                const edge = edges.find(item => item.id === route.layoutEdge.id);
+                drawServiceLink(edge, level(route.points, route.layoutEdge), layers, reversed.has(edge.id));
             });
             bounds.width = layout.width;
             bounds.height = layout.height;
@@ -1892,7 +1986,7 @@
         const d = roundedPath(clean);
         const group = create('g', { class: `map-edge service-link link-${edge.kind.toLowerCase()}`, 'data-edge': edge.id }, layers.edges);
         create('path', { d: d, class: 'map-edge-hit' }, group);
-        create('path', { d: d, class: 'map-edge-line', [reversed ? 'marker-start' : 'marker-end']: `url(#service-arrow-${edge.kind.toLowerCase()})` }, group);
+        traced(create('path', { d: d, class: 'map-edge-line', [reversed ? 'marker-start' : 'marker-end']: `url(#service-arrow-${edge.kind.toLowerCase()})` }, group), clean);
         group.addEventListener('click', event => {
             event.stopPropagation();
             showServiceLink(edge.id);
@@ -1922,6 +2016,115 @@
         });
         legend.querySelectorAll('[data-key]').forEach(item => item.hidden = !shown.has(item.dataset.key));
         legend.querySelectorAll('ul').forEach(list => list.hidden = !list.querySelector('[data-key]:not([hidden])'));
+    };
+
+    // Where two lines cross without joining, the one underneath gets a short gap either side of the other, so it reads as passing under it instead of meeting it.
+    // Arcs always go underneath. Of two other lines, the one running up and down at the crossing goes under the one running across.
+    // Each line remembers the corners it was drawn through, or points along its curve, so this works the same for every view, waves and zigzags included,
+    // and for lines inside scaled rooms, without measuring the drawn shapes.
+    let gapCount = 0;
+    const cutGaps = (svg, viewport) => {
+        const toMap = viewport.getCTM()?.inverse();
+        if (!toMap) {
+            return;
+        }
+        const placements = new Map();
+        const widths = new Map();
+        const lines = [...svg.querySelectorAll('.map-edge-line, .map-trunk-line')].map((path, order) => {
+            if (!(path.traced?.length > 1)) {
+                return null;
+            }
+            // A line's own group can be hidden, like a Zigbee arc waiting for hover, so its position comes from the first group above it that has none of its own.
+            let holder = path.parentNode;
+            while (holder.classList.contains('map-edge') || holder.classList.contains('map-trunk')) {
+                holder = holder.parentNode;
+            }
+            if (!placements.has(holder)) {
+                const placement = holder.getCTM();
+                placements.set(holder, placement ? toMap.multiply(placement) : null);
+            }
+            const toView = placements.get(holder);
+            if (!toView) {
+                return null;
+            }
+            const look = `${path.parentNode.getAttribute('class')}|${path.getAttribute('class')}|${path.getAttribute('style') ?? ''}`;
+            if (!widths.has(look)) {
+                widths.set(look, parseFloat(getComputedStyle(path).strokeWidth) || 2);
+            }
+            const scale = Math.hypot(toView.a, toView.b);
+            const points = path.traced.map(point => new DOMPoint(point.x, point.y).matrixTransform(toView));
+            return { path: path, order: order, owner: path.closest('.map-edge, .map-trunk'), arc: path.classList.contains('map-trunk-line') || path.closest('.map-hover-arc') !== null, points: points, ends: [points[0], points[points.length - 1]], scale: scale, width: widths.get(look) * scale, toView: toView, gaps: [] };
+        }).filter(line => line);
+
+        // Every straight piece goes into a grid so only pieces near each other are compared.
+        const cell = 40;
+        const grid = new Map();
+        const pieces = lines.flatMap(line => line.points.slice(1).map((point, index) => ({ line: line, a: line.points[index], b: point })));
+        pieces.forEach((piece, number) => {
+            piece.number = number;
+            for (let x = Math.floor(Math.min(piece.a.x, piece.b.x) / cell); x <= Math.floor(Math.max(piece.a.x, piece.b.x) / cell); x++) {
+                for (let y = Math.floor(Math.min(piece.a.y, piece.b.y) / cell); y <= Math.floor(Math.max(piece.a.y, piece.b.y) / cell); y++) {
+                    const key = `${x},${y}`;
+                    if (!grid.has(key)) {
+                        grid.set(key, []);
+                    }
+                    grid.get(key).push(piece);
+                }
+            }
+        });
+        const side = (point, a, b) => ((b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)) / (Math.hypot(b.x - a.x, b.y - a.y) || 1);
+        // A real crossing has each piece clearly on both sides of the other, which rules out lines that only touch, share a track, or meet at a corner or an end.
+        const crossing = (piece, other) => {
+            const sides = [side(piece.a, other.a, other.b), side(piece.b, other.a, other.b), side(other.a, piece.a, piece.b), side(other.b, piece.a, piece.b)];
+            if (sides[0] * sides[1] >= 0 || sides[2] * sides[3] >= 0) {
+                return null;
+            }
+            if (!piece.line.arc && !other.line.arc && Math.min(...sides.map(Math.abs)) < 0.5) {
+                return null;
+            }
+            const along = sides[0] / (sides[0] - sides[1]);
+            const point = { x: piece.a.x + (piece.b.x - piece.a.x) * along, y: piece.a.y + (piece.b.y - piece.a.y) * along };
+            return [piece.line, other.line].some(line => line.ends.some(end => Math.hypot(end.x - point.x, end.y - point.y) < 6)) ? null : point;
+        };
+        const upright = piece => Math.abs(piece.b.y - piece.a.y) / (Math.hypot(piece.b.x - piece.a.x, piece.b.y - piece.a.y) || 1);
+        const checked = new Set();
+        grid.forEach(here => here.forEach((piece, index) => here.slice(index + 1).forEach(other => {
+            if (piece.line === other.line || piece.line.owner === other.line.owner) {
+                return;
+            }
+            const key = Math.min(piece.number, other.number) * pieces.length + Math.max(piece.number, other.number);
+            if (checked.has(key)) {
+                return;
+            }
+            checked.add(key);
+            const point = crossing(piece, other);
+            if (!point) {
+                return;
+            }
+            let [under, over] = piece.line.order < other.line.order ? [piece, other] : [other, piece];
+            if (piece.line.arc !== other.line.arc) {
+                [under, over] = piece.line.arc ? [piece, other] : [other, piece];
+            } else if (!piece.line.arc && Math.abs(upright(piece) - upright(other)) > 0.2) {
+                [under, over] = upright(piece) > upright(other) ? [piece, other] : [other, piece];
+            }
+            if (!under.line.gaps.some(gap => Math.hypot(gap.x - point.x, gap.y - point.y) < 6)) {
+                under.line.gaps.push({ ...point, radius: over.line.width / 2 + 3 });
+            }
+        })));
+
+        // Each line with gaps gets a mask: everything shows except a small circle at each crossing.
+        const defs = create('defs', {}, svg);
+        lines.filter(line => line.gaps.length).forEach(line => {
+            const id = `map-gap-${++gapCount}`;
+            const fromView = line.toView.inverse();
+            const mask = create('mask', { id: id, maskUnits: 'userSpaceOnUse', x: -100000, y: -100000, width: 200000, height: 200000 }, defs);
+            create('rect', { x: -100000, y: -100000, width: 200000, height: 200000, fill: 'white' }, mask);
+            line.gaps.forEach(gap => {
+                const point = new DOMPoint(gap.x, gap.y).matrixTransform(fromView);
+                create('circle', { cx: point.x, cy: point.y, r: gap.radius / line.scale, fill: 'black' }, mask);
+            });
+            line.path.setAttribute('mask', `url(#${id})`);
+        });
     };
 
     let renderId = 0;
@@ -1976,7 +2179,7 @@
         }
         const svg = create('svg', { class: 'map-svg' });
         const viewport = create('g', {}, svg);
-        const layers = { boxes: create('g', {}, viewport), trunks: create('g', {}, viewport), halos: create('g', {}, viewport), edges: create('g', {}, viewport), nodes: create('g', {}, viewport), labels: create('g', { class: 'map-labels' }, viewport) };
+        const layers = { boxes: create('g', {}, viewport), trunks: create('g', {}, viewport), edges: create('g', {}, viewport), nodes: create('g', {}, viewport), labels: create('g', { class: 'map-labels' }, viewport) };
         labelLayer = layers.labels;
         const bounds = { width: 0, height: 0 };
 
@@ -2020,6 +2223,7 @@
             apply();
         };
         container.replaceChildren(svg);
+        cutGaps(svg, viewport);
         fit();
 
         svg.addEventListener('wheel', event => {
