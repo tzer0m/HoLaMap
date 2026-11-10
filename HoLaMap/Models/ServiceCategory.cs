@@ -38,11 +38,6 @@ namespace HoLaMap.Models
         /// <summary>
         /// The Asterisk phone system.
         /// </summary>
-        Asterisk,
-
-        /// <summary>
-        /// Pi-hole DNS.
-        /// </summary>
-        PiHole
+        Asterisk
     }
 }
