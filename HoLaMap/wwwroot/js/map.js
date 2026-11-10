@@ -1867,7 +1867,7 @@
                 const origin = placed.get(layoutEdge.container) ?? { x: 0, y: 0 };
                 return (layoutEdge.sections ?? []).map(section => [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(point => ({ x: point.x + origin.x, y: point.y + origin.y })));
             };
-            const routes = (layout.edges ?? []).flatMap(layoutEdge => pointsOf(layoutEdge).map(points => ({ layoutEdge: layoutEdge, kind: edges.find(item => item.id === layoutEdge.id).kind, points: points })));
+            const routes = (layout.edges ?? []).flatMap(layoutEdge => pointsOf(layoutEdge).map(points => ({ layoutEdge: layoutEdge, kind: edges.find(item => item.id === layoutEdge.id).kind, ends: [layoutEdge.sources[0], layoutEdge.targets[0]].map(port => port.split('>')[0]), points: points })));
 
             // A line going into a host or project box sometimes enters the box's edge well above or below its service, then doubles back inside it.
             // Such a line is redrawn the short way, out along its own row, down one of the uprights it already used, and across to its service,
