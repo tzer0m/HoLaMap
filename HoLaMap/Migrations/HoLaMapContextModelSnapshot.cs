@@ -495,6 +495,37 @@ namespace HoLaMap.Migrations
                     b.ToTable("Services");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.ServiceLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("FromServiceId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ToServiceId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ToServiceId");
+
+                    b.HasIndex("FromServiceId", "ToServiceId")
+                        .IsUnique();
+
+                    b.ToTable("ServiceLinks");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.ZigbeeDevice", b =>
                 {
                     b.Property<int>("Id")
@@ -744,6 +775,25 @@ namespace HoLaMap.Migrations
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Device");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.ServiceLink", b =>
+                {
+                    b.HasOne("HoLaMap.Models.Service", "FromService")
+                        .WithMany()
+                        .HasForeignKey("FromServiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("HoLaMap.Models.Service", "ToService")
+                        .WithMany()
+                        .HasForeignKey("ToServiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FromService");
+
+                    b.Navigation("ToService");
                 });
 
             modelBuilder.Entity("HoLaMap.Models.ZigbeeDevice", b =>

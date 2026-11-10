@@ -1405,6 +1405,19 @@ body:has(.map-layout) .details {
     stroke: #ffd43b;
 }
 
+.map-edge.service-link .map-edge-line {
+    stroke: #8a90b0;
+    stroke-width: 2;
+}
+
+.map-edge.service-link:hover .map-edge-line {
+    stroke-width: 3.5;
+}
+
+.service-arrow {
+    fill: #8a90b0;
+}
+
 .map-node.hardware .map-node-box {
     fill: #4a3018;
     stroke: #f0883e;

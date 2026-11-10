@@ -1,0 +1,67 @@
+@page
+@model HoLaMap.Pages.Services.LinksModel
+@{
+    ViewData["Title"] = "Service Links";
+}
+
+<header class="page-header">
+    <h1>Service Links</h1>
+    <a class="button button-secondary" asp-page="Index">Back to Services</a>
+</header>
+
+<form method="post" asp-page-handler="Add" class="form">
+    <label>
+        Service
+        <select asp-for="FromServiceId" asp-items="Model.ServiceOptions">
+            <option value="">Choose the service that uses something…</option>
+        </select>
+        <span asp-validation-for="FromServiceId" class="field-error"></span>
+    </label>
+    <label>
+        Uses
+        <select asp-for="ToServiceId" asp-items="Model.ServiceOptions">
+            <option value="">Choose what it uses…</option>
+        </select>
+        <span asp-validation-for="ToServiceId" class="field-error"></span>
+    </label>
+    <label>
+        Notes
+        <input asp-for="Notes" placeholder="Optional, e.g. prints the daily headline" />
+    </label>
+    <div class="form-actions">
+        <button type="submit" class="button">Add Link</button>
+    </div>
+</form>
+
+@if (Model.Links.Count == 0)
+{
+    <p class="empty">No links yet.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Service</th>
+                <th>Uses</th>
+                <th>Notes</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (ServiceLink link in Model.Links)
+            {
+                <tr>
+                    <td>@LinksModel.Describe(link.FromService)</td>
+                    <td>@LinksModel.Describe(link.ToService)</td>
+                    <td>@link.Notes</td>
+                    <td>
+                        <form method="post" asp-page-handler="Delete" asp-route-id="@link.Id">
+                            <button type="submit" class="button button-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

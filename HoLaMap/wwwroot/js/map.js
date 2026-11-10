@@ -352,12 +352,41 @@
 
     // Services view: what each host reports running, fetched the first time the tab is opened.
     let services = null;
+    let serviceLinks = [];
     const servicesById = new Map();
+    const serviceGroupId = (hostId, group) => `group:${hostId}:${group}`;
     const serviceKindNames = { Systemd: 'Systemd', Docker: 'Docker', TrueNasApp: 'TrueNAS App', PythonScript: 'Python Script', ApiRoute: 'API Route', Cloud: 'Cloud', Device: 'Device', Other: 'Other' };
     const showService = nodeId => {
         const service = servicesById.get(nodeId);
         heading(service.label, [[serviceKindNames[service.kind] ?? service.kind], service.online ? ['Reported', 'online'] : ['Missing', 'offline']]);
         rows(section(), [['Unit', service.name !== service.label ? service.name : ''], ['Host', rawById.has(service.host.id) ? deviceButton(service.host.id) : service.host.label], ['Category', service.category], ['Compose Project', service.group], ['Owner', service.mine ? 'Mine' : 'Third Party'], ['Source', service.manual ? 'Added by Hand' : 'Reported by Host'], ['Last Reported', service.lastSeen]]);
+        const list = (title, links, other) => {
+            if (!links.length) {
+                return;
+            }
+            const items = element('ul', 'details-list');
+            links.forEach(link => {
+                const item = element('li');
+                item.append(serviceButton(other(link)));
+                meta(item, link.notes);
+                items.append(item);
+            });
+            section(title).append(items);
+        };
+        list('Uses', serviceLinks.filter(link => link.source === nodeId), link => link.target);
+        list('Used By', serviceLinks.filter(link => link.target === nodeId), link => link.source);
+    };
+    const serviceButton = serviceId => {
+        const service = servicesById.get(serviceId);
+        return button(service ? `${service.label} (${service.host.label})` : 'Unknown', () => {
+            showService(serviceId);
+            focusNode(serviceId);
+        });
+    };
+    const showServiceLink = linkId => {
+        const link = serviceLinks.find(item => item.id === linkId);
+        heading(`${servicesById.get(link.source)?.label ?? 'Unknown'} → ${servicesById.get(link.target)?.label ?? 'Unknown'}`, [['Link']]);
+        rows(section(), [['Service', serviceButton(link.source)], ['Uses', serviceButton(link.target)], ['Notes', link.notes]]);
     };
 
     const showDevice = nodeId => {
@@ -1555,15 +1584,20 @@
             const groups = new Set(host.services.map(service => service.group).filter(group => group));
             return { ...host, services: host.services.filter(service => service.group || !groups.has(service.label)) };
         });
+        // A link to a service that's the group's box itself, like Api, ends at the box.
+        const ends = new Map();
+        services.forEach(host => host.services.forEach(service => ends.set(service.id, !service.group && host.services.some(other => other.group === service.label) ? serviceGroupId(host.id, service.label) : service.id)));
+        const edges = serviceLinks.filter(link => ends.has(link.source) && ends.has(link.target)).map(link => ({ ...link, source: ends.get(link.source), target: ends.get(link.target), online: true }));
         const single = host => service => service.group && host.services.filter(other => other.group === service.group).length === 1;
-        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: single(host)(service) ? service.group : service.label, kind: service.kind === 'Docker' ? 'docker' : service.kind === 'PythonScript' ? 'python' : service.kind === 'Other' ? 'other' : service.kind === 'Cloud' ? 'cloud' : service.kind === 'Device' ? 'hardware' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: [], hosts: hosts };
+        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: single(host)(service) ? service.group : service.label, kind: service.kind === 'Docker' ? 'docker' : service.kind === 'PythonScript' ? 'python' : service.kind === 'Other' ? 'other' : service.kind === 'Cloud' ? 'cloud' : service.kind === 'Device' ? 'hardware' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: edges, hosts: hosts };
     };
-    const drawServices = (layers, bounds) => {
+    const drawServices = async (layers, bounds, id) => {
         const maxHeight = 10 * (chipHeight + stackGap) - stackGap;
         const hostGap = 32;
+        const endpoints = new Set(graph.edges.flatMap(edge => [edge.source, edge.target]));
 
-        // Measure each host first: its services and project boxes fill columns of about ten chips' height.
-        const measured = graph.hosts.map(host => {
+        // A host's services and project boxes, as items sized to fill columns.
+        const itemsOf = host => {
             const counts = new Map();
             host.services.filter(service => service.group).forEach(service => counts.set(service.group, (counts.get(service.group) ?? 0) + 1));
             const items = [];
@@ -1586,6 +1620,11 @@
                 item.width = item.group ? Math.max(chipWidth, textWidth(item.label, true) + 16) + roomPadding * 2 : chipWidth;
                 item.height = item.group ? roomHeader + item.nodes.length * (chipHeight + stackGap) - stackGap + roomPadding : chipHeight;
             });
+            return items;
+        };
+
+        // Items fill columns top to bottom, about ten chips tall.
+        const columnsOf = items => {
             const columns = [];
             items.forEach(item => {
                 const column = columns[columns.length - 1];
@@ -1597,16 +1636,13 @@
                 }
             });
             columns.forEach(column => column.width = Math.max(...column.items.map(item => item.width)));
-            const innerWidth = Math.max(columns.reduce((sum, column) => sum + column.width, 0) + (columns.length - 1) * groupPadding, textWidth(host.label, true) * 14 / 12 + groupPadding);
-            const innerHeight = Math.max(...columns.map(column => column.height));
-            return { host: host, columns: columns, width: innerWidth + groupPadding * 2, height: titleHeight + innerHeight + groupPadding };
-        });
-
-        const drawHost = (item, left, top, width) => {
-            drawFrame(item.host.label, left, top, width, item.height, layers.boxes);
-            let x = left + groupPadding;
-            item.columns.forEach(column => {
-                let y = top + titleHeight;
+            return columns;
+        };
+        const sizeOfColumns = columns => ({ width: columns.reduce((sum, column) => sum + column.width, 0) + (columns.length - 1) * groupPadding, height: Math.max(...columns.map(column => column.height)) });
+        const drawColumns = (columns, left, top) => {
+            let x = left;
+            columns.forEach(column => {
+                let y = top;
                 column.items.forEach(entry => {
                     if (entry.group) {
                         drawRoom(entry.label, x, y, column.width, entry.height, layers.boxes);
@@ -1620,7 +1656,105 @@
             });
         };
 
-        // Hosts stack into piles no taller than the tallest host, keeping name order, so small hosts sit on top of each other beside the big ones.
+        // Hosts with a linked service are laid out by ELK, so linked services sit close together and the lines cross as little as possible.
+        // Only the linked services, and the project boxes holding them, take part. The rest of each host is packed into one block beside them.
+        const hosts = graph.hosts.map(host => {
+            const items = itemsOf(host);
+            const isLinked = item => item.nodes.some(node => endpoints.has(node.id)) || (item.group !== undefined && endpoints.has(serviceGroupId(host.id, item.group)));
+            return { host: host, items: items, isLinked: isLinked, linked: items.some(isLinked) };
+        });
+        const linked = hosts.filter(entry => entry.linked);
+        let top = 0;
+        if (linked.length) {
+            const blocks = new Map();
+            const ids = new Set();
+            const direction = { 'elk.direction': 'RIGHT' };
+            const children = linked.map(entry => {
+                const rest = columnsOf(entry.items.filter(item => !entry.isLinked(item)));
+                const block = rest.length ? { id: `block:${entry.host.id}`, ...sizeOfColumns(rest) } : null;
+                if (block) {
+                    blocks.set(block.id, rest);
+                }
+                ids.add(entry.host.id);
+                return {
+                    id: entry.host.id,
+                    layoutOptions: { ...direction, 'elk.padding': `[top=${titleHeight},left=${groupPadding},bottom=${groupPadding},right=${groupPadding}]`, 'elk.spacing.nodeNode': '12', 'elk.layered.spacing.nodeNodeBetweenLayers': '40' },
+                    children: [
+                        ...entry.items.filter(entry.isLinked).map(item => {
+                            if (!item.group) {
+                                ids.add(item.nodes[0].id);
+                                return { id: item.nodes[0].id, ...chipSize(item.nodes[0]) };
+                            }
+                            const groupId = serviceGroupId(entry.host.id, item.group);
+                            ids.add(groupId);
+                            item.nodes.forEach(node => ids.add(node.id));
+                            return { id: groupId, layoutOptions: { ...direction, 'elk.padding': `[top=${roomHeader},left=${roomPadding},bottom=${roomPadding},right=${roomPadding}]`, 'elk.spacing.nodeNode': String(stackGap) }, children: item.nodes.map(node => ({ id: node.id, ...chipSize(node) })) };
+                        }),
+                        ...(block ? [block] : [])
+                    ]
+                };
+            });
+            const edges = graph.edges.filter(edge => ids.has(edge.source) && ids.has(edge.target));
+            const layout = await new ELK().layout({
+                id: 'root',
+                layoutOptions: { ...direction, 'elk.algorithm': 'layered', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.layered.spacing.nodeNodeBetweenLayers': '60', 'elk.layered.spacing.edgeNodeBetweenLayers': '20', 'elk.spacing.nodeNode': '32', 'elk.spacing.edgeEdge': '10', 'elk.padding': '[top=0,left=0,bottom=0,right=0]' },
+                children: children,
+                edges: edges.map(edge => ({ id: edge.id, sources: [edge.source], targets: [edge.target] }))
+            });
+            if (id !== renderId) {
+                return false;
+            }
+
+            // ELK places each box relative to the one holding it, so walk down adding up the offsets.
+            const placed = new Map();
+            const walk = (box, x, y) => (box.children ?? []).forEach(child => {
+                placed.set(child.id, { x: x + child.x, y: y + child.y, width: child.width, height: child.height });
+                walk(child, x + child.x, y + child.y);
+            });
+            walk(layout, 0, 0);
+            linked.forEach(entry => {
+                const hostBox = placed.get(entry.host.id);
+                drawFrame(entry.host.label, hostBox.x, hostBox.y, hostBox.width, hostBox.height, layers.boxes);
+                entry.items.filter(entry.isLinked).forEach(item => {
+                    if (item.group) {
+                        const box = placed.get(serviceGroupId(entry.host.id, item.group));
+                        drawRoom(item.label, box.x, box.y, box.width, box.height, layers.boxes);
+                    }
+                    item.nodes.forEach(node => {
+                        const box = placed.get(node.id);
+                        drawNode(node, box.x, box.y, box.width, box.height, layers.nodes, true);
+                    });
+                });
+                const block = placed.get(`block:${entry.host.id}`);
+                if (block) {
+                    drawColumns(blocks.get(`block:${entry.host.id}`), block.x, block.y);
+                }
+            });
+
+            // A line comes back relative to the box ELK names as its container: a project box, a host, or the whole map.
+            const defs = create('defs', {}, layers.edges);
+            const marker = create('marker', { id: 'service-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' }, defs);
+            create('path', { d: 'M 0 0 L 10 5 L 0 10 z', class: 'service-arrow' }, marker);
+            (layout.edges ?? []).forEach(layoutEdge => {
+                const edge = edges.find(item => item.id === layoutEdge.id);
+                const origin = placed.get(layoutEdge.container) ?? { x: 0, y: 0 };
+                (layoutEdge.sections ?? []).forEach(section => drawServiceLink(edge, [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(point => ({ x: point.x + origin.x, y: point.y + origin.y })), layers));
+            });
+            bounds.width = layout.width;
+            bounds.height = layout.height;
+            top = layout.height + hostGap * 2;
+        }
+
+        // Hosts with nothing linked stack into piles no taller than the tallest of them, keeping name order, so small hosts sit on top of each other beside the big ones.
+        const measured = hosts.filter(entry => !entry.linked).map(entry => {
+            const columns = columnsOf(entry.items);
+            const size = sizeOfColumns(columns);
+            const innerWidth = Math.max(size.width, textWidth(entry.host.label, true) * 14 / 12 + groupPadding);
+            return { host: entry.host, columns: columns, width: innerWidth + groupPadding * 2, height: titleHeight + size.height + groupPadding };
+        });
+        if (!measured.length) {
+            return true;
+        }
         const tallest = Math.max(...measured.map(item => item.height));
         const piles = [];
         measured.forEach(item => {
@@ -1634,12 +1768,11 @@
             }
         });
 
-        // Piles wrap into rows roughly the shape of the map area, so it fills the screen rather than running off to one side.
+        // Piles wrap into rows roughly the shape of the map area, below anything ELK laid out, so it fills the screen rather than running off to one side.
         const box = container.getBoundingClientRect();
         const area = piles.reduce((sum, pile) => sum + (pile.width + hostGap) * (pile.height + hostGap), 0);
-        const rowWidth = Math.max(...piles.map(pile => pile.width), Math.sqrt(area * box.width / Math.max(box.height, 1)));
+        const rowWidth = Math.max(bounds.width, ...piles.map(pile => pile.width), Math.sqrt(area * box.width / Math.max(box.height, 1)));
         let left = 0;
-        let top = 0;
         let rowHeight = 0;
         piles.forEach(pile => {
             if (left > 0 && left + pile.width > rowWidth) {
@@ -1649,13 +1782,33 @@
             }
             let y = top;
             pile.items.forEach(item => {
-                drawHost(item, left, y, pile.width);
+                drawFrame(item.host.label, left, y, pile.width, item.height, layers.boxes);
+                drawColumns(item.columns, left + groupPadding, y + titleHeight);
                 y += item.height + hostGap;
             });
             bounds.width = Math.max(bounds.width, left + pile.width);
             bounds.height = Math.max(bounds.height, top + pile.height);
             rowHeight = Math.max(rowHeight, pile.height);
             left += pile.width + hostGap;
+        });
+        return true;
+    };
+
+    // A link between services: a grey line with an arrow pointing at the service being used.
+    const drawServiceLink = (edge, points, layers) => {
+        const clean = tidy(points);
+        if (clean.length < 2) {
+            return;
+        }
+        const d = roundedPath(clean);
+        create('path', { d: d, class: 'map-halo' }, layers.halos);
+        const group = create('g', { class: `map-edge service-link ${edge.kind.toLowerCase()}`, 'data-edge': edge.id }, layers.edges);
+        create('path', { d: d, class: 'map-edge-hit' }, group);
+        create('path', { d: d, class: 'map-edge-line', 'marker-end': 'url(#service-arrow)' }, group);
+        group.addEventListener('click', event => {
+            event.stopPropagation();
+            showServiceLink(edge.id);
+            focusEdges([edge]);
         });
     };
 
@@ -1700,9 +1853,12 @@
         }
         if (mode === 'services' && !services) {
             try {
-                services = await (await fetch(container.dataset.servicesUrl)).json();
+                const data = await (await fetch(container.dataset.servicesUrl)).json();
+                services = data.hosts;
+                serviceLinks = data.links;
             } catch (error) {
                 services = [];
+                serviceLinks = [];
             }
             services.forEach(host => host.services.forEach(service => servicesById.set(service.id, { ...service, host: host })));
             if (id !== renderId) {
@@ -1737,7 +1893,9 @@
         const bounds = { width: 0, height: 0 };
 
         if (mode === 'services') {
-            drawServices(layers, bounds);
+            if (!await drawServices(layers, bounds, id)) {
+                return;
+            }
         } else if (mode === 'network' || !graph.floors.length) {
             // The network on its own, laid out and routed by ELK.
             const result = await layoutGroup({ nodes: graph.nodes, edges: graph.edges });

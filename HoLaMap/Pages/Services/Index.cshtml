@@ -6,7 +6,10 @@
 
 <header class="page-header">
     <h1>Services</h1>
-    <a class="button" asp-page="Edit">Add Service</a>
+    <div class="form-actions">
+        <a class="button button-secondary" asp-page="Links">Links</a>
+        <a class="button" asp-page="Edit">Add Service</a>
+    </div>
 </header>
 
 @if (Model.Hosts.Count == 0 && Model.Cloud.Count == 0)

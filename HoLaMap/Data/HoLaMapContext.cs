@@ -80,6 +80,11 @@ namespace HoLaMap.Data
         public DbSet<Service> Services => Set<Service>();
 
         /// <summary>
+        /// Gets the dependencies between services.
+        /// </summary>
+        public DbSet<ServiceLink> ServiceLinks => Set<ServiceLink>();
+
+        /// <summary>
         /// Configures keys, indexes and relationships.
         /// </summary>
         /// <param name="modelBuilder">The model builder.</param>
@@ -121,6 +126,10 @@ namespace HoLaMap.Data
             modelBuilder.Entity<Service>().Property(service => service.Kind).HasConversion<string>();
             modelBuilder.Entity<Service>().Property(service => service.Source).HasConversion<string>();
             modelBuilder.Entity<Service>().Property(service => service.Category).HasConversion<string>();
+            modelBuilder.Entity<ServiceLink>().HasOne(link => link.FromService).WithMany().HasForeignKey(link => link.FromServiceId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<ServiceLink>().HasOne(link => link.ToService).WithMany().HasForeignKey(link => link.ToServiceId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<ServiceLink>().HasIndex(link => new { link.FromServiceId, link.ToServiceId }).IsUnique();
+            modelBuilder.Entity<ServiceLink>().Property(link => link.Kind).HasConversion<string>();
         }
     }
 }

@@ -82,12 +82,27 @@ namespace HoLaMap.Pages.Devices
             }
             context.ActionItems.RemoveRange(await context.ActionItems.Where(item => mergingIds.Contains(item.DeviceId)).ToListAsync());
 
-            // Move services onto the kept device too, dropping any it already has.
+            // Move services onto the kept device too. One it already has is dropped, with its links moved to the kept copy.
             List<Service> services = await context.Services.Where(service => (service.DeviceId != null && mergingIds.Contains(service.DeviceId.Value)) || service.DeviceId == keep!.Id).ToListAsync();
             foreach (Service service in services.Where(service => service.DeviceId != null && mergingIds.Contains(service.DeviceId.Value)).ToList())
             {
-                if (services.Any(other => other.DeviceId == keep!.Id && other.Kind == service.Kind && other.Group == service.Group && other.Name == service.Name))
+                Service? existing = services.FirstOrDefault(other => other.DeviceId == keep!.Id && other.Kind == service.Kind && other.Group == service.Group && other.Name == service.Name);
+                if (existing != null)
                 {
+                    foreach (ServiceLink link in await context.ServiceLinks.Where(link => link.FromServiceId == service.Id || link.ToServiceId == service.Id).ToListAsync())
+                    {
+                        int fromId = link.FromServiceId == service.Id ? existing.Id : link.FromServiceId;
+                        int toId = link.ToServiceId == service.Id ? existing.Id : link.ToServiceId;
+                        if (fromId == toId || await context.ServiceLinks.AnyAsync(other => other.FromServiceId == fromId && other.ToServiceId == toId))
+                        {
+                            context.ServiceLinks.Remove(link);
+                        }
+                        else
+                        {
+                            link.FromServiceId = fromId;
+                            link.ToServiceId = toId;
+                        }
+                    }
                     context.Services.Remove(service);
                 }
                 else

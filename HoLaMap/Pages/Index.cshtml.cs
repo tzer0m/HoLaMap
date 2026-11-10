@@ -143,9 +143,9 @@ namespace HoLaMap.Pages
         }
 
         /// <summary>
-        /// Returns each host with the services running on it.
+        /// Returns each host with the services running on it, and the links between services.
         /// </summary>
-        /// <returns>The hosts and their services as JSON.</returns>
+        /// <returns>The hosts, their services and the links as JSON.</returns>
         public async Task<JsonResult> OnGetServicesAsync()
         {
             List<Device> hosts = await context.Devices.Where(device => device.Services.Any()).Include(device => device.Services).OrderBy(device => device.Name).ToListAsync();
@@ -156,7 +156,8 @@ namespace HoLaMap.Pages
             {
                 result.Insert(0, ToHost("cloud", "Cloud", true, cloud));
             }
-            return new JsonResult(result);
+            List<ServiceLink> links = await context.ServiceLinks.ToListAsync();
+            return new JsonResult(new GraphServiceMap { Hosts = result, Links = [.. links.Select(link => new GraphServiceLink { Id = $"sl{link.Id}", Source = $"s{link.FromServiceId}", Target = $"s{link.ToServiceId}", Kind = link.Kind.ToString(), Notes = link.Notes ?? string.Empty })] });
         }
 
         /// <summary>
