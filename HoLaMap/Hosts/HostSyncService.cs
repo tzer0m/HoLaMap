@@ -55,9 +55,9 @@ namespace HoLaMap.Hosts
                 if (service.Source == ServiceSource.Synced)
                 {
                     service.LastSeen = now;
-                    service.Category = CategoryOf(item.Name);
+                    service.Category = CategoryOf(item.Name, item.Custom);
                     // It's one of your own apps if it was set up by hand and isn't a tool, like a runner, or monitoring, like a hand-installed node_exporter.
-                    service.Mine = item.Custom && service.Category is ServiceCategory.App or ServiceCategory.Home or ServiceCategory.Media or ServiceCategory.Data;
+                    service.Mine = item.Custom && service.Category is ServiceCategory.Custom or ServiceCategory.Home or ServiceCategory.Media or ServiceCategory.Data;
                 }
             }
             await context.SaveChangesAsync(cancellationToken);
@@ -68,8 +68,9 @@ namespace HoLaMap.Hosts
         /// Works out a service's category from the settings, where a trailing * matches the start of the name.
         /// </summary>
         /// <param name="name">The service name.</param>
-        /// <returns>The category, or App if none matches.</returns>
-        private ServiceCategory CategoryOf(string name)
+        /// <param name="custom">Whether the service was set up by hand, like your own apps' systemd units and API routes.</param>
+        /// <returns>The category, or Custom for anything set up by hand and Other for anything else if none matches.</returns>
+        private ServiceCategory CategoryOf(string name, bool custom)
         {
             foreach (KeyValuePair<string, ServiceCategory> pair in options.Value.Categories)
             {
@@ -79,7 +80,7 @@ namespace HoLaMap.Hosts
                     return pair.Value;
                 }
             }
-            return ServiceCategory.App;
+            return custom ? ServiceCategory.Custom : ServiceCategory.Other;
         }
     }
 }

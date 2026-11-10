@@ -8,14 +8,30 @@ namespace HoLaMap.Models
     public enum ServiceCategory
     {
         /// <summary>
-        /// An app or anything not in another category.
+        /// Anything not given a category yet, which is where new services land.
         /// </summary>
-        App,
+        Other,
 
         /// <summary>
-        /// A Cloudflare Tunnel connector.
+        /// Your own apps, including the Tzer ones.
         /// </summary>
-        Cloudflared,
+        Custom,
+
+        /// <summary>
+        /// Someone else's app or tool that doesn't fit another category.
+        /// </summary>
+        [Display(Name = "3rd Party")]
+        ThirdParty,
+
+        /// <summary>
+        /// A service in the cloud rather than on one of your devices.
+        /// </summary>
+        Cloud,
+
+        /// <summary>
+        /// Cloudflare: the tunnel connectors and Cloudflare's own services, like Turnstile.
+        /// </summary>
+        Cloudflare,
 
         /// <summary>
         /// Semaphore, running Ansible.

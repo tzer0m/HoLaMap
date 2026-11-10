@@ -41,7 +41,7 @@ namespace HoLaMap.Pages.Services
         /// What the service is for.
         /// </summary>
         [BindProperty]
-        public ServiceCategory Category { get; set; } = ServiceCategory.App;
+        public ServiceCategory Category { get; set; } = ServiceCategory.Other;
 
         /// <summary>
         /// The group the service belongs to, if any.
@@ -92,11 +92,15 @@ namespace HoLaMap.Pages.Services
         {
             string name = Name.Trim();
             string? group = string.IsNullOrWhiteSpace(Group) ? null : Group.Trim();
-            // A cloud service has no device, and is always the Cloud type so it gets the cloud colour.
+            // A cloud service has no device, and is always the Cloud type so it gets the cloud colour. It goes under Cloud unless it's given a category of its own.
             int? deviceId = DeviceId == 0 ? null : DeviceId;
             if (DeviceId == 0)
             {
                 Kind = ServiceKind.Cloud;
+                if (Category == ServiceCategory.Other)
+                {
+                    Category = ServiceCategory.Cloud;
+                }
             }
             else if (DeviceId == null || !await context.Devices.AnyAsync(device => device.Id == DeviceId))
             {

@@ -1179,6 +1179,11 @@ body:has(.map-layout) .details {
     min-height: 0;
 }
 
+.map-message {
+    padding: 14px 16px;
+    text-align: right;
+}
+
 .vlan-select {
     position: absolute;
     top: 12px;

@@ -366,11 +366,12 @@
     let serviceLinks = [];
     const servicesById = new Map();
     const serviceGroupId = (hostId, group) => `group:${hostId}:${group}`;
+    const serviceCategoryNames = { Data: 'Documents/Data', ThirdParty: '3rd Party' };
     const serviceKindNames = { Systemd: 'Systemd', Docker: 'Docker', TrueNasApp: 'TrueNAS App', PythonScript: 'Python Script', ApiRoute: 'API Route', Cloud: 'Cloud', Device: 'Device', Other: 'Other' };
     const showService = nodeId => {
         const service = servicesById.get(nodeId);
         heading(service.label, [[serviceKindNames[service.kind] ?? service.kind], service.online ? ['Reported', 'online'] : ['Missing', 'offline']]);
-        rows(section(), [['Unit', service.name !== service.label ? service.name : ''], ['Host', rawById.has(service.host.id) ? deviceButton(service.host.id) : service.host.label], ['Category', service.category === 'Data' ? 'Documents/Data' : service.category], [service.kind === 'Docker' ? 'Compose Project' : service.kind === 'Cloud' ? 'Provider' : 'Group', service.group], ['Owner', service.mine ? 'Mine' : 'Third Party'], ['Source', service.manual ? 'Added by Hand' : 'Reported by Host'], ['Last Reported', service.lastSeen]]);
+        rows(section(), [['Unit', service.name !== service.label ? service.name : ''], ['Host', rawById.has(service.host.id) ? deviceButton(service.host.id) : service.host.label], ['Category', serviceCategoryNames[service.category] ?? service.category], [service.kind === 'Docker' ? 'Compose Project' : service.kind === 'Cloud' ? 'Provider' : 'Group', service.group], ['Owner', service.mine ? 'Mine' : 'Third Party'], ['Source', service.manual ? 'Added by Hand' : 'Reported by Host'], ['Last Reported', service.lastSeen]]);
         const list = (title, links, other) => {
             if (!links.length) {
                 return;
@@ -2149,6 +2150,14 @@
         });
     };
 
+    // A message in place of the map sits in the top right corner, clear of the dropdown on the left.
+    const showMessage = text => {
+        const message = document.createElement('div');
+        message.className = 'map-message';
+        message.textContent = text;
+        container.replaceChildren(message);
+    };
+
     let renderId = 0;
     const render = async mode => {
         const id = ++renderId;
@@ -2186,18 +2195,15 @@
         servicesSelect.hidden = mode !== 'services';
         details.textContent = defaultDetails;
         if (mode === 'services' && !graph.nodes.length) {
-            container.replaceChildren();
-            container.textContent = services.some(host => host.services.length) ? 'No services in this category yet.' : 'No services yet. Hosts report them to /api/services/{host}/systemd.';
+            showMessage(services.some(host => host.services.length) ? 'No services in this category yet.' : 'No services yet. Hosts report them to /api/services/{host}/systemd.');
             return;
         }
         if ((mode === 'network' || mode === 'zigbee') && !graph.nodes.length) {
-            container.replaceChildren();
-            container.textContent = mode === 'zigbee' ? zigbeeSelect.value === 'hue' ? 'No Hue devices yet. They come from the Hue Bridge once its app key is set.' : 'No Zigbee devices yet. They come from Home Assistant once its URL and token are set.' : 'Nothing found on this network.';
+            showMessage(mode === 'zigbee' ? zigbeeSelect.value === 'hue' ? 'No Hue devices yet. They come from the Hue Bridge once its app key is set.' : 'No Zigbee devices yet. They come from Home Assistant once its URL and token are set.' : 'Nothing found on this network.');
             return;
         }
         if (mode === 'floorplan' && !graph.floors.length) {
-            container.replaceChildren();
-            container.textContent = 'No floors yet. Add floors and rooms on the Floor Plan page.';
+            showMessage('No floors yet. Add floors and rooms on the Floor Plan page.');
             return;
         }
         const svg = create('svg', { class: 'map-svg' });
