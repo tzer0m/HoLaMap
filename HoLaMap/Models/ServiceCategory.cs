@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace HoLaMap.Models
 {
     /// <summary>
@@ -16,11 +18,6 @@ namespace HoLaMap.Models
         Cloudflared,
 
         /// <summary>
-        /// A Prometheus exporter.
-        /// </summary>
-        Exporter,
-
-        /// <summary>
         /// Semaphore, running Ansible.
         /// </summary>
         Semaphore,
@@ -33,6 +30,27 @@ namespace HoLaMap.Models
         /// <summary>
         /// The Asterisk phone system.
         /// </summary>
-        Asterisk
+        Asterisk,
+
+        /// <summary>
+        /// The house: Home Assistant and the things it talks to.
+        /// </summary>
+        Home,
+
+        /// <summary>
+        /// Films, TV and the downloads feeding them.
+        /// </summary>
+        Media,
+
+        /// <summary>
+        /// Metrics, dashboards, uptime checks and the exporters they read.
+        /// </summary>
+        Monitoring,
+
+        /// <summary>
+        /// Documents, passwords, databases and the apps keeping records.
+        /// </summary>
+        [Display(Name = "Documents/Data")]
+        Data
     }
 }

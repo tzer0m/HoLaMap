@@ -54,10 +54,10 @@ namespace HoLaMap.Hosts
                 }
                 if (service.Source == ServiceSource.Synced)
                 {
-                    // It's one of your own apps if it was set up by hand and isn't a known tool with its own category.
                     service.LastSeen = now;
                     service.Category = CategoryOf(item.Name);
-                    service.Mine = item.Custom && service.Category == ServiceCategory.App;
+                    // It's one of your own apps if it was set up by hand and isn't a tool, like a runner, or monitoring, like a hand-installed node_exporter.
+                    service.Mine = item.Custom && service.Category is ServiceCategory.App or ServiceCategory.Home or ServiceCategory.Media or ServiceCategory.Data;
                 }
             }
             await context.SaveChangesAsync(cancellationToken);
