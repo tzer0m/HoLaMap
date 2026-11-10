@@ -1425,31 +1425,76 @@ body:has(.map-layout) .details {
     stroke-width: 2.5;
 }
 
-.map-edge.service-link.database .map-edge-line,
-.swatch-link.database {
+.map-edge.service-link.link-database .map-edge-line,
+.swatch-link.link-database {
     stroke: #e8a33d;
 }
 
-.service-arrow.database {
+.service-arrow.link-database {
     fill: #e8a33d;
 }
 
-.map-edge.service-link.signin .map-edge-line,
-.swatch-link.signin {
+.map-edge.service-link.link-signin .map-edge-line,
+.swatch-link.link-signin {
     stroke: #c678dd;
 }
 
-.service-arrow.signin {
+.service-arrow.link-signin {
     fill: #c678dd;
 }
 
-.map-edge.service-link.notification .map-edge-line,
-.swatch-link.notification {
+.map-edge.service-link.link-notification .map-edge-line,
+.swatch-link.link-notification {
     stroke: #e06c75;
 }
 
-.service-arrow.notification {
+.service-arrow.link-notification {
     fill: #e06c75;
+}
+
+.map-edge.service-link.link-api .map-edge-line,
+.swatch-link.link-api {
+    stroke: #61afef;
+}
+
+.service-arrow.link-api {
+    fill: #61afef;
+}
+
+.map-edge.service-link.link-monitoring .map-edge-line,
+.swatch-link.link-monitoring {
+    stroke: #98c379;
+}
+
+.service-arrow.link-monitoring {
+    fill: #98c379;
+}
+
+.map-edge.service-link.link-media .map-edge-line,
+.swatch-link.link-media {
+    stroke: #56b6c2;
+}
+
+.service-arrow.link-media {
+    fill: #56b6c2;
+}
+
+.map-edge.service-link.link-device .map-edge-line,
+.swatch-link.link-device {
+    stroke: #e6e6e6;
+}
+
+.service-arrow.link-device {
+    fill: #e6e6e6;
+}
+
+.map-edge.service-link.link-email .map-edge-line,
+.swatch-link.link-email {
+    stroke: #f5e663;
+}
+
+.service-arrow.link-email {
+    fill: #f5e663;
 }
 
 .map-node.hardware .map-node-box {

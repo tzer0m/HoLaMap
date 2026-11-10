@@ -383,7 +383,7 @@
             focusNode(serviceId);
         });
     };
-    const linkKindNames = { Other: 'Link', Database: 'Database', SignIn: 'Sign-in', Notification: 'Notification' };
+    const linkKindNames = { Other: 'Link', Database: 'Database', SignIn: 'Sign-in', Notification: 'Notification', Api: 'API', Monitoring: 'Monitoring', Media: 'Media', Device: 'Device', Email: 'Email' };
     const showServiceLink = linkId => {
         const link = serviceLinks.find(item => item.id === linkId);
         heading(`${servicesById.get(link.source)?.label ?? 'Unknown'} → ${servicesById.get(link.target)?.label ?? 'Unknown'}`, [[linkKindNames[link.kind] ?? link.kind]]);
@@ -1644,12 +1644,13 @@
             let x = left;
             columns.forEach(column => {
                 let y = top;
+                // Each chip and project box keeps its own width, lined up on the left of the column, the same as the services ELK places.
                 column.items.forEach(entry => {
                     if (entry.group) {
-                        drawRoom(entry.label, x, y, column.width, entry.height, layers.boxes);
-                        entry.nodes.forEach((node, row) => drawNode(node, x + roomPadding, y + roomHeader + row * (chipHeight + stackGap), column.width - roomPadding * 2, chipHeight, layers.nodes, true));
+                        drawRoom(entry.label, x, y, entry.width, entry.height, layers.boxes);
+                        entry.nodes.forEach((node, row) => drawNode(node, x + roomPadding, y + roomHeader + row * (chipHeight + stackGap), chipSize(node).width, chipHeight, layers.nodes, true));
                     } else {
-                        drawNode(entry.nodes[0], x, y, column.width, chipHeight, layers.nodes, true);
+                        drawNode(entry.nodes[0], x, y, entry.width, chipHeight, layers.nodes, true);
                     }
                     y += entry.height + stackGap;
                 });
@@ -1669,11 +1670,14 @@
         if (linked.length) {
             const blocks = new Map();
             const ids = new Set();
-            // Lines into or out of the same service share one point on it, so they join on the way in and split on the way out.
-            const direction = { 'elk.direction': 'RIGHT', 'elk.layered.mergeEdges': 'true' };
-            const children = linked.map(entry => {
+            // Each service has one connection point per link type on each side, so lines of the same type join there and lines of different types never share a track.
+            // Services, project boxes and blocks line up on the left of their column, rather than ELK's default of lining up on the right.
+            const direction = { 'elk.direction': 'RIGHT' };
+            const left = { 'elk.alignment': 'LEFT' };
+            const portsOn = (ports, nodeId) => ports.has(nodeId) ? { ports: ports.get(nodeId), layoutOptions: { ...left, 'elk.portConstraints': 'FIXED_SIDE' } } : { layoutOptions: left };
+            const makeChildren = ports => linked.map(entry => {
                 const rest = columnsOf(entry.items.filter(item => !entry.isLinked(item)));
-                const block = rest.length ? { id: `block:${entry.host.id}`, ...sizeOfColumns(rest) } : null;
+                const block = rest.length ? { id: `block:${entry.host.id}`, ...sizeOfColumns(rest), layoutOptions: left } : null;
                 if (block) {
                     blocks.set(block.id, rest);
                 }
@@ -1685,35 +1689,70 @@
                         ...entry.items.filter(entry.isLinked).map(item => {
                             if (!item.group) {
                                 ids.add(item.nodes[0].id);
-                                return { id: item.nodes[0].id, ...chipSize(item.nodes[0]) };
+                                return { id: item.nodes[0].id, ...chipSize(item.nodes[0]), ...portsOn(ports, item.nodes[0].id) };
                             }
                             const groupId = serviceGroupId(entry.host.id, item.group);
                             ids.add(groupId);
                             item.nodes.forEach(node => ids.add(node.id));
-                            return { id: groupId, layoutOptions: { ...direction, 'elk.padding': `[top=${roomHeader},left=${roomPadding},bottom=${roomPadding},right=${roomPadding}]`, 'elk.spacing.nodeNode': String(stackGap) }, children: item.nodes.map(node => ({ id: node.id, ...chipSize(node) })) };
+                            return { id: groupId, ports: ports.get(groupId) ?? [], layoutOptions: { ...direction, ...left, 'elk.padding': `[top=${roomHeader},left=${roomPadding},bottom=${roomPadding},right=${roomPadding}]`, 'elk.spacing.nodeNode': String(stackGap), ...(ports.has(groupId) ? { 'elk.portConstraints': 'FIXED_SIDE' } : {}) }, children: item.nodes.map(node => ({ id: node.id, ...chipSize(node), ...portsOn(ports, node.id) })) };
                         }),
                         ...(block ? [block] : [])
                     ]
                 };
             });
+            makeChildren(new Map());
             const edges = graph.edges.filter(edge => ids.has(edge.source) && ids.has(edge.target));
-            const layout = await new ELK().layout({
-                id: 'root',
-                layoutOptions: { ...direction, 'elk.algorithm': 'layered', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.layered.spacing.nodeNodeBetweenLayers': '60', 'elk.layered.spacing.edgeNodeBetweenLayers': '20', 'elk.spacing.nodeNode': '32', 'elk.spacing.edgeEdge': '10', 'elk.padding': '[top=0,left=0,bottom=0,right=0]' },
-                children: children,
-                edges: edges.map(edge => ({ id: edge.id, sources: [edge.source], targets: [edge.target] }))
-            });
+            const run = reversed => {
+                // A line leaves from its type's point on the right of one service and arrives at its type's point on the left of the other.
+                const ports = new Map();
+                const addPort = (nodeId, portId, side) => {
+                    const list = ports.get(nodeId) ?? [];
+                    if (!list.some(port => port.id === portId)) {
+                        list.push({ id: portId, width: 0, height: 0, layoutOptions: { 'elk.port.side': side } });
+                    }
+                    ports.set(nodeId, list);
+                };
+                const elkEdges = edges.map(edge => {
+                    const [from, to] = reversed.has(edge.id) ? [edge.target, edge.source] : [edge.source, edge.target];
+                    const kind = edge.kind.toLowerCase();
+                    addPort(from, `${from}>out>${kind}`, 'EAST');
+                    addPort(to, `${to}>in>${kind}`, 'WEST');
+                    return { id: edge.id, sources: [`${from}>out>${kind}`], targets: [`${to}>in>${kind}`] };
+                });
+                return new ELK().layout({
+                    id: 'root',
+                    layoutOptions: { ...direction, 'elk.algorithm': 'layered', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.layered.spacing.nodeNodeBetweenLayers': '60', 'elk.layered.spacing.edgeNodeBetweenLayers': '20', 'elk.spacing.nodeNode': '32', 'elk.spacing.edgeEdge': '10', 'elk.padding': '[top=0,left=0,bottom=0,right=0]' },
+                    children: makeChildren(ports),
+                    edges: elkEdges
+                });
+            };
+
+            // ELK places each box relative to the one holding it, so walk down adding up the offsets.
+            const placedIn = layout => {
+                const placed = new Map();
+                const walk = (box, x, y) => (box.children ?? []).forEach(child => {
+                    placed.set(child.id, { x: x + child.x, y: y + child.y, width: child.width, height: child.height });
+                    walk(child, x + child.x, y + child.y);
+                });
+                walk(layout, 0, 0);
+                return placed;
+            };
+
+            // ELK runs every line left to right, so a line pointing back to the left, like Home Assistant to Dashboard, loops right round the map.
+            // So the map is laid out once, then again with those lines turned round, and they're drawn with the arrow at the other end.
+            let layout = await run(new Set());
             if (id !== renderId) {
                 return false;
             }
-
-            // ELK places each box relative to the one holding it, so walk down adding up the offsets.
-            const placed = new Map();
-            const walk = (box, x, y) => (box.children ?? []).forEach(child => {
-                placed.set(child.id, { x: x + child.x, y: y + child.y, width: child.width, height: child.height });
-                walk(child, x + child.x, y + child.y);
-            });
-            walk(layout, 0, 0);
+            const first = placedIn(layout);
+            const reversed = new Set(edges.filter(edge => first.get(edge.target).x + first.get(edge.target).width / 2 < first.get(edge.source).x).map(edge => edge.id));
+            if (reversed.size) {
+                layout = await run(reversed);
+                if (id !== renderId) {
+                    return false;
+                }
+            }
+            const placed = placedIn(layout);
             linked.forEach(entry => {
                 const hostBox = placed.get(entry.host.id);
                 drawFrame(entry.host.label, hostBox.x, hostBox.y, hostBox.width, hostBox.height, layers.boxes);
@@ -1736,14 +1775,59 @@
             // A line comes back relative to the box ELK names as its container: a project box, a host, or the whole map.
             const defs = create('defs', {}, layers.edges);
             // One arrowhead per link type, in the type's colour.
-            ['other', 'database', 'signin', 'notification'].forEach(kind => {
+            ['other', 'database', 'signin', 'notification', 'api', 'monitoring', 'media', 'device', 'email'].forEach(kind => {
                 const marker = create('marker', { id: `service-arrow-${kind}`, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, markerUnits: 'userSpaceOnUse', orient: 'auto-start-reverse' }, defs);
-                create('path', { d: 'M 0 0 L 10 5 L 0 10 z', class: `service-arrow ${kind}` }, marker);
+                create('path', { d: 'M 0 0 L 10 5 L 0 10 z', class: `service-arrow link-${kind}` }, marker);
             });
+            // A line that leaves a service and then jogs a few pixels to its track starts level with the track instead, when the track is within the service's height.
+            // Lines sharing a point are left alone, so lines of the same type still join there. The same goes for the end of a line.
+            // A line is never moved onto another of the service's points, or onto a stretch of another line.
+            const same = (a, b) => Math.abs(a - b) < 0.5;
+            const pointsOf = layoutEdge => {
+                const origin = placed.get(layoutEdge.container) ?? { x: 0, y: 0 };
+                return (layoutEdge.sections ?? []).map(section => [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(point => ({ x: point.x + origin.x, y: point.y + origin.y })));
+            };
+            const portUse = new Map();
+            const portY = new Map();
+            const runs = [];
+            (layout.edges ?? []).forEach(layoutEdge => {
+                [layoutEdge.sources[0], layoutEdge.targets[0]].forEach(port => portUse.set(port, (portUse.get(port) ?? 0) + 1));
+                pointsOf(layoutEdge).forEach(points => {
+                    portY.set(layoutEdge.sources[0], points[0].y);
+                    portY.set(layoutEdge.targets[0], points[points.length - 1].y);
+                    points.slice(1).forEach((point, index) => {
+                        if (same(points[index].y, point.y)) {
+                            runs.push({ id: layoutEdge.id, y: point.y, from: Math.min(points[index].x, point.x), to: Math.max(points[index].x, point.x) });
+                        }
+                    });
+                });
+            });
+            const fits = (port, y) => {
+                const nodeId = port.split('>')[0];
+                const box = placed.get(nodeId);
+                const clash = [...portY].some(([other, otherY]) => other !== port && other.split('>')[0] === nodeId && Math.abs(otherY - y) < 4);
+                return portUse.get(port) === 1 && box !== undefined && !clash && y > box.y + 3 && y < box.y + box.height - 3;
+            };
+            const free = (edgeId, y, a, b) => !runs.some(run => run.id !== edgeId && Math.abs(run.y - y) < 4 && Math.min(run.to, Math.max(a, b)) > Math.max(run.from, Math.min(a, b)));
+            const level = (points, layoutEdge) => {
+                if (points.length < 3) {
+                    return points;
+                }
+                const [start, next, turn] = points;
+                if (same(start.y, next.y) && same(next.x, turn.x) && fits(layoutEdge.sources[0], turn.y) && free(layoutEdge.id, turn.y, start.x, next.x)) {
+                    start.y = turn.y;
+                    next.y = turn.y;
+                }
+                const [end, last, bend] = [points[points.length - 1], points[points.length - 2], points[points.length - 3]];
+                if (same(end.y, last.y) && same(last.x, bend.x) && fits(layoutEdge.targets[0], bend.y) && free(layoutEdge.id, bend.y, end.x, last.x)) {
+                    end.y = bend.y;
+                    last.y = bend.y;
+                }
+                return points;
+            };
             (layout.edges ?? []).forEach(layoutEdge => {
                 const edge = edges.find(item => item.id === layoutEdge.id);
-                const origin = placed.get(layoutEdge.container) ?? { x: 0, y: 0 };
-                (layoutEdge.sections ?? []).forEach(section => drawServiceLink(edge, [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(point => ({ x: point.x + origin.x, y: point.y + origin.y })), layers));
+                pointsOf(layoutEdge).forEach(points => drawServiceLink(edge, level(points, layoutEdge), layers, reversed.has(edge.id)));
             });
             bounds.width = layout.width;
             bounds.height = layout.height;
@@ -1799,17 +1883,16 @@
         return true;
     };
 
-    // A link between services: a grey line with an arrow pointing at the service being used.
-    const drawServiceLink = (edge, points, layers) => {
+    // A link between services, with an arrow pointing at the service being used. A line laid out turned round has its points running the other way, so its arrow goes on its first point.
+    const drawServiceLink = (edge, points, layers, reversed) => {
         const clean = tidy(points);
         if (clean.length < 2) {
             return;
         }
         const d = roundedPath(clean);
-        create('path', { d: d, class: 'map-halo' }, layers.halos);
-        const group = create('g', { class: `map-edge service-link ${edge.kind.toLowerCase()}`, 'data-edge': edge.id }, layers.edges);
+        const group = create('g', { class: `map-edge service-link link-${edge.kind.toLowerCase()}`, 'data-edge': edge.id }, layers.edges);
         create('path', { d: d, class: 'map-edge-hit' }, group);
-        create('path', { d: d, class: 'map-edge-line', 'marker-end': `url(#service-arrow-${edge.kind.toLowerCase()})` }, group);
+        create('path', { d: d, class: 'map-edge-line', [reversed ? 'marker-start' : 'marker-end']: `url(#service-arrow-${edge.kind.toLowerCase()})` }, group);
         group.addEventListener('click', event => {
             event.stopPropagation();
             showServiceLink(edge.id);

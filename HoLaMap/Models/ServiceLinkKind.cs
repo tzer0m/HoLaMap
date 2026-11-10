@@ -26,6 +26,32 @@ namespace HoLaMap.Models
         /// <summary>
         /// The service sends notifications through the other.
         /// </summary>
-        Notification
+        Notification,
+
+        /// <summary>
+        /// The service calls the other's API.
+        /// </summary>
+        [Display(Name = "API")]
+        Api,
+
+        /// <summary>
+        /// The service checks or shows the other's status.
+        /// </summary>
+        Monitoring,
+
+        /// <summary>
+        /// The service plays, fetches or manages media through the other.
+        /// </summary>
+        Media,
+
+        /// <summary>
+        /// The service controls a device, such as a printer or speaker.
+        /// </summary>
+        Device,
+
+        /// <summary>
+        /// The service sends email through the other.
+        /// </summary>
+        Email
     }
 }
