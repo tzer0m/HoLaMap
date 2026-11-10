@@ -26,11 +26,6 @@ namespace HoLaMap.Models
         Semaphore,
 
         /// <summary>
-        /// A Tailscale node.
-        /// </summary>
-        Tailscale,
-
-        /// <summary>
         /// A GitHub Actions runner.
         /// </summary>
         GitHub,
