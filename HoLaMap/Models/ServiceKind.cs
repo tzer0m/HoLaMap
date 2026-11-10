@@ -41,6 +41,11 @@ namespace HoLaMap.Models
         Cloud,
 
         /// <summary>
+        /// A plain device that doesn't run anything, such as a printer, added by hand so other services can link to it.
+        /// </summary>
+        Device,
+
+        /// <summary>
         /// Anything else, added by hand.
         /// </summary>
         Other
