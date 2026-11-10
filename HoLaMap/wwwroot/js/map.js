@@ -1585,15 +1585,31 @@
     // Services and project boxes fill columns top to bottom, about ten chips tall, in name order.
     // A project with just one container shows as a chip named after the project, since its container can have a generic name like postgres.
     // A service named the same as a group on its host, like the Api app and its routes, is the group's box itself, so it isn't drawn again as a chip.
+    // Picking a category shows its services, the services they link to, and only the links touching its own.
+    const servicesSelect = document.getElementById('services-select');
+    try {
+        const storedServices = localStorage.getItem('holamap.services');
+        if ([...servicesSelect.options].some(option => option.value === storedServices)) {
+            servicesSelect.value = storedServices;
+        }
+    } catch (error) {
+        // Storage is only a convenience for remembering the category.
+    }
     const servicesView = () => {
-        const hosts = services.filter(host => host.services.length).map(host => {
+        const category = servicesSelect.value;
+        const chosen = new Set(services.flatMap(host => host.services.filter(service => !category || service.category === category).map(service => service.id)));
+        const links = serviceLinks.filter(link => !category || chosen.has(link.source) || chosen.has(link.target));
+        const shown = new Set([...chosen, ...links.flatMap(link => [link.source, link.target])]);
+        // A linked service that's a group's box itself, like Api, brings its whole group, so the line has a box to end at.
+        services.forEach(host => host.services.filter(service => shown.has(service.id) && !service.group).forEach(service => host.services.filter(other => other.group === service.label).forEach(other => shown.add(other.id))));
+        const hosts = services.map(host => ({ ...host, services: host.services.filter(service => shown.has(service.id)) })).filter(host => host.services.length).map(host => {
             const groups = new Set(host.services.map(service => service.group).filter(group => group));
             return { ...host, services: host.services.filter(service => service.group || !groups.has(service.label)) };
         });
         // A link to a service that's the group's box itself, like Api, ends at the box.
         const ends = new Map();
         services.forEach(host => host.services.forEach(service => ends.set(service.id, !service.group && host.services.some(other => other.group === service.label) ? serviceGroupId(host.id, service.label) : service.id)));
-        const edges = serviceLinks.filter(link => ends.has(link.source) && ends.has(link.target)).map(link => ({ ...link, source: ends.get(link.source), target: ends.get(link.target), online: true }));
+        const edges = links.filter(link => ends.has(link.source) && ends.has(link.target)).map(link => ({ ...link, source: ends.get(link.source), target: ends.get(link.target), online: true }));
         // A cloud service on its own from its provider keeps its own name, since Gemini says more than Google.
         const single = host => service => service.group && service.kind !== 'Cloud' && host.services.filter(other => other.group === service.group).length === 1;
         return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: single(host)(service) ? service.group : service.label, kind: service.kind === 'Docker' ? 'docker' : service.kind === 'PythonScript' ? 'python' : service.kind === 'Other' ? 'other' : service.kind === 'Cloud' ? 'cloud' : service.kind === 'Device' ? 'hardware' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: edges, hosts: hosts };
@@ -1776,9 +1792,11 @@
             // ELK also runs every line left to right, so a line pointing back to the left, like Home Assistant to Dashboard, loops right round the map.
             // So a first layout finds those lines, and they're turned round for the real one and drawn with the arrow at the other end.
             const fingerprint = JSON.stringify([makeChildren(new Map()), edges.map(edge => [edge.id, edge.source, edge.target, edge.kind])]);
+            // Each category keeps its own, so switching between them doesn't search again.
+            const layoutKey = `holamap.serviceLayout.${servicesSelect.value || 'all'}`;
             let remembered = null;
             try {
-                remembered = JSON.parse(localStorage.getItem('holamap.serviceLayout') ?? 'null');
+                remembered = JSON.parse(localStorage.getItem(layoutKey) ?? 'null');
             } catch (error) {
                 remembered = null;
             }
@@ -1809,7 +1827,7 @@
                 }
                 layout = best.layout;
                 try {
-                    localStorage.setItem('holamap.serviceLayout', JSON.stringify({ fingerprint: fingerprint, seed: best.seed, reversed: [...reversed] }));
+                    localStorage.setItem(layoutKey, JSON.stringify({ fingerprint: fingerprint, seed: best.seed, reversed: [...reversed] }));
                 } catch (error) {
                     // Storage is only a convenience for skipping the search next time.
                 }
@@ -1854,10 +1872,12 @@
             // A line going into a host or project box sometimes enters the box's edge well above or below its service, then doubles back inside it.
             // Such a line is redrawn the short way, out along its own row, down one of the uprights it already used, and across to its service,
             // as long as that doesn't run through a service or along a line of another type. Lines sharing an end with it may share its track, as they join anyway.
-            const leaves = [...placed].filter(([key]) => ids.has(key) && !linked.some(entry => entry.host.id === key) && !key.startsWith('group:') || key.startsWith('block:')).map(([, box]) => box);
+            const leaves = [...placed].filter(([key]) => ids.has(key) && !linked.some(entry => entry.host.id === key) && !key.startsWith('group:') || key.startsWith('block:')).map(([key, box]) => ({ ...box, id: key }));
             const segmentsOf = points => points.slice(1).map((point, index) => ({ a: points[index], b: point }));
             const lengthOf = points => segmentsOf(points).reduce((total, segment) => total + Math.abs(segment.b.x - segment.a.x) + Math.abs(segment.b.y - segment.a.y), 0);
-            const hitsService = (a, b) => leaves.some(box => Math.min(a.x, b.x) < box.x + box.width - 1 && Math.max(a.x, b.x) > box.x + 1 && Math.min(a.y, b.y) < box.y + box.height - 1 && Math.max(a.y, b.y) > box.y + 1);
+            // The shorter way also has to keep clear of other services by the same gap ELK leaves, so it never runs tight along a chip's edge.
+            const clearance = 10;
+            const hitsService = (route, a, b) => leaves.some(box => !route.ends.includes(box.id) && Math.min(a.x, b.x) < box.x + box.width + clearance && Math.max(a.x, b.x) > box.x - clearance && Math.min(a.y, b.y) < box.y + box.height + clearance && Math.max(a.y, b.y) > box.y - clearance);
             const sharesEnd = (route, other) => route.layoutEdge.sources[0] === other.layoutEdge.sources[0] || route.layoutEdge.targets[0] === other.layoutEdge.targets[0];
             const alongOther = (route, a, b) => routes.some(other => other !== route && !sharesEnd(route, other) && segmentsOf(other.points).some(segment => {
                 if (same(a.y, b.y) && same(segment.a.y, segment.b.y)) {
@@ -1876,7 +1896,7 @@
                 }
                 const uprights = [...new Set(segmentsOf(route.points).filter(segment => same(segment.a.x, segment.b.x)).map(segment => segment.a.x))].filter(x => x > start.x + 5 && x < end.x - 5);
                 const candidates = same(start.y, end.y) ? [[start, end]] : uprights.map(x => [start, { x: x, y: start.y }, { x: x, y: end.y }, end]);
-                const shorter = candidates.find(points => segmentsOf(points).every(segment => !hitsService(segment.a, segment.b) && !alongOther(route, segment.a, segment.b)));
+                const shorter = candidates.find(points => segmentsOf(points).every(segment => !hitsService(route, segment.a, segment.b) && !alongOther(route, segment.a, segment.b)));
                 if (shorter) {
                     route.points = shorter.map(point => ({ ...point }));
                 }
@@ -2161,10 +2181,11 @@
         updateKey(mode);
         vlanSelect.hidden = mode !== 'network' || !raw.networks.length;
         zigbeeSelect.hidden = mode !== 'zigbee';
+        servicesSelect.hidden = mode !== 'services';
         details.textContent = defaultDetails;
         if (mode === 'services' && !graph.nodes.length) {
             container.replaceChildren();
-            container.textContent = 'No services yet. Hosts report them to /api/services/{host}/systemd.';
+            container.textContent = services.some(host => host.services.length) ? 'No services in this category yet.' : 'No services yet. Hosts report them to /api/services/{host}/systemd.';
             return;
         }
         if ((mode === 'network' || mode === 'zigbee') && !graph.nodes.length) {
@@ -2216,7 +2237,7 @@
         const fit = () => {
             const box = container.getBoundingClientRect();
             // Leave room at the top for the picker when one is showing.
-            const reserved = vlanSelect.hidden && zigbeeSelect.hidden ? 0 : 44;
+            const reserved = vlanSelect.hidden && zigbeeSelect.hidden && servicesSelect.hidden ? 0 : 44;
             view.scale = Math.min(box.width / (bounds.width + 40), (box.height - reserved) / (bounds.height + 40), 1.5);
             view.x = (box.width - bounds.width * view.scale) / 2;
             view.y = 20 + reserved;
@@ -2301,6 +2322,14 @@
             // Storage is only a convenience for remembering the choice.
         }
         render('zigbee');
+    });
+    servicesSelect.addEventListener('change', () => {
+        try {
+            localStorage.setItem('holamap.services', servicesSelect.value);
+        } catch (error) {
+            // Storage is only a convenience for remembering the category.
+        }
+        render('services');
     });
     await render(mode);
 })();

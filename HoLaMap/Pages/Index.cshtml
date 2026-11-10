@@ -62,6 +62,17 @@
             <option value="zha">Zigbee</option>
             <option value="hue">Hue</option>
         </select>
+        <select id="services-select" class="vlan-select" title="Category" hidden>
+            <option value="">All</option>
+            <option value="App">Apps</option>
+            <option value="Asterisk">Asterisk</option>
+            <option value="Cloudflared">Cloudflared</option>
+            <option value="Exporter">Exporter</option>
+            <option value="GitHub">GitHub</option>
+            <option value="PiHole">Pi-hole</option>
+            <option value="Semaphore">Semaphore</option>
+            <option value="Tailscale">Tailscale</option>
+        </select>
     </div>
     <aside id="details" class="details" data-splitter-url="@Url.Page("/Index", "Splitter")" data-room-url="@Url.Page("/Index", "Room")" data-zigbee-room-url="@Url.Page("/Index", "ZigbeeRoom")">Select a device or link to see its details.</aside>
     @Html.AntiForgeryToken()
