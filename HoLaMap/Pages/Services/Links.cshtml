@@ -1,5 +1,6 @@
 @page
 @model HoLaMap.Pages.Services.LinksModel
+@using Microsoft.AspNetCore.Mvc.Rendering
 @{
     ViewData["Title"] = "Service Links";
 }
@@ -25,6 +26,10 @@
         <span asp-validation-for="ToServiceId" class="field-error"></span>
     </label>
     <label>
+        Type
+        <select asp-for="Kind" asp-items="Html.GetEnumSelectList<ServiceLinkKind>()"></select>
+    </label>
+    <label>
         Notes
         <input asp-for="Notes" placeholder="Optional, e.g. prints the daily headline" />
     </label>
@@ -44,6 +49,7 @@ else
             <tr>
                 <th>Service</th>
                 <th>Uses</th>
+                <th>Type</th>
                 <th>Notes</th>
                 <th></th>
             </tr>
@@ -54,6 +60,11 @@ else
                 <tr>
                     <td>@LinksModel.Describe(link.FromService)</td>
                     <td>@LinksModel.Describe(link.ToService)</td>
+                    <td>
+                        <form method="post" asp-page-handler="Kind" asp-route-id="@link.Id">
+                            <select name="kind" asp-items="Html.GetEnumSelectList<ServiceLinkKind>().Select(item => new SelectListItem(item.Text, item.Value, item.Value == ((int)link.Kind).ToString()))" onchange="this.form.submit()"></select>
+                        </form>
+                    </td>
                     <td>@link.Notes</td>
                     <td>
                         <form method="post" asp-page-handler="Delete" asp-route-id="@link.Id">

@@ -1418,6 +1418,40 @@ body:has(.map-layout) .details {
     fill: #8a90b0;
 }
 
+.swatch-link {
+    width: 18px;
+    height: 10px;
+    stroke: #8a90b0;
+    stroke-width: 2.5;
+}
+
+.map-edge.service-link.database .map-edge-line,
+.swatch-link.database {
+    stroke: #e8a33d;
+}
+
+.service-arrow.database {
+    fill: #e8a33d;
+}
+
+.map-edge.service-link.signin .map-edge-line,
+.swatch-link.signin {
+    stroke: #c678dd;
+}
+
+.service-arrow.signin {
+    fill: #c678dd;
+}
+
+.map-edge.service-link.notification .map-edge-line,
+.swatch-link.notification {
+    stroke: #e06c75;
+}
+
+.service-arrow.notification {
+    fill: #e06c75;
+}
+
 .map-node.hardware .map-node-box {
     fill: #4a3018;
     stroke: #f0883e;

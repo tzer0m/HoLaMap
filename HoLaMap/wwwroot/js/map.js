@@ -383,9 +383,10 @@
             focusNode(serviceId);
         });
     };
+    const linkKindNames = { Other: 'Link', Database: 'Database', SignIn: 'Sign-in', Notification: 'Notification' };
     const showServiceLink = linkId => {
         const link = serviceLinks.find(item => item.id === linkId);
-        heading(`${servicesById.get(link.source)?.label ?? 'Unknown'} → ${servicesById.get(link.target)?.label ?? 'Unknown'}`, [['Link']]);
+        heading(`${servicesById.get(link.source)?.label ?? 'Unknown'} → ${servicesById.get(link.target)?.label ?? 'Unknown'}`, [[linkKindNames[link.kind] ?? link.kind]]);
         rows(section(), [['Service', serviceButton(link.source)], ['Uses', serviceButton(link.target)], ['Notes', link.notes]]);
     };
 
@@ -1734,8 +1735,11 @@
 
             // A line comes back relative to the box ELK names as its container: a project box, a host, or the whole map.
             const defs = create('defs', {}, layers.edges);
-            const marker = create('marker', { id: 'service-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, markerUnits: 'userSpaceOnUse', orient: 'auto-start-reverse' }, defs);
-            create('path', { d: 'M 0 0 L 10 5 L 0 10 z', class: 'service-arrow' }, marker);
+            // One arrowhead per link type, in the type's colour.
+            ['other', 'database', 'signin', 'notification'].forEach(kind => {
+                const marker = create('marker', { id: `service-arrow-${kind}`, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, markerUnits: 'userSpaceOnUse', orient: 'auto-start-reverse' }, defs);
+                create('path', { d: 'M 0 0 L 10 5 L 0 10 z', class: `service-arrow ${kind}` }, marker);
+            });
             (layout.edges ?? []).forEach(layoutEdge => {
                 const edge = edges.find(item => item.id === layoutEdge.id);
                 const origin = placed.get(layoutEdge.container) ?? { x: 0, y: 0 };
@@ -1805,7 +1809,7 @@
         create('path', { d: d, class: 'map-halo' }, layers.halos);
         const group = create('g', { class: `map-edge service-link ${edge.kind.toLowerCase()}`, 'data-edge': edge.id }, layers.edges);
         create('path', { d: d, class: 'map-edge-hit' }, group);
-        create('path', { d: d, class: 'map-edge-line', 'marker-end': 'url(#service-arrow)' }, group);
+        create('path', { d: d, class: 'map-edge-line', 'marker-end': `url(#service-arrow-${edge.kind.toLowerCase()})` }, group);
         group.addEventListener('click', event => {
             event.stopPropagation();
             showServiceLink(edge.id);
@@ -1822,7 +1826,7 @@
         const shown = new Set();
         const lines = [...graph.edges, ...(graph.zigbeeArcs ?? [])];
         // The coordinator's USB cable is drawn grey but isn't a cable that's down, so it isn't counted.
-        lines.filter(edge => edge.id !== 'zl-usb').forEach(edge => shown.add(edge.zigbee ? 'zigbee' : edge.wireless ? 'wifi' : edge.style));
+        lines.filter(edge => edge.id !== 'zl-usb').forEach(edge => shown.add(edge.id.startsWith('sl') ? `link-${edge.kind.toLowerCase()}` : edge.zigbee ? 'zigbee' : edge.wireless ? 'wifi' : edge.style));
         if (lines.some(edge => edge.poE)) {
             shown.add('poe');
         }

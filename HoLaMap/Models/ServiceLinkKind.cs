@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace HoLaMap.Models
 {
     /// <summary>
@@ -6,8 +8,24 @@ namespace HoLaMap.Models
     public enum ServiceLinkKind
     {
         /// <summary>
-        /// Any use, drawn as a plain grey line.
+        /// Any other use, drawn as a plain grey line.
         /// </summary>
-        Other
+        Other,
+
+        /// <summary>
+        /// The service stores its data in the other.
+        /// </summary>
+        Database,
+
+        /// <summary>
+        /// The service signs people in through the other.
+        /// </summary>
+        [Display(Name = "Sign-in")]
+        SignIn,
+
+        /// <summary>
+        /// The service sends notifications through the other.
+        /// </summary>
+        Notification
     }
 }

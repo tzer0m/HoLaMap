@@ -32,6 +32,12 @@ namespace HoLaMap.Pages.Services
         public string? Notes { get; set; }
 
         /// <summary>
+        /// What the service is used for.
+        /// </summary>
+        [BindProperty]
+        public ServiceLinkKind Kind { get; set; }
+
+        /// <summary>
         /// Every link, with both services and their hosts loaded.
         /// </summary>
         public List<ServiceLink> Links { get; private set; } = [];
@@ -77,8 +83,25 @@ namespace HoLaMap.Pages.Services
                 await LoadAsync();
                 return Page();
             }
-            context.ServiceLinks.Add(new ServiceLink { FromServiceId = FromServiceId!.Value, ToServiceId = ToServiceId!.Value, Notes = string.IsNullOrWhiteSpace(Notes) ? null : Notes.Trim() });
+            context.ServiceLinks.Add(new ServiceLink { FromServiceId = FromServiceId!.Value, ToServiceId = ToServiceId!.Value, Kind = Kind, Notes = string.IsNullOrWhiteSpace(Notes) ? null : Notes.Trim() });
             await context.SaveChangesAsync();
+            return RedirectToPage();
+        }
+
+        /// <summary>
+        /// Changes what a link is for.
+        /// </summary>
+        /// <param name="id">The ID of the link.</param>
+        /// <param name="kind">The new type.</param>
+        /// <returns>A redirect back to the page.</returns>
+        public async Task<IActionResult> OnPostKindAsync(int id, ServiceLinkKind kind)
+        {
+            ServiceLink? link = await context.ServiceLinks.FirstOrDefaultAsync(link => link.Id == id);
+            if (link != null)
+            {
+                link.Kind = kind;
+                await context.SaveChangesAsync();
+            }
             return RedirectToPage();
         }
 
