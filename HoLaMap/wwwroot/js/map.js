@@ -21,6 +21,9 @@
     const chipHeight = 24;
     const laneGap = 10;
     const stackGap = 8;
+    // The All view's services boxes: the gap between a device and its box, and the height of a device's title in a rack's box.
+    const serviceBoxGap = 10;
+    const serviceTitleHeight = 22;
     const defaultDetails = details.textContent;
 
     const response = await fetch(container.dataset.graphUrl);
@@ -63,12 +66,17 @@
     };
     const roundUp = (value, to) => Math.ceil(value / to) * to;
 
-    // Measure names with the same font the labels are drawn in.
+    // Measure names with the same font the labels are drawn in, remembering each one since the same names are measured over and over.
     const measure = document.createElement('canvas').getContext('2d');
     const fontFamily = getComputedStyle(container).fontFamily;
+    const widths = new Map();
     const textWidth = (text, bold) => {
-        measure.font = `${bold ? 600 : 400} 12px ${fontFamily}`;
-        return measure.measureText(text).width;
+        const key = `${bold ? 1 : 0}${text}`;
+        if (!widths.has(key)) {
+            measure.font = `${bold ? 600 : 400} 12px ${fontFamily}`;
+            widths.set(key, measure.measureText(text).width);
+        }
+        return widths.get(key);
     };
     const isInfrastructure = node => ['gateway', 'switch', 'accesspoint', 'rack', 'coordinator', 'router'].includes(node.kind);
 
@@ -978,8 +986,9 @@
         // The faded lines are solid, so the picked ones are moved on top of them, or a faded line on the same track would cover them.
         currentSvg.querySelectorAll('[data-edge].related, [data-edges].related').forEach(element => element.parentNode.appendChild(element));
     };
+    // A device's links include its Zigbee arcs to other rooms, and a service's its dependencies on the All view, which only show while it's selected.
     const focusNode = nodeId => {
-        const edges = graph.edges.filter(edge => edge.source === nodeId || edge.target === nodeId);
+        const edges = [...graph.edges, ...(graph.zigbeeArcs ?? []), ...(graph.dependencies ?? [])].filter(edge => edge.source === nodeId || edge.target === nodeId);
         focusOn(new Set([nodeId, ...edges.flatMap(edge => [edge.source, edge.target])]), new Set(edges.map(edge => edge.id)));
     };
     const focusEdges = edges => focusOn(new Set(edges.flatMap(edge => [edge.source, edge.target])), new Set(edges.map(edge => edge.id)));
@@ -996,10 +1005,59 @@
         ].filter(group => group.nodes.length);
         const groupOf = new Map(groups.flatMap(group => group.nodes.map(node => [node.id, group.id])));
         const crossing = new Set(graph.edges.filter(edge => groupOf.get(edge.source) !== groupOf.get(edge.target)).map(edge => edge.id));
+        // On the All view a device without ports, like a server, has a box of its services under it. A rack's box has a titled section for each device in it.
+        // Sections sit side by side, wrapping onto a new row past a set width.
+        const serviceBoxes = new Map();
+        if (withRooms && services) {
+            const hostsById = new Map(services.map(host => [host.id, host]));
+            graph.nodes.filter(node => !node.ports.length).forEach(node => {
+                const hosts = (node.kind === 'rack' ? raw.nodes.filter(item => item.rack === node.id).map(item => hostsById.get(item.id)) : [hostsById.get(node.id)]).filter(host => host?.services.length).map(shownServices).sort((a, b) => a.label.localeCompare(b.label));
+                if (!hosts.length) {
+                    return;
+                }
+                const sections = hosts.map(host => {
+                    const nodes = new Map(host.services.map(service => [service.id, serviceNode(host, service)]));
+                    const columns = serviceColumns(serviceItems(host, serviceId => nodes.get(serviceId)));
+                    const size = columnsSize(columns);
+                    const title = node.kind === 'rack' ? host.label : null;
+                    return { title: title, columns: columns, width: Math.max(size.width, title ? textWidth(title, true) : 0), height: (title ? serviceTitleHeight : 0) + size.height };
+                });
+                const rowWidth = Math.max(600, ...sections.map(section => section.width));
+                let x = 0;
+                let y = 0;
+                let rowHeight = 0;
+                let width = 0;
+                sections.forEach(section => {
+                    if (x > 0 && x + section.width > rowWidth) {
+                        x = 0;
+                        y += rowHeight + groupPadding * 2;
+                        rowHeight = 0;
+                    }
+                    section.x = roomPadding + x;
+                    section.y = roomPadding + y;
+                    x += section.width + groupPadding * 2;
+                    rowHeight = Math.max(rowHeight, section.height);
+                    width = Math.max(width, x - groupPadding * 2);
+                });
+                serviceBoxes.set(node.id, { sections: sections, width: width + roomPadding * 2, height: y + rowHeight + roomPadding * 2 });
+            });
+        }
         // Devices without ports, like a rack, get a connection point per cable so ELK can spread the cables out instead of bunching them into one spot.
         // A line to another floor always connects to the top, since that's the way out.
+        // With a services box underneath, the points are spread along the device's own top and the box's bottom, since the box is wider than the device.
         const device = (node, edges) => {
             const size = sizeOf(node);
+            const box = serviceBoxes.get(node.id);
+            if (box) {
+                const width = Math.max(size.width, box.width);
+                const height = size.height + serviceBoxGap + box.height;
+                const offset = (width - size.width) / 2;
+                const outOf = edges.filter(edge => edge.source === node.id && !edge.sourcePort);
+                const top = [...edges.filter(edge => edge.target === node.id && !edge.targetPort).map(edge => `${edge.id}-to`), ...outOf.filter(edge => crossing.has(edge.id)).map(edge => `${edge.id}-from`)];
+                const bottom = outOf.filter(edge => !crossing.has(edge.id)).map(edge => `${edge.id}-from`);
+                const spread = (ids, y, side) => ids.map((id, index) => ({ id: id, x: offset + (index + 1) * size.width / (ids.length + 1), y: y, width: 0, height: 0, layoutOptions: { 'elk.port.side': side } }));
+                return { id: node.id, width: width, height: height, layoutOptions: { 'elk.portConstraints': 'FIXED_POS' }, ports: [...spread(top, 0, 'NORTH'), ...spread(bottom, height, 'SOUTH')] };
+            }
             if (!node.ports.length) {
                 const into = edges.filter(edge => edge.target === node.id && !edge.targetPort);
                 const outOf = edges.filter(edge => edge.source === node.id && !edge.sourcePort);
@@ -1161,7 +1219,7 @@
             walk(first, 0);
             return fit(inside.map(edge => loose(edge) && heights.get(edge.source) > heights.get(edge.target) ? { ...edge, source: edge.target, target: edge.source, sourcePort: edge.targetPort, targetPort: edge.sourcePort } : edge));
         }));
-        return { groups: groups.map((group, index) => ({ ...group, layout: results[index] })), groupOf: groupOf, crossing: crossing, stacks: stacks, stackOfEdge: stackOfEdge, hueColumns: hueColumns };
+        return { groups: groups.map((group, index) => ({ ...group, layout: results[index] })), groupOf: groupOf, crossing: crossing, stacks: stacks, stackOfEdge: stackOfEdge, hueColumns: hueColumns, serviceBoxes: serviceBoxes };
     };
 
     const drawNested = (nested, layers) => {
@@ -1206,6 +1264,18 @@
         const roomOfNode = new Map();
         placed.forEach(place => (place.box.children ?? []).filter(child => roomNames.has(child.id)).forEach(child => (child.children ?? []).forEach(item => [item.id, ...(nested.stacks.get(item.id)?.items.map(stacked => stacked.node.id) ?? [])].forEach(nodeId => roomOfNode.set(nodeId, child)))));
         const stackBoxes = new Map();
+        // Where each service chip and project or provider box went, for the dependency lines.
+        const spots = new Map();
+        const spot = (id, box) => spots.set(id, box);
+        const drawServiceBox = (services, x, y) => {
+            create('rect', { x: x, y: y, width: services.width, height: services.height, rx: 6, class: 'map-services-box' }, layers.boxes);
+            services.sections.forEach(section => {
+                if (section.title) {
+                    drawTitle(section.title, x + section.x, y + section.y + 13, 12, 'map-services-plate', 'map-room-title', layers.boxes);
+                }
+                drawServiceColumns(section.columns, x + section.x, y + section.y + (section.title ? serviceTitleHeight : 0), layers, spot);
+            });
+        };
         // Draws a column of Hue devices down the right of a room or floor, in the space kept for it.
         const drawHue = (containerId, right, y) => {
             const column = nested.hueColumns.get(containerId);
@@ -1244,6 +1314,17 @@
                     }
                     if (item.id.startsWith('loose-')) {
                         (item.children ?? []).forEach(inner => draw(inner, left + item.x, top + item.y));
+                        return;
+                    }
+                    const services = nested.serviceBoxes.get(item.id);
+                    if (services) {
+                        // The device keeps its own size, centred over its services box.
+                        const node = nodesById.get(item.id);
+                        const size = sizeOf(node);
+                        const at = { x: left + item.x + (item.width - size.width) / 2, y: top + item.y, width: size.width, height: size.height };
+                        drawNode(node, at.x, at.y, at.width, at.height, layers.nodes, false);
+                        boxes.set(item.id, at);
+                        drawServiceBox(services, left + item.x + (item.width - services.width) / 2, top + item.y + size.height + serviceBoxGap);
                         return;
                     }
                     drawNode(nodesById.get(item.id), left + item.x, top + item.y, item.width, item.height, layers.nodes, false);
@@ -1335,38 +1416,58 @@
         });
         routes.forEach(route => drawEdge(route.edge, route.points, layers.edges));
 
-        // An end device's Zigbee link to another room is only shown, as an arc, while the pointer is over a device at either end.
-        // The arc runs from the top of one device to the top of the other, rising only as high as the distance needs. When one device is mostly above the other,
+        // The cloud services sit in a box of their own beside the floors, each provider with more than one service in a box inside it.
+        let cloudHeight = 0;
+        const cloud = graph.dependencies ? services.find(host => host.id === 'cloud' && host.services.length) : null;
+        if (cloud) {
+            const host = shownServices(cloud);
+            const nodes = new Map(host.services.map(service => [service.id, serviceNode(host, service)]));
+            const columns = serviceColumns(serviceItems(host, serviceId => nodes.get(serviceId)));
+            const size = columnsSize(columns);
+            const width = Math.max(size.width, textWidth(cloud.label, true) * 14 / 12) + groupPadding * 2;
+            cloudHeight = titleHeight + size.height + groupPadding;
+            drawFrame(cloud.label, ox, top, width, cloudHeight, layers.boxes);
+            drawServiceColumns(columns, ox + groupPadding, top + titleHeight, layers, spot);
+            ox += width + groupGap;
+        }
+
+        // An end device's Zigbee link to another room, and a dependency between services, are only shown while something at either end is selected.
+        // The arc runs from the top of one to the top of the other, rising only as high as the distance needs. When one is mostly above the other,
         // it leaves the upper one's bottom and bows out to the side instead.
-        const arcsByNode = new Map();
-        (graph.zigbeeArcs ?? []).filter(edge => boxes.has(edge.source) && boxes.has(edge.target)).forEach(edge => {
-            const [a, b] = [boxes.get(edge.source), boxes.get(edge.target)];
+        const arcBetween = (a, b) => {
             const centre = box => box.x + box.width / 2;
             const across = Math.abs(centre(b) - centre(a));
-            let curve;
             if (across >= Math.abs(b.y - a.y)) {
                 // The curve's highest point is a quarter of the way from its ends to the apex, and it shouldn't leave the top of the map.
                 const apex = Math.max(Math.min(a.y, b.y) - Math.max(30, across * 0.25), (8 - 0.25 * Math.min(a.y, b.y)) / 0.75);
-                curve = [{ x: centre(a), y: a.y }, { x: centre(a), y: apex }, { x: centre(b), y: apex }, { x: centre(b), y: b.y }];
-            } else {
-                const [upper, lower] = a.y < b.y ? [a, b] : [b, a];
-                const from = { x: centre(upper), y: upper.y + upper.height };
-                const to = { x: centre(lower), y: lower.y };
-                const down = to.y - from.y;
-                const bow = (to.x >= from.x ? 1 : -1) * Math.max(40, down * 0.2);
-                curve = [from, { x: from.x + bow, y: from.y + down / 3 }, { x: to.x + bow, y: to.y - down / 3 }, to];
+                return [{ x: centre(a), y: a.y }, { x: centre(a), y: apex }, { x: centre(b), y: apex }, { x: centre(b), y: b.y }];
             }
-            const d = `M ${curve[0].x} ${curve[0].y} C ${curve[1].x} ${curve[1].y}, ${curve[2].x} ${curve[2].y}, ${curve[3].x} ${curve[3].y}`;
+            const [upper, lower] = a.y < b.y ? [a, b] : [b, a];
+            const from = { x: centre(upper), y: upper.y + upper.height };
+            const to = { x: centre(lower), y: lower.y };
+            const down = to.y - from.y;
+            const bow = (to.x >= from.x ? 1 : -1) * Math.max(40, down * 0.2);
+            const curve = [from, { x: from.x + bow, y: from.y + down / 3 }, { x: to.x + bow, y: to.y - down / 3 }, to];
+            // Kept running from the first box to the second, so an arrow at its end points the right way.
+            return upper === a ? curve : curve.reverse();
+        };
+        const curveD = curve => `M ${curve[0].x} ${curve[0].y} C ${curve[1].x} ${curve[1].y}, ${curve[2].x} ${curve[2].y}, ${curve[3].x} ${curve[3].y}`;
+        (graph.zigbeeArcs ?? []).filter(edge => boxes.has(edge.source) && boxes.has(edge.target)).forEach(edge => {
+            const curve = arcBetween(boxes.get(edge.source), boxes.get(edge.target));
             const group = create('g', { class: 'map-edge zigbee map-hover-arc' + (edge.online ? '' : ' offline'), 'data-edge': edge.id }, layers.trunks);
-            traced(create('path', { d: d, class: 'map-edge-line', stroke: colours.zigbee }, group), curvePoints(...curve));
-            [edge.source, edge.target].forEach(nodeId => arcsByNode.set(nodeId, [...(arcsByNode.get(nodeId) ?? []), group]));
+            traced(create('path', { d: curveD(curve), class: 'map-edge-line', stroke: colours.zigbee }, group), curvePoints(...curve));
         });
-        arcsByNode.forEach((arcs, nodeId) => {
-            const node = layers.nodes.querySelector(`[data-node="${CSS.escape(nodeId)}"]`);
-            node?.addEventListener('mouseenter', () => arcs.forEach(arc => arc.classList.add('shown')));
-            node?.addEventListener('mouseleave', () => arcs.forEach(arc => arc.classList.remove('shown')));
+        const dependencies = (graph.dependencies ?? []).filter(link => spots.has(link.source) && spots.has(link.target));
+        if (dependencies.length) {
+            const marker = create('marker', { id: 'dependency-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, markerUnits: 'userSpaceOnUse', orient: 'auto-start-reverse' }, create('defs', {}, layers.trunks));
+            create('path', { d: 'M 0 0 L 10 5 L 0 10 z', class: 'dependency-arrow' }, marker);
+        }
+        dependencies.forEach(link => {
+            const curve = arcBetween(spots.get(link.source), spots.get(link.target));
+            const group = create('g', { class: 'map-edge dependency map-hover-arc', 'data-edge': link.id }, layers.trunks);
+            traced(create('path', { d: curveD(curve), class: 'map-edge-line', 'marker-end': 'url(#dependency-arrow)' }, group), curvePoints(...curve));
         });
-        return { width: Math.max(0, ox - groupGap), height: top + Math.max(0, ...placed.map(place => place.height)) };
+        return { width: Math.max(0, ox - groupGap), height: top + Math.max(0, cloudHeight, ...placed.map(place => place.height)) };
     };
 
     // Floor Plan view: rooms exactly as saved, floors side by side. Each room's devices are a small tree of name-only chips, all shrunk by the same amount so every room matches.
@@ -1659,83 +1760,111 @@
         const shown = new Set([...chosen, ...links.flatMap(link => [link.source, link.target])]);
         // A linked service that's a group's box itself, like Api, brings its whole group, so the line has a box to end at.
         services.forEach(host => host.services.filter(service => shown.has(service.id) && !service.group).forEach(service => host.services.filter(other => other.group === service.label).forEach(other => shown.add(other.id))));
-        const hosts = services.map(host => ({ ...host, services: host.services.filter(service => shown.has(service.id)) })).filter(host => host.services.length).map(host => {
-            const groups = new Set(host.services.map(service => service.group).filter(group => group));
-            return { ...host, services: host.services.filter(service => service.group || !groups.has(service.label)) };
-        });
-        // A link to a service that's the group's box itself, like Api, ends at the box.
+        const hosts = services.map(host => ({ ...host, services: host.services.filter(service => shown.has(service.id)) })).filter(host => host.services.length).map(shownServices);
+        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => serviceNode(host, service))), edges: serviceEdges(links), hosts: hosts };
+    };
+
+    // A service as a chip. A project with just one container is named after the project, but a cloud service on its own from its provider keeps its own name,
+    // since Gemini says more than Google.
+    const serviceNode = (host, service) => ({
+        id: service.id,
+        label: service.group && service.kind !== 'Cloud' && host.services.filter(other => other.group === service.group).length === 1 ? service.group : service.label,
+        kind: service.kind === 'Docker' ? 'docker' : service.kind === 'PythonScript' ? 'python' : service.kind === 'Other' ? 'other' : service.kind === 'Cloud' ? 'cloud' : service.kind === 'Device' ? 'hardware' : service.mine ? 'app' : 'service',
+        online: service.online,
+        room: '',
+        rack: '',
+        ports: []
+    });
+    // A host's services as they're drawn: a service that's its group's box itself, like the Api app and its routes, isn't drawn again as a chip.
+    const shownServices = host => {
+        const groups = new Set(host.services.map(service => service.group).filter(group => group));
+        return { ...host, services: host.services.filter(service => service.group || !groups.has(service.label)) };
+    };
+    // Links as lines between drawn things. A link to a service that's its group's box itself, like Api, ends at the box.
+    const serviceEdges = links => {
         const ends = new Map();
         services.forEach(host => host.services.forEach(service => ends.set(service.id, !service.group && host.services.some(other => other.group === service.label) ? serviceGroupId(host.id, service.label) : service.id)));
-        const edges = links.filter(link => ends.has(link.source) && ends.has(link.target)).map(link => ({ ...link, source: ends.get(link.source), target: ends.get(link.target), online: true }));
-        // A cloud service on its own from its provider keeps its own name, since Gemini says more than Google.
-        const single = host => service => service.group && service.kind !== 'Cloud' && host.services.filter(other => other.group === service.group).length === 1;
-        return { ...raw, nodes: hosts.flatMap(host => host.services.map(service => ({ id: service.id, label: single(host)(service) ? service.group : service.label, kind: service.kind === 'Docker' ? 'docker' : service.kind === 'PythonScript' ? 'python' : service.kind === 'Other' ? 'other' : service.kind === 'Cloud' ? 'cloud' : service.kind === 'Device' ? 'hardware' : service.mine ? 'app' : 'service', online: service.online, room: '', rack: '', ports: [] }))), edges: edges, hosts: hosts };
+        return links.filter(link => ends.has(link.source) && ends.has(link.target)).map(link => ({ ...link, source: ends.get(link.source), target: ends.get(link.target), online: true }));
     };
+
+    // A host's services and Compose project or cloud provider boxes, as items sized to fill columns.
+    const serviceItems = (host, nodeOf) => {
+        const counts = new Map();
+        host.services.filter(service => service.group).forEach(service => counts.set(service.group, (counts.get(service.group) ?? 0) + 1));
+        const items = [];
+        host.services.forEach(service => {
+            const node = nodeOf(service.id);
+            if (counts.get(service.group) > 1) {
+                let item = items.find(entry => entry.group === service.group);
+                if (!item) {
+                    item = { group: service.group, groupId: serviceGroupId(host.id, service.group), label: service.group, nodes: [] };
+                    items.push(item);
+                }
+                item.nodes.push(node);
+            } else {
+                items.push({ label: node.label, nodes: [node] });
+            }
+        });
+        items.sort((a, b) => a.label.localeCompare(b.label));
+        items.forEach(item => {
+            const chipWidth = Math.max(...item.nodes.map(node => chipSize(node).width));
+            item.width = item.group ? Math.max(chipWidth, textWidth(item.label, true) + 16) + roomPadding * 2 : chipWidth;
+            item.height = item.group ? roomHeader + item.nodes.length * (chipHeight + stackGap) - stackGap + roomPadding : chipHeight;
+        });
+        return items;
+    };
+
+    // Items fill columns top to bottom, about ten chips tall.
+    const serviceColumnHeight = 10 * (chipHeight + stackGap) - stackGap;
+    const serviceColumns = items => {
+        const columns = [];
+        items.forEach(item => {
+            const column = columns[columns.length - 1];
+            if (column && column.height + stackGap + item.height <= serviceColumnHeight) {
+                column.items.push(item);
+                column.height += stackGap + item.height;
+            } else {
+                columns.push({ items: [item], height: item.height });
+            }
+        });
+        columns.forEach(column => column.width = Math.max(...column.items.map(item => item.width)));
+        return columns;
+    };
+    const columnsSize = columns => ({ width: columns.reduce((sum, column) => sum + column.width, 0) + (columns.length - 1) * groupPadding, height: Math.max(...columns.map(column => column.height)) });
+    // Each chip and project box keeps its own width, lined up on the left of its column. Spotted, when given, hears where each chip and project box went.
+    const drawServiceColumns = (columns, left, top, layers, spotted) => {
+        let x = left;
+        columns.forEach(column => {
+            let y = top;
+            column.items.forEach(entry => {
+                if (entry.group) {
+                    drawRoom(entry.label, x, y, entry.width, entry.height, layers.boxes);
+                    spotted?.(entry.groupId, { x: x, y: y, width: entry.width, height: entry.height });
+                    entry.nodes.forEach((node, row) => {
+                        const spot = { x: x + roomPadding, y: y + roomHeader + row * (chipHeight + stackGap), width: chipSize(node).width, height: chipHeight };
+                        drawNode(node, spot.x, spot.y, spot.width, spot.height, layers.nodes, true);
+                        spotted?.(node.id, spot);
+                    });
+                } else {
+                    drawNode(entry.nodes[0], x, y, entry.width, chipHeight, layers.nodes, true);
+                    spotted?.(entry.nodes[0].id, { x: x, y: y, width: entry.width, height: chipHeight });
+                }
+                y += entry.height + stackGap;
+            });
+            x += column.width + groupPadding;
+        });
+    };
+
+    // The All view also gets the service links, drawn as single-style dependency lines that only show while a service at either end is selected.
+    const withServices = data => services ? { ...data, dependencies: serviceEdges(serviceLinks) } : data;
     const drawServices = async (layers, bounds, id) => {
-        const maxHeight = 10 * (chipHeight + stackGap) - stackGap;
         const hostGap = 32;
         const endpoints = new Set(graph.edges.flatMap(edge => [edge.source, edge.target]));
 
-        // A host's services and project boxes, as items sized to fill columns.
-        const itemsOf = host => {
-            const counts = new Map();
-            host.services.filter(service => service.group).forEach(service => counts.set(service.group, (counts.get(service.group) ?? 0) + 1));
-            const items = [];
-            host.services.forEach(service => {
-                const node = nodesById.get(service.id);
-                if (counts.get(service.group) > 1) {
-                    let item = items.find(entry => entry.group === service.group);
-                    if (!item) {
-                        item = { group: service.group, label: service.group, nodes: [] };
-                        items.push(item);
-                    }
-                    item.nodes.push(node);
-                } else {
-                    items.push({ label: node.label, nodes: [node] });
-                }
-            });
-            items.sort((a, b) => a.label.localeCompare(b.label));
-            items.forEach(item => {
-                const chipWidth = Math.max(...item.nodes.map(node => chipSize(node).width));
-                item.width = item.group ? Math.max(chipWidth, textWidth(item.label, true) + 16) + roomPadding * 2 : chipWidth;
-                item.height = item.group ? roomHeader + item.nodes.length * (chipHeight + stackGap) - stackGap + roomPadding : chipHeight;
-            });
-            return items;
-        };
-
-        // Items fill columns top to bottom, about ten chips tall.
-        const columnsOf = items => {
-            const columns = [];
-            items.forEach(item => {
-                const column = columns[columns.length - 1];
-                if (column && column.height + stackGap + item.height <= maxHeight) {
-                    column.items.push(item);
-                    column.height += stackGap + item.height;
-                } else {
-                    columns.push({ items: [item], height: item.height });
-                }
-            });
-            columns.forEach(column => column.width = Math.max(...column.items.map(item => item.width)));
-            return columns;
-        };
-        const sizeOfColumns = columns => ({ width: columns.reduce((sum, column) => sum + column.width, 0) + (columns.length - 1) * groupPadding, height: Math.max(...columns.map(column => column.height)) });
-        const drawColumns = (columns, left, top) => {
-            let x = left;
-            columns.forEach(column => {
-                let y = top;
-                // Each chip and project box keeps its own width, lined up on the left of the column, the same as the services ELK places.
-                column.items.forEach(entry => {
-                    if (entry.group) {
-                        drawRoom(entry.label, x, y, entry.width, entry.height, layers.boxes);
-                        entry.nodes.forEach((node, row) => drawNode(node, x + roomPadding, y + roomHeader + row * (chipHeight + stackGap), chipSize(node).width, chipHeight, layers.nodes, true));
-                    } else {
-                        drawNode(entry.nodes[0], x, y, entry.width, chipHeight, layers.nodes, true);
-                    }
-                    y += entry.height + stackGap;
-                });
-                x += column.width + groupPadding;
-            });
-        };
+        const itemsOf = host => serviceItems(host, serviceId => nodesById.get(serviceId));
+        const columnsOf = serviceColumns;
+        const sizeOfColumns = columnsSize;
+        const drawColumns = (columns, left, top) => drawServiceColumns(columns, left, top, layers);
 
         // Hosts with a linked service are laid out by ELK, so linked services sit close together and the lines cross as little as possible.
         // Only the linked services, and the project boxes holding them, take part. The rest of each host is packed into one block beside them.
@@ -2091,6 +2220,13 @@
             const zigbeeOnly = zigbeeById.has(node.id) && !rawById.has(node.id);
             shown.add(node.hue ? 'hue' : ['gateway', 'switch', 'accesspoint'].includes(node.kind) ? 'unifi' : node.kind === 'client' ? zigbeeOnly ? 'end-device' : 'client' : node.kind);
         });
+        // The All view's services boxes and dependency lines.
+        if (graph.dependencies) {
+            services.forEach(host => shownServices(host).services.forEach(service => shown.add(serviceNode(host, service).kind)));
+            if (graph.dependencies.length) {
+                shown.add('dependency');
+            }
+        }
         legend.querySelectorAll('[data-key]').forEach(item => item.hidden = !shown.has(item.dataset.key));
         legend.querySelectorAll('ul').forEach(list => list.hidden = !list.querySelector('[data-key]:not([hidden])'));
     };
@@ -2189,18 +2325,24 @@
             }
         })));
 
-        // Each line with gaps gets a mask: everything shows except a small circle at each crossing.
+        // Each line with gaps is clipped to a box just round it with a small round hole at each crossing. A clip is plain geometry,
+        // so panning and zooming stay quick, where a mask would be redrawn as an image every frame.
         const defs = create('defs', {}, svg);
         lines.filter(line => line.gaps.length).forEach(line => {
             const id = `map-gap-${++gapCount}`;
             const fromView = line.toView.inverse();
-            const mask = create('mask', { id: id, maskUnits: 'userSpaceOnUse', x: -100000, y: -100000, width: 200000, height: 200000 }, defs);
-            create('rect', { x: -100000, y: -100000, width: 200000, height: 200000, fill: 'white' }, mask);
-            line.gaps.forEach(gap => {
+            const pad = 20 / line.scale;
+            const xs = line.path.traced.map(point => point.x);
+            const ys = line.path.traced.map(point => point.y);
+            const [left, top, right, bottom] = [Math.min(...xs) - pad, Math.min(...ys) - pad, Math.max(...xs) + pad, Math.max(...ys) + pad];
+            const holes = line.gaps.map(gap => {
                 const point = new DOMPoint(gap.x, gap.y).matrixTransform(fromView);
-                create('circle', { cx: point.x, cy: point.y, r: gap.radius / line.scale, fill: 'black' }, mask);
-            });
-            line.path.setAttribute('mask', `url(#${id})`);
+                const radius = gap.radius / line.scale;
+                return ` M ${point.x - radius} ${point.y} a ${radius} ${radius} 0 1 0 ${radius * 2} 0 a ${radius} ${radius} 0 1 0 ${-radius * 2} 0 Z`;
+            }).join('');
+            const clip = create('clipPath', { id: id, clipPathUnits: 'userSpaceOnUse' }, defs);
+            create('path', { d: `M ${left} ${top} H ${right} V ${bottom} H ${left} Z${holes}`, 'clip-rule': 'evenodd' }, clip);
+            line.path.setAttribute('clip-path', `url(#${id})`);
         });
     };
 
@@ -2214,6 +2356,9 @@
     };
 
     let renderId = 0;
+    // Each view is drawn once per visit to the page and kept, keyed by the view and the choice in its picker.
+    const drawnViews = new Map();
+    const viewKey = mode => `${mode}|${mode === 'network' ? vlanSelect.value : mode === 'zigbee' ? zigbeeSelect.value : mode === 'services' ? servicesSelect.value : ''}`;
     const render = async mode => {
         const id = ++renderId;
         if ((mode === 'zigbee' || mode === 'all' || mode === 'floorplan') && !zigbee) {
@@ -2228,13 +2373,13 @@
                 return;
             }
         }
-        if (mode === 'services' && !services) {
+        if ((mode === 'services' || mode === 'all') && !services) {
             await loadServices();
             if (id !== renderId) {
                 return;
             }
         }
-        useView(mode === 'services' ? servicesView() : mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? zigbeeView() : mode === 'all' ? withZigbee() : withZigbee(false));
+        useView(mode === 'services' ? servicesView() : mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? zigbeeView() : mode === 'all' ? withServices(withZigbee()) : withZigbee(false));
         tabs.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.view === mode));
         updateKey(mode);
         vlanSelect.hidden = mode !== 'network' || !raw.networks.length;
@@ -2251,6 +2396,17 @@
         }
         if (mode === 'floorplan' && !graph.floors.length) {
             showMessage('No floors yet. Add floors and rooms on the Floor Plan page.');
+            return;
+        }
+        // A view already drawn is put back as it was, fitted to the window again, rather than laid out again.
+        const key = viewKey(mode);
+        const drawn = drawnViews.get(key);
+        if (drawn) {
+            container.replaceChildren(drawn.svg);
+            currentSvg = drawn.svg;
+            reveal = drawn.reveal;
+            clearFocus();
+            drawn.fit();
             return;
         }
         const svg = create('svg', { class: 'map-svg' });
@@ -2287,8 +2443,17 @@
         currentSvg = svg;
 
         // Pan and zoom.
+        // Moves are drawn once per frame, however many wheel and pointer events arrive in between.
         const view = { scale: 1, x: 0, y: 0 };
-        const apply = () => viewport.setAttribute('transform', `translate(${view.x}, ${view.y}) scale(${view.scale})`);
+        let frame = 0;
+        const apply = () => {
+            if (!frame) {
+                frame = requestAnimationFrame(() => {
+                    frame = 0;
+                    viewport.setAttribute('transform', `translate(${view.x}, ${view.y}) scale(${view.scale})`);
+                });
+            }
+        };
         const fit = () => {
             const box = container.getBoundingClientRect();
             // Leave room at the top for the picker when one is showing.
@@ -2353,6 +2518,7 @@
             drag = null;
         });
         svg.addEventListener('dblclick', fit);
+        drawnViews.set(key, { svg: svg, reveal: reveal, fit: fit });
     };
 
     // Following something from the details pane. The map stays on the current view when it shows the item, otherwise it switches to the item's own view,

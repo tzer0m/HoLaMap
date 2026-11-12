@@ -614,6 +614,28 @@ body:has(.map-layout) .details {
     fill: #1b1f27;
 }
 
+/* The All view's box of services under a device, dashed like the hosts on the Services view. */
+.map-services-box {
+    fill: #15181e;
+    stroke: #3a4054;
+    stroke-width: 1.5;
+    stroke-dasharray: 5 4;
+}
+
+.map-services-plate {
+    fill: #15181e;
+}
+
+.map-edge.dependency .map-edge-line,
+.swatch-link.dependency {
+    stroke: #c8ccd8;
+    stroke-width: 2;
+}
+
+.dependency-arrow {
+    fill: #c8ccd8;
+}
+
 .map-floor-box {
     fill: none;
     stroke: #3a4054;
@@ -1396,7 +1418,7 @@ body:has(.map-layout) .details {
     pointer-events: none;
 }
 
-.map-hover-arc.shown {
+.map-hover-arc.related {
     display: inline;
 }
 
