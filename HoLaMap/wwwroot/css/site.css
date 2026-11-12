@@ -614,12 +614,11 @@ body:has(.map-layout) .details {
     fill: #1b1f27;
 }
 
-/* The All view's box of services under a device, dashed like the hosts on the Services view. */
-.map-services-box {
+/* The All view's card for a device with services: the device across the top and its services underneath, in one frame. */
+.map-device-card {
     fill: #15181e;
-    stroke: #3a4054;
+    stroke: #4a5068;
     stroke-width: 1.5;
-    stroke-dasharray: 5 4;
 }
 
 .map-services-plate {

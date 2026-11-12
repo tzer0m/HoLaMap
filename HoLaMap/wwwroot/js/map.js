@@ -21,8 +21,10 @@
     const chipHeight = 24;
     const laneGap = 10;
     const stackGap = 8;
-    // The All view's services boxes: the gap between a device and its box, and the height of a device's title in a rack's box.
-    const serviceBoxGap = 10;
+    // The All view's device cards: the space above the device at the top of its card, the gap between the device and its services,
+    // and the height of a device's title in a rack's card.
+    const cardTop = 10;
+    const serviceBoxGap = 4;
     const serviceTitleHeight = 22;
     const defaultDetails = details.textContent;
 
@@ -1044,13 +1046,14 @@
         }
         // Devices without ports, like a rack, get a connection point per cable so ELK can spread the cables out instead of bunching them into one spot.
         // A line to another floor always connects to the top, since that's the way out.
-        // With a services box underneath, the points are spread along the device's own top and the box's bottom, since the box is wider than the device.
+        // A device with services is a card holding the device at its top and its services underneath. Its points are spread along the card's top
+        // above the device, and along its bottom, since the card is wider than the device.
         const device = (node, edges) => {
             const size = sizeOf(node);
             const box = serviceBoxes.get(node.id);
             if (box) {
-                const width = Math.max(size.width, box.width);
-                const height = size.height + serviceBoxGap + box.height;
+                const width = Math.max(size.width + cardTop * 2, box.width);
+                const height = cardTop + size.height + serviceBoxGap + box.height;
                 const offset = (width - size.width) / 2;
                 const outOf = edges.filter(edge => edge.source === node.id && !edge.sourcePort);
                 const top = [...edges.filter(edge => edge.target === node.id && !edge.targetPort).map(edge => `${edge.id}-to`), ...outOf.filter(edge => crossing.has(edge.id)).map(edge => `${edge.id}-from`)];
@@ -1268,7 +1271,6 @@
         const spots = new Map();
         const spot = (id, box) => spots.set(id, box);
         const drawServiceBox = (services, x, y) => {
-            create('rect', { x: x, y: y, width: services.width, height: services.height, rx: 6, class: 'map-services-box' }, layers.boxes);
             services.sections.forEach(section => {
                 if (section.title) {
                     drawTitle(section.title, x + section.x, y + section.y + 13, 12, 'map-services-plate', 'map-room-title', layers.boxes);
@@ -1318,13 +1320,14 @@
                     }
                     const services = nested.serviceBoxes.get(item.id);
                     if (services) {
-                        // The device keeps its own size, centred over its services box.
+                        // The card, with the device at its own size across the top and its services underneath.
                         const node = nodesById.get(item.id);
                         const size = sizeOf(node);
-                        const at = { x: left + item.x + (item.width - size.width) / 2, y: top + item.y, width: size.width, height: size.height };
+                        create('rect', { x: left + item.x, y: top + item.y, width: item.width, height: item.height, rx: 8, class: 'map-device-card' }, layers.boxes);
+                        const at = { x: left + item.x + (item.width - size.width) / 2, y: top + item.y + cardTop, width: size.width, height: size.height };
                         drawNode(node, at.x, at.y, at.width, at.height, layers.nodes, false);
                         boxes.set(item.id, at);
-                        drawServiceBox(services, left + item.x + (item.width - services.width) / 2, top + item.y + size.height + serviceBoxGap);
+                        drawServiceBox(services, left + item.x + (item.width - services.width) / 2, at.y + size.height + serviceBoxGap);
                         return;
                     }
                     drawNode(nodesById.get(item.id), left + item.x, top + item.y, item.width, item.height, layers.nodes, false);
