@@ -1228,38 +1228,106 @@
     const drawNested = (nested, layers) => {
         const floorNames = new Map(graph.floors.map(floor => [`floor-${floor.id}`, floor.name]));
         const roomNames = new Map(graph.floors.flatMap(floor => floor.rooms.map(item => [`room-${item.id}`, item.name])));
-        // The floors in a row, in their saved order, then the unplaced devices.
-        let ox = 0;
-        const placed = nested.groups.map(group => {
-            const box = group.layout.children[0];
-            const column = nested.hueColumns.get(group.id);
-            const place = { ...group, box: box, x: ox, height: Math.max(box.height, column ? titleHeight + 12 + column.height + 16 : 0) };
-            ox += box.width + groupGap;
-            return place;
-        });
-        const placeOf = new Map(placed.map(place => [place.id, place]));
-        // Each line between floors gets its own lane above them. Shorter lines get the lower lanes so the longer ones pass over them instead of crossing.
-        const exitX = (edgeId, groupId) => {
-            const place = placeOf.get(groupId);
-            return place.x + place.box.ports.find(port => port.id === `${edgeId}@${groupId}`).x;
-        };
-        const lanes = [];
-        const laneOf = new Map();
-        graph.edges.filter(edge => nested.crossing.has(edge.id)).map(edge => {
-            const a = exitX(edge.id, nested.groupOf.get(edge.source));
-            const b = exitX(edge.id, nested.groupOf.get(edge.target));
-            return { id: edge.id, from: Math.min(a, b), to: Math.max(a, b) };
-        }).sort((a, b) => (a.to - a.from) - (b.to - b.from)).forEach(span => {
-            let lane = lanes.findIndex(taken => taken.every(other => span.to < other.from - 6 || span.from > other.to + 6));
-            if (lane < 0) {
-                lane = lanes.length;
-                lanes.push([]);
+        // The cloud services get a box of their own, each provider with more than one service in a box inside it, placed after the floors.
+        const cloud = graph.dependencies ? services.find(host => host.id === 'cloud' && host.services.length) : null;
+        const cloudItem = (() => {
+            if (!cloud) {
+                return null;
             }
-            lanes[lane].push(span);
-            laneOf.set(span.id, lane);
-        });
-        const top = 24 + lanes.length * laneGap;
-        const laneY = edgeId => top - 14 - laneOf.get(edgeId) * laneGap;
+            const host = shownServices(cloud);
+            const nodes = new Map(host.services.map(service => [service.id, serviceNode(host, service)]));
+            const columns = serviceColumns(serviceItems(host, serviceId => nodes.get(serviceId)));
+            const size = columnsSize(columns);
+            return { id: 'cloud', cloud: true, columns: columns, width: Math.max(size.width, textWidth(cloud.label, true) * 14 / 12) + groupPadding * 2, height: titleHeight + size.height + groupPadding };
+        })();
+        const items = [
+            ...nested.groups.map(group => {
+                const box = group.layout.children[0];
+                const column = nested.hueColumns.get(group.id);
+                return { ...group, box: box, width: box.width, height: Math.max(box.height, column ? titleHeight + 12 + column.height + 16 : 0) };
+            }),
+            ...(cloudItem ? [cloudItem] : [])
+        ];
+
+        // The floors, in their saved order, then the unplaced devices and the cloud, go in rows, split wherever makes the map fill the window best.
+        // Each row has lanes above it for the lines between floors. A line between floors in different rows also runs down a lane in a gutter
+        // down the left of the map, from the lanes above one row to the lanes above the other.
+        const crossingEdges = graph.edges.filter(edge => nested.crossing.has(edge.id));
+        const rowGap = 40;
+        const arrange = rows => {
+            const placeOf = new Map();
+            const rowOf = new Map();
+            rows.forEach((row, index) => row.forEach(item => rowOf.set(item.id, index)));
+            const rowsOf = edge => [rowOf.get(nested.groupOf.get(edge.source)), rowOf.get(nested.groupOf.get(edge.target))];
+            // Lines spanning fewer rows take the gutter lanes nearest the floors, so the longer ones pass outside them instead of crossing.
+            const crossRow = crossingEdges.filter(edge => rowsOf(edge)[0] !== rowsOf(edge)[1]).sort((x, y) => Math.abs(rowsOf(x)[0] - rowsOf(x)[1]) - Math.abs(rowsOf(y)[0] - rowsOf(y)[1]));
+            const gutterLane = new Map(crossRow.map((edge, index) => [edge.id, index]));
+            const gutter = crossRow.length ? 16 + crossRow.length * laneGap : 0;
+            const gutterX = edgeId => gutter - 12 - gutterLane.get(edgeId) * laneGap;
+            rows.forEach(row => {
+                let x = gutter;
+                row.forEach(item => {
+                    placeOf.set(item.id, { ...item, x: x });
+                    x += item.width + groupGap;
+                });
+            });
+            const exitX = (edgeId, groupId) => {
+                const place = placeOf.get(groupId);
+                return place.x + place.box.ports.find(port => port.id === `${edgeId}@${groupId}`).x;
+            };
+            // Each line gets its own lane in the lanes above its row, or in both rows' lanes when it runs between rows. Shorter lines get the lower lanes.
+            const bands = rows.map(() => []);
+            const laneOf = new Map();
+            const spans = crossingEdges.flatMap(edge => {
+                const [from, to] = rowsOf(edge);
+                const a = exitX(edge.id, nested.groupOf.get(edge.source));
+                const b = exitX(edge.id, nested.groupOf.get(edge.target));
+                if (from === to) {
+                    return [{ key: `${edge.id}:${from}`, row: from, from: Math.min(a, b), to: Math.max(a, b) }];
+                }
+                const g = gutterX(edge.id);
+                return [{ key: `${edge.id}:${from}`, row: from, from: g, to: a }, { key: `${edge.id}:${to}`, row: to, from: g, to: b }];
+            });
+            spans.sort((x, y) => (x.to - x.from) - (y.to - y.from)).forEach(span => {
+                const lanes = bands[span.row];
+                let lane = lanes.findIndex(taken => taken.every(other => span.to < other.from - 6 || span.from > other.to + 6));
+                if (lane < 0) {
+                    lane = lanes.length;
+                    lanes.push([]);
+                }
+                lanes[lane].push(span);
+                laneOf.set(span.key, lane);
+            });
+            let y = 0;
+            let width = 0;
+            const tops = rows.map((row, index) => {
+                const top = y + 24 + bands[index].length * laneGap;
+                row.forEach(item => placeOf.get(item.id).top = top);
+                y = top + Math.max(...row.map(item => item.height)) + rowGap;
+                width = Math.max(width, ...row.map(item => placeOf.get(item.id).x + item.width));
+                return top;
+            });
+            return { places: rows.flat().map(item => placeOf.get(item.id)), placeOf: placeOf, rowsOf: rowsOf, laneY: (edgeId, row) => tops[row] - 14 - laneOf.get(`${edgeId}:${row}`) * laneGap, gutterX: gutterX, width: width, height: y - rowGap };
+        };
+        // Every way of splitting the order into rows is tried, keeping whichever can be drawn largest in the window, and the fewest rows on a tie.
+        if (!items.length) {
+            return { width: 0, height: 0 };
+        }
+        const area = container.getBoundingClientRect();
+        let arranged = null;
+        let best = -1;
+        for (let mask = 0; mask < 2 ** Math.max(0, items.length - 1); mask++) {
+            const rows = [[items[0]]];
+            items.slice(1).forEach((item, index) => mask & (1 << index) ? rows.push([item]) : rows[rows.length - 1].push(item));
+            const candidate = arrange(rows);
+            const scale = Math.min(area.width / (candidate.width + 40), area.height / (candidate.height + 40)) - rows.length * 0.0001;
+            if (scale > best) {
+                best = scale;
+                arranged = candidate;
+            }
+        }
+        const placed = arranged.places.filter(place => !place.cloud);
+        const placeOf = arranged.placeOf;
 
         const boxes = new Map();
         const routes = [];
@@ -1291,15 +1359,15 @@
         };
         const pointsOf = (layoutEdge, place, edge) => {
             const inRoom = edge && roomOfNode.get(edge.source) && roomOfNode.get(edge.source) === roomOfNode.get(edge.target) ? roomOfNode.get(edge.source) : null;
-            const origin = { x: place.x + (inRoom?.x ?? 0), y: top + (inRoom?.y ?? 0) };
+            const origin = { x: place.x + (inRoom?.x ?? 0), y: place.top + (inRoom?.y ?? 0) };
             return (layoutEdge?.sections ?? []).flatMap(section => [section.startPoint, ...(section.bendPoints ?? []), section.endPoint]).map(point => ({ x: point.x + origin.x, y: point.y + origin.y }));
         };
         placed.forEach(place => {
             const floor = place.box;
-            drawFrame(floorNames.get(place.id) ?? 'Unplaced', place.x, top, floor.width, place.height, layers.boxes);
+            drawFrame(floorNames.get(place.id) ?? 'Unplaced', place.x, place.top, floor.width, place.height, layers.boxes);
             (floor.children ?? []).forEach(child => {
                 const x = place.x + child.x;
-                const y = top + child.y;
+                const y = place.top + child.y;
                 // Draws a device, each device in a packed box of loose ones, or each device in a stack.
                 const draw = (item, left, top) => {
                     if (item.id.startsWith('space-')) {
@@ -1338,10 +1406,10 @@
                     (child.children ?? []).forEach(item => draw(item, x, y));
                     drawHue(child.id, x + child.width, y + roomHeader + 20);
                 } else {
-                    draw(child, place.x, top);
+                    draw(child, place.x, place.top);
                 }
             });
-            drawHue(place.id, place.x + floor.width, top + titleHeight + 12);
+            drawHue(place.id, place.x + floor.width, place.top + titleHeight + 12);
             (place.layout.edges ?? []).filter(layoutEdge => !layoutEdge.id.includes('@')).forEach(layoutEdge => {
                 const edge = graph.edges.find(item => item.id === layoutEdge.id);
                 const points = pointsOf(layoutEdge, place, edge);
@@ -1356,6 +1424,7 @@
             });
         });
         // A line between floors: from its device out of the top of the floor, across its lane, and down into the other floor to its other device.
+        // Between rows, it runs across its lane above its own row to its gutter lane, along that to the lanes above the other row, then across to the other floor.
         graph.edges.filter(edge => nested.crossing.has(edge.id)).forEach(edge => {
             const half = groupId => {
                 const place = placeOf.get(groupId);
@@ -1372,8 +1441,15 @@
                 const centreY = at.y + stacked.item.y + stacked.item.height / 2;
                 back.push({ x: back[back.length - 1].x, y: centreY }, { x: at.x + stacked.stack.entryX, y: centreY });
             }
-            const y = laneY(edge.id);
-            routes.push({ edge: edge, points: [...out, { x: out[out.length - 1].x, y: y }, { x: back[0].x, y: y }, ...back] });
+            const [from, to] = arranged.rowsOf(edge);
+            const y = arranged.laneY(edge.id, from);
+            if (from === to) {
+                routes.push({ edge: edge, points: [...out, { x: out[out.length - 1].x, y: y }, { x: back[0].x, y: y }, ...back] });
+                return;
+            }
+            const g = arranged.gutterX(edge.id);
+            const other = arranged.laneY(edge.id, to);
+            routes.push({ edge: edge, points: [...out, { x: out[out.length - 1].x, y: y }, { x: g, y: y }, { x: g, y: other }, { x: back[0].x, y: other }, ...back] });
         });
 
         // A cable leaving the bottom of a rack only to loop round and climb past it is moved to leave from the top instead,
@@ -1419,19 +1495,10 @@
         });
         routes.forEach(route => drawEdge(route.edge, route.points, layers.edges));
 
-        // The cloud services sit in a box of their own beside the floors, each provider with more than one service in a box inside it.
-        let cloudHeight = 0;
-        const cloud = graph.dependencies ? services.find(host => host.id === 'cloud' && host.services.length) : null;
-        if (cloud) {
-            const host = shownServices(cloud);
-            const nodes = new Map(host.services.map(service => [service.id, serviceNode(host, service)]));
-            const columns = serviceColumns(serviceItems(host, serviceId => nodes.get(serviceId)));
-            const size = columnsSize(columns);
-            const width = Math.max(size.width, textWidth(cloud.label, true) * 14 / 12) + groupPadding * 2;
-            cloudHeight = titleHeight + size.height + groupPadding;
-            drawFrame(cloud.label, ox, top, width, cloudHeight, layers.boxes);
-            drawServiceColumns(columns, ox + groupPadding, top + titleHeight, layers, spot);
-            ox += width + groupGap;
+        if (cloudItem) {
+            const place = placeOf.get('cloud');
+            drawFrame(cloud.label, place.x, place.top, place.width, place.height, layers.boxes);
+            drawServiceColumns(place.columns, place.x + groupPadding, place.top + titleHeight, layers, spot);
         }
 
         // An end device's Zigbee link to another room, and a dependency between services, are only shown while something at either end is selected.
@@ -1470,7 +1537,7 @@
             const group = create('g', { class: 'map-edge dependency map-hover-arc', 'data-edge': link.id }, layers.trunks);
             traced(create('path', { d: curveD(curve), class: 'map-edge-line', 'marker-end': 'url(#dependency-arrow)' }, group), curvePoints(...curve));
         });
-        return { width: Math.max(0, ox - groupGap), height: top + Math.max(0, cloudHeight, ...placed.map(place => place.height)) };
+        return { width: arranged.width, height: arranged.height };
     };
 
     // Floor Plan view: rooms exactly as saved, floors side by side. Each room's devices are a small tree of name-only chips, all shrunk by the same amount so every room matches.
