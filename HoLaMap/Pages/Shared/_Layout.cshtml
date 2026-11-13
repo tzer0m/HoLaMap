@@ -8,11 +8,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"]</title>
+    <link rel="icon" href="~/favicon.ico" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
     <header class="site-header">
-        <a class="brand" asp-page="/Index">HoLaMap</a>
+        <a class="brand" asp-page="/Index" title="HoLaMap"><img src="~/logo.png" alt="HoLaMap" asp-append-version="true" /></a>
         <nav class="site-nav">
             <a asp-page="/Floorplan/Index">Floor Plan</a>
             <a asp-page="/Racks/Index">Racks</a>

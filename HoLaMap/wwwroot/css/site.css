@@ -159,6 +159,12 @@ body {
     text-decoration: none;
 }
 
+.brand img {
+    display: block;
+    width: 28px;
+    height: 28px;
+}
+
 .site-nav {
     display: flex;
     gap: 16px;
