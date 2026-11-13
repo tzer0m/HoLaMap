@@ -1,3 +1,4 @@
+using HoLaMap.Cloudflare;
 using HoLaMap.Data;
 using HoLaMap.Display;
 using HoLaMap.Graph;
@@ -157,7 +158,20 @@ namespace HoLaMap.Pages
                 result.Insert(0, ToHost("cloud", "Cloud", true, cloud));
             }
             List<ServiceLink> links = await context.ServiceLinks.ToListAsync();
-            return new JsonResult(new GraphServiceMap { Hosts = result, Links = [.. links.Select(link => new GraphServiceLink { Id = $"sl{link.Id}", Source = $"s{link.FromServiceId}", Target = $"s{link.ToServiceId}", Kind = link.Kind.ToString(), Notes = link.Notes ?? string.Empty })] });
+            List<Tunnel> tunnels = await context.Tunnels.Include(tunnel => tunnel.Routes).OrderBy(tunnel => tunnel.Name).ToListAsync();
+            return new JsonResult(new GraphServiceMap { Hosts = result, Links = [.. links.Select(link => new GraphServiceLink { Id = $"sl{link.Id}", Source = $"s{link.FromServiceId}", Target = $"s{link.ToServiceId}", Kind = link.Kind.ToString(), Notes = link.Notes ?? string.Empty })], Tunnels = [.. tunnels.Select(tunnel => ToTunnel(tunnel, hosts))] });
+        }
+
+        /// <summary>
+        /// Builds a tunnel for the Cloudflare view, with each route's service picked by hand or else matched by port.
+        /// </summary>
+        /// <param name="tunnel">The tunnel, with its routes.</param>
+        /// <param name="hosts">The devices with services.</param>
+        /// <returns>The tunnel.</returns>
+        private static GraphTunnel ToTunnel(Tunnel tunnel, List<Device> hosts)
+        {
+            Device? host = TunnelMatcher.HostOf(tunnel, hosts);
+            return new GraphTunnel { Id = $"ct{tunnel.Id}", Name = tunnel.Name, Status = tunnel.Status, Version = tunnel.Version ?? string.Empty, RemoteConfig = tunnel.RemoteConfig, Host = host == null ? string.Empty : $"d{host.Id}", Routes = [.. tunnel.Routes.OrderBy(route => route.Hostname).ThenBy(route => route.Path).Select(route => new GraphTunnelRoute { Id = $"cr{route.Id}", Hostname = route.Hostname, Path = route.Path, Target = route.Target, Service = route.ServiceId != null ? $"s{route.ServiceId}" : TunnelMatcher.Match(route, host, hosts) is Service service ? $"s{service.Id}" : string.Empty, Manual = route.ServiceId != null })] };
         }
 
         /// <summary>

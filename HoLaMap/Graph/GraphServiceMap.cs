@@ -1,7 +1,7 @@
 namespace HoLaMap.Graph
 {
     /// <summary>
-    /// Everything the Services view draws: the hosts with their services, and the links between services.
+    /// Everything the Services and Cloudflare views draw: the hosts with their services, the links between services, and the tunnels reaching them.
     /// </summary>
     public class GraphServiceMap
     {
@@ -14,5 +14,10 @@ namespace HoLaMap.Graph
         /// The links between services.
         /// </summary>
         public List<GraphServiceLink> Links { get; set; } = [];
+
+        /// <summary>
+        /// The Cloudflare tunnels, with each route's service.
+        /// </summary>
+        public List<GraphTunnel> Tunnels { get; set; } = [];
     }
 }

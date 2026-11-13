@@ -1,3 +1,4 @@
+using HoLaMap.Cloudflare;
 using HoLaMap.Data;
 using HoLaMap.Hosts;
 using HoLaMap.Hue;
@@ -27,6 +28,9 @@ builder.Services.AddScoped<HostSyncService>();
 builder.Services.Configure<OpenApiOptions>(builder.Configuration.GetSection("OpenApi"));
 builder.Services.AddHttpClient<OpenApiSyncService>();
 builder.Services.AddHostedService<OpenApiSyncWorker>();
+builder.Services.Configure<CloudflareOptions>(builder.Configuration.GetSection("Cloudflare"));
+builder.Services.AddHttpClient<CloudflareSyncService>();
+builder.Services.AddHostedService<CloudflareSyncWorker>();
 
 WebApplication app = builder.Build();
 app.UseRouting();

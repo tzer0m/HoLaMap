@@ -58,10 +58,42 @@ namespace HoLaMap.Hosts
                     service.Category = CategoryOf(item.Name, item.Custom);
                     // It's one of your own apps if it was set up by hand and isn't a tool, like a runner, or monitoring, like a hand-installed node_exporter.
                     service.Mine = item.Custom && service.Category is ServiceCategory.Custom or ServiceCategory.Home or ServiceCategory.Media or ServiceCategory.Data;
+                    // Only Docker reports say which ports a service uses. Systemd services get theirs from the ports report instead.
+                    if (kind == ServiceKind.Docker)
+                    {
+                        service.Ports = item.Ports;
+                    }
                 }
             }
             await context.SaveChangesAsync(cancellationToken);
             return keys.Count;
+        }
+
+        /// <summary>
+        /// Saves which ports each of a host's synced systemd services listens on, matching each listening process to the unit with its name.
+        /// </summary>
+        /// <param name="host">The host's device name or MAC address.</param>
+        /// <param name="listening">The ports and the processes holding them.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The number of services with a port, or null if no device matches the host.</returns>
+        public async Task<int?> SyncPortsAsync(string host, List<ListeningPort> listening, CancellationToken cancellationToken)
+        {
+            string name = host.Trim().ToLowerInvariant();
+            string mac = name.Replace('-', ':');
+            Device? device = await context.Devices.Include(item => item.Services).FirstOrDefaultAsync(item => item.Name.ToLower() == name || item.Mac == mac, cancellationToken);
+            if (device == null)
+            {
+                return null;
+            }
+            int count = 0;
+            foreach (Service service in device.Services.Where(service => service.Kind == ServiceKind.Systemd && service.Source == ServiceSource.Synced))
+            {
+                // Linux cuts process names to 15 characters, so a longer unit name only has to start with it. An app named after its project, like Connect4.Web for Connect4, counts too.
+                service.Ports = [.. listening.Where(item => item.Process.Equals(service.Name, StringComparison.OrdinalIgnoreCase) || (item.Process.Length == 15 && service.Name.StartsWith(item.Process, StringComparison.OrdinalIgnoreCase)) || item.Process.StartsWith($"{service.Name}.", StringComparison.OrdinalIgnoreCase)).Select(item => item.Port).Distinct().Order()];
+                count += service.Ports.Count > 0 ? 1 : 0;
+            }
+            await context.SaveChangesAsync(cancellationToken);
+            return count;
         }
 
         /// <summary>

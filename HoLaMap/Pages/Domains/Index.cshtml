@@ -1,0 +1,59 @@
+@page
+@model HoLaMap.Pages.Domains.IndexModel
+@using Microsoft.AspNetCore.Mvc.Rendering
+@{
+    ViewData["Title"] = "Domains";
+}
+
+<header class="page-header">
+    <h1>Domains</h1>
+</header>
+
+<p class="empty">Each tunnel's public hostnames, read from Cloudflare. A hostname is matched to the service listening on its port, and any it gets wrong or can't find can be picked by hand.</p>
+
+@if (Model.Tunnels.Count == 0)
+{
+    <p class="empty">No tunnels yet. They come from Cloudflare once its account ID and API token are set.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Hostname</th>
+                <th>Goes To</th>
+                <th>Service</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (Tunnel tunnel in Model.Tunnels)
+            {
+                <tr class="table-group">
+                    <th colspan="3">
+                        <form method="post" asp-page-handler="Host" asp-route-id="@tunnel.Id" class="table-group-form">
+                            <span>@tunnel.Name · @tunnel.Status@(tunnel.Version == null ? "" : $" · {tunnel.Version}") · runs on</span>
+                            <select name="deviceId" asp-items="Model.DeviceOptions.Select(item => new SelectListItem(item.Text, item.Value, item.Value == tunnel.DeviceId?.ToString()))" onchange="this.form.submit()">
+                                <option value="">@(tunnel.DeviceId == null && Model.Hosts[tunnel.Id] is Device named ? $"{named.Name} (by name)" : "Not known")</option>
+                            </select>
+                        </form>
+                    </th>
+                </tr>
+                @foreach (TunnelRoute route in tunnel.Routes.OrderBy(route => route.Hostname).ThenBy(route => route.Path))
+                {
+                    Service? match = Model.Matches[route.Id];
+                    <tr>
+                        <td><a href="https://@route.Hostname@route.Path" target="_blank" rel="noopener">@route.Hostname@route.Path</a></td>
+                        <td>@route.Target</td>
+                        <td>
+                            <form method="post" asp-page-handler="Service" asp-route-id="@route.Id">
+                                <select name="serviceId" asp-items="Model.ServiceOptions.Select(item => new SelectListItem(item.Text, item.Value, item.Value == route.ServiceId?.ToString()) { Group = item.Group })" onchange="this.form.submit()">
+                                    <option value="">@(match == null ? "Not found by port" : $"{IndexModel.Describe(match)} (by port)")</option>
+                                </select>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+}

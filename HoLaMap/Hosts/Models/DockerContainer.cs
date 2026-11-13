@@ -42,5 +42,11 @@ namespace HoLaMap.Hosts.Models
         /// </summary>
         [JsonPropertyName("Labels")]
         public string? Labels { get; set; }
+
+        /// <summary>
+        /// Gets or sets its ports, such as 0.0.0.0:8082->8080/tcp for one published on the host.
+        /// </summary>
+        [JsonPropertyName("Ports")]
+        public string? Ports { get; set; }
     }
 }

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using HoLaMap.Hosts.Models;
 
 namespace HoLaMap.Hosts
@@ -48,7 +49,7 @@ namespace HoLaMap.Hosts
         /// <returns>The services.</returns>
         public static List<ReportedService> Services(string output, List<string> ignore)
         {
-            return [.. Parse(output).Where(container => !ignore.Contains(Labels(container).GetValueOrDefault("com.docker.compose.service") ?? string.Empty, StringComparer.OrdinalIgnoreCase)).Select(container => new ReportedService { Name = Name(container), Group = Labels(container).GetValueOrDefault("com.docker.compose.project") }).DistinctBy(service => (service.Group, service.Name)).OrderBy(service => service.Group).ThenBy(service => service.Name)];
+            return [.. Parse(output).Where(container => !ignore.Contains(Labels(container).GetValueOrDefault("com.docker.compose.service") ?? string.Empty, StringComparer.OrdinalIgnoreCase)).Select(container => new ReportedService { Name = Name(container), Group = Labels(container).GetValueOrDefault("com.docker.compose.project"), Ports = HostPorts(container) }).DistinctBy(service => (service.Group, service.Name)).OrderBy(service => service.Group).ThenBy(service => service.Name)];
         }
 
         /// <summary>
@@ -62,6 +63,26 @@ namespace HoLaMap.Hosts
             Dictionary<string, string> labels = Labels(container);
             bool compose = labels.TryGetValue("com.docker.compose.project", out string? project) & labels.TryGetValue("com.docker.compose.service", out string? service) & labels.TryGetValue("com.docker.compose.container-number", out string? number);
             return compose && name == $"{project}-{service}-{number}" ? service! : name;
+        }
+
+        /// <summary>
+        /// Gets the host ports a container is published on, from parts like 0.0.0.0:8082->8080/tcp, and every port of a small range like 0.0.0.0:8000-8002->8000-8002/tcp.
+        /// </summary>
+        /// <param name="container">The container.</param>
+        /// <returns>The host ports.</returns>
+        private static List<int> HostPorts(DockerContainer container)
+        {
+            List<int> ports = [];
+            foreach (Match match in Regex.Matches(container.Ports ?? string.Empty, @":(\d+)(?:-(\d+))?->"))
+            {
+                int first = int.Parse(match.Groups[1].Value);
+                int last = match.Groups[2].Success ? int.Parse(match.Groups[2].Value) : first;
+                if (last - first <= 100)
+                {
+                    ports.AddRange(Enumerable.Range(first, last - first + 1));
+                }
+            }
+            return [.. ports.Distinct().Order()];
         }
 
         /// <summary>

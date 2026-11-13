@@ -409,20 +409,30 @@
     };
 
     // Services view: what each host reports running, fetched the first time the tab is opened or a device's details need it.
+    // The Cloudflare tunnels come with them, each route with the service it reaches.
     let services = null;
     let serviceLinks = [];
+    let tunnels = [];
     const servicesById = new Map();
+    const tunnelsById = new Map();
+    const routesById = new Map();
     let servicesLoading = null;
     const loadServices = () => servicesLoading ??= (async () => {
         try {
             const data = await (await fetch(container.dataset.servicesUrl)).json();
             services = data.hosts;
             serviceLinks = data.links;
+            tunnels = data.tunnels ?? [];
         } catch (error) {
             services = [];
             serviceLinks = [];
+            tunnels = [];
         }
         services.forEach(host => host.services.forEach(service => servicesById.set(service.id, { ...service, host: host })));
+        tunnels.forEach(tunnel => {
+            tunnelsById.set(tunnel.id, tunnel);
+            tunnel.routes.forEach(route => routesById.set(route.id, { ...route, tunnel: tunnel }));
+        });
     })();
     const serviceGroupId = (hostId, group) => `group:${hostId}:${group}`;
     const serviceCategoryNames = { Data: 'Documents/Data', ThirdParty: '3rd Party' };
@@ -446,6 +456,18 @@
         };
         list('Uses', serviceLinks.filter(link => link.source === nodeId), link => link.target);
         list('Used By', serviceLinks.filter(link => link.target === nodeId), link => link.source);
+        // The public hostnames reaching it through a tunnel, each opening the site.
+        const domains = [...routesById.values()].filter(route => route.service === nodeId);
+        if (domains.length) {
+            const items = element('ul', 'details-list');
+            domains.forEach(route => {
+                const item = element('li');
+                item.append(domainLink(route));
+                meta(item, route.tunnel.name);
+                items.append(item);
+            });
+            section('Domains').append(items);
+        }
     };
     const serviceButton = (serviceId, text) => {
         const service = servicesById.get(serviceId);
@@ -458,7 +480,66 @@
         rows(section(), [['Service', serviceButton(link.source)], ['Uses', serviceButton(link.target)], ['Notes', link.notes]]);
     };
 
+    // A tunnel and a public hostname, from the Cloudflare view.
+    const domainLink = route => {
+        const link = element('a', 'details-link', `${route.hostname}${route.path}`);
+        link.href = `https://${route.hostname}${route.path}`;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        return link;
+    };
+    const routeButton = routeId => button(`${routesById.get(routeId)?.hostname ?? 'Unknown'}${routesById.get(routeId)?.path ?? ''}`, () => follow('cloudflare', 'node', routeId, () => showRoute(routeId), () => focusNode(routeId)));
+    const tunnelButton = tunnelId => button(tunnelsById.get(tunnelId)?.name ?? 'Unknown', () => follow('cloudflare', 'node', tunnelId, () => showTunnel(tunnelId), () => focusNode(tunnelId)));
+    const showTunnel = tunnelId => {
+        const tunnel = tunnelsById.get(tunnelId);
+        heading(tunnel.name, [['Tunnel'], tunnel.status === 'healthy' ? ['Healthy', 'online'] : [tunnel.status || 'Unknown', 'offline']]);
+        rows(section(), [['Runs On', rawById.has(tunnel.host) ? deviceButton(tunnel.host) : 'Not known, pick it on the Domains page'], ['Version', tunnel.version], ['Routes Set In', tunnel.remoteConfig ? 'Cloudflare Dashboard' : 'cloudflared Config File']]);
+        const items = element('ul', 'details-list');
+        tunnel.routes.forEach(route => {
+            const item = element('li');
+            item.append(routeButton(route.id));
+            meta(item, servicesById.get(route.service)?.label ?? 'No service found');
+            items.append(item);
+        });
+        section('Hostnames').append(items);
+    };
+    const showRoute = routeId => {
+        const route = routesById.get(routeId);
+        heading(`${route.hostname}${route.path}`, [['Hostname']]);
+        rows(section(), [['Opens', domainLink(route)], ['Goes To', route.target], ['Tunnel', tunnelButton(route.tunnel.id)], ['Service', servicesById.has(route.service) ? serviceButton(route.service) : 'Not found by port, pick it on the Domains page'], ['Matched', route.service ? route.manual ? 'Picked by Hand' : 'By Port' : '']]);
+    };
+
+    const showZone = zoneId => {
+        const zone = zonesById.get(zoneId);
+        heading(zone.name, [['Domain']]);
+        // Its hostnames, under the tunnel each goes through.
+        zone.tunnels.forEach(tunnel => {
+            const part = section();
+            rows(part, [['Tunnel', tunnelButton(tunnel.id)]]);
+            const items = element('ul', 'details-list');
+            tunnel.routes.filter(route => zoneOf(route.hostname) === zone.name).forEach(route => {
+                const item = element('li');
+                item.append(routeButton(route.id));
+                meta(item, servicesById.get(route.service)?.label ?? 'No service found');
+                items.append(item);
+            });
+            part.append(items);
+        });
+    };
+
     const showDevice = nodeId => {
+        if (zonesById.has(nodeId)) {
+            showZone(nodeId);
+            return;
+        }
+        if (tunnelsById.has(nodeId)) {
+            showTunnel(nodeId);
+            return;
+        }
+        if (routesById.has(nodeId)) {
+            showRoute(nodeId);
+            return;
+        }
         if (servicesById.has(nodeId)) {
             showService(nodeId);
             return;
@@ -1925,6 +2006,132 @@
         });
     };
 
+    // The Cloudflare view: each tunnel, the domains it serves, their public hostnames, and the service each hostname reaches, labelled with its host.
+    // A domain has one chip, split into a section per tunnel using it. Each tunnel's line comes in on the left of its section and its hostnames leave from the right,
+    // so each hostname still shows which tunnel it goes through. A hostname with no service found stands alone. Clicking a line shows whatever it leads to.
+    const zonesById = new Map();
+    const zoneOf = hostname => hostname.split('.').slice(hostname.endsWith('.co.uk') ? -3 : -2).join('.');
+    const cloudflareView = () => {
+        const nodes = [];
+        const edges = [];
+        const reached = new Set();
+        const plain = { room: '', rack: '', ports: [] };
+        zonesById.clear();
+        tunnels.forEach(tunnel => tunnel.routes.forEach(route => {
+            const zoneId = `zone:${zoneOf(route.hostname)}`;
+            const zone = zonesById.get(zoneId) ?? { id: zoneId, name: zoneOf(route.hostname), tunnels: [] };
+            if (!zone.tunnels.includes(tunnel)) {
+                zone.tunnels.push(tunnel);
+            }
+            zonesById.set(zoneId, zone);
+        }));
+        [...zonesById.values()].sort((a, b) => a.name.localeCompare(b.name)).forEach(zone => nodes.push({ ...plain, id: zone.id, label: zone.name, kind: 'zone', online: true }));
+        tunnels.forEach(tunnel => {
+            nodes.push({ ...plain, id: tunnel.id, label: tunnel.name, kind: 'tunnel', online: tunnel.status === 'healthy' });
+            [...new Set(tunnel.routes.map(route => `zone:${zoneOf(route.hostname)}`))].forEach(zoneId => edges.push({ id: `${zoneId}:in:${tunnel.id}`, source: tunnel.id, target: zoneId, targetSection: tunnel.id, online: true, route: true, focus: zoneId }));
+            tunnel.routes.forEach(route => {
+                nodes.push({ ...plain, id: route.id, label: `${route.hostname}${route.path}`, kind: 'domain', online: true });
+                edges.push({ id: `${route.id}:in`, source: `zone:${zoneOf(route.hostname)}`, sourceSection: tunnel.id, target: route.id, online: true, route: true, focus: route.id });
+                if (servicesById.has(route.service)) {
+                    reached.add(route.service);
+                    edges.push({ id: `${route.id}:out`, source: route.id, target: route.service, online: true, route: true, focus: route.id });
+                }
+            });
+        });
+        // Services from the same Compose project on the same host share a box titled with the project and host, as on the Services view.
+        const boxes = new Map();
+        const projectOf = service => service.group && service.kind !== 'Cloud' ? serviceGroupId(service.host.id, service.group) : null;
+        [...reached].map(serviceId => servicesById.get(serviceId)).filter(service => projectOf(service) && [...reached].filter(other => projectOf(servicesById.get(other)) === projectOf(service)).length > 1).forEach(service => {
+            const box = boxes.get(projectOf(service)) ?? { id: projectOf(service), label: `${service.group} · ${service.host.label}`, members: [] };
+            box.members.push(service.id);
+            boxes.set(box.id, box);
+        });
+        const boxed = new Set([...boxes.values()].flatMap(box => box.members));
+        reached.forEach(serviceId => {
+            const service = servicesById.get(serviceId);
+            const node = serviceNode(service.host, service);
+            nodes.push({ ...node, label: boxed.has(serviceId) ? service.label : `${node.label} · ${service.host.label}` });
+        });
+        return { ...raw, nodes: nodes, edges: edges, boxes: [...boxes.values()] };
+    };
+    // Laid out by ELK left to right: tunnels, then domains, then hostnames, then services, with each project box holding its services.
+    const drawCloudflare = async (layers, bounds, id) => {
+        const chip = node => ({ id: node.id, ...chipSize(node), layoutOptions: { 'elk.alignment': 'LEFT' } });
+        const boxed = new Set(graph.boxes.flatMap(box => box.members));
+        // A domain used by more than one tunnel is taller, with a section per tunnel under its name, labelled with the tunnel, and a point in and a point out at the middle of each.
+        const sectionHeight = 18;
+        const zoneSize = node => {
+            const zone = zonesById.get(node.id);
+            const size = chipSize(node);
+            return zone.tunnels.length > 1 ? { width: Math.max(size.width, roundUp(Math.max(...zone.tunnels.map(tunnel => textWidth(tunnel.name) * 11 / 12)) + 16, 8)), height: chipHeight + zone.tunnels.length * sectionHeight } : size;
+        };
+        const sectionY = (zone, index) => zone.tunnels.length > 1 ? chipHeight + index * sectionHeight + sectionHeight / 2 : chipHeight / 2;
+        const zoneChip = node => {
+            const zone = zonesById.get(node.id);
+            const size = zoneSize(node);
+            const ports = zone.tunnels.flatMap((tunnel, index) => [
+                { id: `${node.id}>in>${tunnel.id}`, x: 0, y: sectionY(zone, index), width: 0, height: 0, layoutOptions: { 'elk.port.side': 'WEST' } },
+                { id: `${node.id}>out>${tunnel.id}`, x: size.width, y: sectionY(zone, index), width: 0, height: 0, layoutOptions: { 'elk.port.side': 'EAST' } }
+            ]);
+            return { id: node.id, ...size, ports: ports, layoutOptions: { 'elk.alignment': 'LEFT', 'elk.portConstraints': 'FIXED_POS' } };
+        };
+        const layout = await new ELK().layout({
+            id: 'root',
+            layoutOptions: { 'elk.algorithm': 'layered', 'elk.direction': 'RIGHT', 'elk.edgeRouting': 'ORTHOGONAL', 'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.layered.spacing.nodeNodeBetweenLayers': '80', 'elk.spacing.nodeNode': '10', 'elk.spacing.edgeEdge': '8', 'elk.layered.thoroughness': '25', 'elk.padding': '[top=0,left=0,bottom=0,right=0]' },
+            children: [
+                ...graph.nodes.filter(node => !boxed.has(node.id)).map(node => node.kind === 'zone' ? zoneChip(node) : chip(node)),
+                ...graph.boxes.map(box => ({ id: box.id, layoutOptions: { 'elk.direction': 'RIGHT', 'elk.alignment': 'LEFT', 'elk.spacing.nodeNode': String(stackGap), 'elk.padding': `[top=${roomHeader},left=${roomPadding},bottom=${roomPadding},right=${roomPadding}]` }, children: box.members.map(member => chip(nodesById.get(member))) }))
+            ],
+            edges: graph.edges.map(edge => ({ id: edge.id, sources: [edge.sourceSection ? `${edge.source}>out>${edge.sourceSection}` : edge.source], targets: [edge.targetSection ? `${edge.target}>in>${edge.targetSection}` : edge.target] }))
+        });
+        if (id !== renderId) {
+            return false;
+        }
+        // ELK places each box relative to the one holding it, and each line relative to the box it names as its container.
+        const placed = new Map();
+        const walk = (box, x, y) => (box.children ?? []).forEach(child => {
+            placed.set(child.id, { x: x + child.x, y: y + child.y, width: child.width, height: child.height });
+            walk(child, x + child.x, y + child.y);
+        });
+        walk(layout, 0, 0);
+        (layout.edges ?? []).forEach(layoutEdge => {
+            const edge = graph.edges.find(item => item.id === layoutEdge.id);
+            const origin = placed.get(layoutEdge.container) ?? { x: 0, y: 0 };
+            (layoutEdge.sections ?? []).forEach(section => {
+                const clean = tidy([section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map(point => ({ x: point.x + origin.x, y: point.y + origin.y })));
+                const group = create('g', { class: 'map-edge tunnel-route', 'data-edge': edge.id }, layers.edges);
+                create('path', { d: roundedPath(clean), class: 'map-edge-hit' }, group);
+                traced(create('path', { d: roundedPath(clean), class: 'map-edge-line' }, group), clean);
+                group.addEventListener('click', event => {
+                    event.stopPropagation();
+                    showDevice(edge.focus);
+                    focusNode(edge.focus);
+                });
+            });
+        });
+        graph.boxes.forEach(box => {
+            const at = placed.get(box.id);
+            drawRoom(box.label, at.x, at.y, at.width, at.height, layers.boxes);
+        });
+        graph.nodes.forEach(node => {
+            const at = placed.get(node.id);
+            drawNode(node, at.x, at.y, at.width, node.kind === 'zone' ? chipHeight : at.height, layers.nodes, true);
+            // A split domain carries on below its name, with a line between each tunnel's section.
+            const zone = zonesById.get(node.id);
+            if (zone && zone.tunnels.length > 1) {
+                const group = layers.nodes.lastElementChild;
+                group.querySelector('.map-node-box').setAttribute('height', at.height);
+                zone.tunnels.forEach((tunnel, index) => {
+                    create('line', { x1: 0, y1: chipHeight + index * sectionHeight, x2: at.width, y2: chipHeight + index * sectionHeight, class: 'map-zone-divider' }, group);
+                    create('text', { x: at.width / 2, y: chipHeight + index * sectionHeight + sectionHeight / 2 + 4, class: 'map-zone-section' }, group).textContent = tunnel.name;
+                });
+            }
+        });
+        bounds.width = layout.width;
+        bounds.height = layout.height;
+        return true;
+    };
+
     // The All view also gets the service links, drawn as single-style dependency lines that only show while a service at either end is selected.
     const withServices = data => services ? { ...data, dependencies: serviceEdges(serviceLinks) } : data;
     const drawServices = async (layers, bounds, id) => {
@@ -2279,7 +2486,7 @@
         const shown = new Set();
         const lines = [...graph.edges, ...(graph.zigbeeArcs ?? [])];
         // The coordinator's USB cable is drawn grey but isn't a cable that's down, so it isn't counted.
-        lines.filter(edge => edge.id !== 'zl-usb').forEach(edge => shown.add(edge.id.startsWith('sl') ? `link-${edge.kind.toLowerCase()}` : edge.zigbee ? 'zigbee' : edge.wireless ? 'wifi' : edge.style));
+        lines.filter(edge => edge.id !== 'zl-usb').forEach(edge => shown.add(edge.route ? 'route' : edge.id.startsWith('sl') ? `link-${edge.kind.toLowerCase()}` : edge.zigbee ? 'zigbee' : edge.wireless ? 'wifi' : edge.style));
         if (lines.some(edge => edge.poE)) {
             shown.add('poe');
         }
@@ -2443,19 +2650,23 @@
                 return;
             }
         }
-        if ((mode === 'services' || mode === 'all') && !services) {
+        if ((mode === 'services' || mode === 'all' || mode === 'cloudflare') && !services) {
             await loadServices();
             if (id !== renderId) {
                 return;
             }
         }
-        useView(mode === 'services' ? servicesView() : mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? zigbeeView() : mode === 'all' ? withServices(withZigbee()) : withZigbee(false));
+        useView(mode === 'cloudflare' ? cloudflareView() : mode === 'services' ? servicesView() : mode === 'network' ? (vlanSelect.value ? vlanView(vlanSelect.value) : raw) : mode === 'zigbee' ? zigbeeView() : mode === 'all' ? withServices(withZigbee()) : withZigbee(false));
         tabs.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.view === mode));
         updateKey(mode);
         vlanSelect.hidden = mode !== 'network' || !raw.networks.length;
         zigbeeSelect.hidden = mode !== 'zigbee';
         servicesSelect.hidden = mode !== 'services';
         details.textContent = defaultDetails;
+        if (mode === 'cloudflare' && !graph.nodes.length) {
+            showMessage('No tunnels yet. They come from Cloudflare once its account ID and API token are set.');
+            return;
+        }
         if (mode === 'services' && !graph.nodes.length) {
             showMessage(services.some(host => host.services.length) ? 'No services in this category yet.' : 'No services yet. Hosts report them to /api/services/{host}/systemd.');
             return;
@@ -2485,7 +2696,11 @@
         labelLayer = layers.labels;
         const bounds = { width: 0, height: 0 };
 
-        if (mode === 'services') {
+        if (mode === 'cloudflare') {
+            if (!await drawCloudflare(layers, bounds, id)) {
+                return;
+            }
+        } else if (mode === 'services') {
             if (!await drawServices(layers, bounds, id)) {
                 return;
             }
@@ -2627,7 +2842,7 @@
         }
     };
 
-    const modes = ['all', 'floorplan', 'network', 'zigbee', 'services'];
+    const modes = ['all', 'floorplan', 'network', 'zigbee', 'services', 'cloudflare'];
     let stored = null;
     try {
         stored = localStorage.getItem('holamap.view');

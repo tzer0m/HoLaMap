@@ -308,6 +308,13 @@ body:has(.map-layout) .details {
     color: #a0a6b4;
 }
 
+.table-group-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: normal;
+}
+
 .field-error {
     color: #f08080;
     font-size: 0.85rem;
@@ -1223,6 +1230,21 @@ body:has(.map-layout) .details {
     border-color: #5fd4d0;
 }
 
+.swatch.box-tunnel {
+    background: #4a2c12;
+    border-color: #f38020;
+}
+
+.swatch.box-zone {
+    background: #3d1f33;
+    border-color: #e06cb5;
+}
+
+.swatch.box-domain {
+    background: #1f2a3d;
+    border-color: #8ab4f8;
+}
+
 .swatch.box-other {
     background: #33363d;
     border-color: #9ea3ad;
@@ -1567,6 +1589,41 @@ body:has(.map-layout) .details {
 .map-node.cloud .map-node-box {
     fill: #1d4447;
     stroke: #5fd4d0;
+}
+
+/* The Cloudflare view: tunnels in Cloudflare orange, hostnames in blue, and the routes between them in orange. */
+.map-node.tunnel .map-node-box {
+    fill: #4a2c12;
+    stroke: #f38020;
+}
+
+.map-node.zone .map-node-box {
+    fill: #3d1f33;
+    stroke: #e06cb5;
+}
+
+.map-zone-divider {
+    stroke: #e06cb5;
+    stroke-width: 1;
+    opacity: 0.6;
+}
+
+.map-zone-section {
+    fill: #c9b3c2;
+    font-size: 11px;
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+.map-node.domain .map-node-box {
+    fill: #1f2a3d;
+    stroke: #8ab4f8;
+}
+
+.map-edge.tunnel-route .map-edge-line,
+.swatch-link.route {
+    stroke: #f38020;
+    stroke-width: 2;
 }
 
 .map-node.other .map-node-box {

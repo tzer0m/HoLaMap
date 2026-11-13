@@ -85,6 +85,16 @@ namespace HoLaMap.Data
         public DbSet<ServiceLink> ServiceLinks => Set<ServiceLink>();
 
         /// <summary>
+        /// Gets the Cloudflare tunnels.
+        /// </summary>
+        public DbSet<Tunnel> Tunnels => Set<Tunnel>();
+
+        /// <summary>
+        /// Gets the tunnels' public hostnames.
+        /// </summary>
+        public DbSet<TunnelRoute> TunnelRoutes => Set<TunnelRoute>();
+
+        /// <summary>
         /// Configures keys, indexes and relationships.
         /// </summary>
         /// <param name="modelBuilder">The model builder.</param>
@@ -130,6 +140,11 @@ namespace HoLaMap.Data
             modelBuilder.Entity<ServiceLink>().HasOne(link => link.ToService).WithMany().HasForeignKey(link => link.ToServiceId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<ServiceLink>().HasIndex(link => new { link.FromServiceId, link.ToServiceId }).IsUnique();
             modelBuilder.Entity<ServiceLink>().Property(link => link.Kind).HasConversion<string>();
+            modelBuilder.Entity<Tunnel>().HasIndex(tunnel => tunnel.CloudflareId).IsUnique();
+            modelBuilder.Entity<Tunnel>().HasOne(tunnel => tunnel.Device).WithMany().HasForeignKey(tunnel => tunnel.DeviceId).OnDelete(DeleteBehavior.SetNull);
+            modelBuilder.Entity<TunnelRoute>().HasOne(route => route.Tunnel).WithMany(tunnel => tunnel.Routes).HasForeignKey(route => route.TunnelId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<TunnelRoute>().HasOne(route => route.Service).WithMany().HasForeignKey(route => route.ServiceId).OnDelete(DeleteBehavior.SetNull);
+            modelBuilder.Entity<TunnelRoute>().HasIndex(route => new { route.TunnelId, route.Hostname, route.Path }).IsUnique();
         }
     }
 }

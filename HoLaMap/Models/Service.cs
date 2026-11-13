@@ -54,5 +54,10 @@ namespace HoLaMap.Models
         /// Gets or sets when its host last reported it (UTC), or null for one added by hand.
         /// </summary>
         public DateTime? LastSeen { get; set; }
+
+        /// <summary>
+        /// Gets or sets the ports it listens on, as its host last reported them, so a tunnel's route can be matched to it.
+        /// </summary>
+        public List<int> Ports { get; set; } = [];
     }
 }

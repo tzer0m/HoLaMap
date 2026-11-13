@@ -483,6 +483,10 @@ namespace HoLaMap.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.PrimitiveCollection<List<int>>("Ports")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasColumnType("text");
@@ -524,6 +528,84 @@ namespace HoLaMap.Migrations
                         .IsUnique();
 
                     b.ToTable("ServiceLinks");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.Tunnel", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CloudflareId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("DeviceId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("LastSeen")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("RemoteConfig")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Version")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CloudflareId")
+                        .IsUnique();
+
+                    b.HasIndex("DeviceId");
+
+                    b.ToTable("Tunnels");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.TunnelRoute", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Hostname")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ServiceId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("TunnelId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceId");
+
+                    b.HasIndex("TunnelId", "Hostname", "Path")
+                        .IsUnique();
+
+                    b.ToTable("TunnelRoutes");
                 });
 
             modelBuilder.Entity("HoLaMap.Models.ZigbeeDevice", b =>
@@ -796,6 +878,34 @@ namespace HoLaMap.Migrations
                     b.Navigation("ToService");
                 });
 
+            modelBuilder.Entity("HoLaMap.Models.Tunnel", b =>
+                {
+                    b.HasOne("HoLaMap.Models.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Device");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.TunnelRoute", b =>
+                {
+                    b.HasOne("HoLaMap.Models.Service", "Service")
+                        .WithMany()
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("HoLaMap.Models.Tunnel", "Tunnel")
+                        .WithMany("Routes")
+                        .HasForeignKey("TunnelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Service");
+
+                    b.Navigation("Tunnel");
+                });
+
             modelBuilder.Entity("HoLaMap.Models.ZigbeeDevice", b =>
                 {
                     b.HasOne("HoLaMap.Models.Room", "Room")
@@ -848,6 +958,11 @@ namespace HoLaMap.Migrations
                     b.Navigation("Devices");
 
                     b.Navigation("Racks");
+                });
+
+            modelBuilder.Entity("HoLaMap.Models.Tunnel", b =>
+                {
+                    b.Navigation("Routes");
                 });
 
             modelBuilder.Entity("HoLaMap.Models.ZigbeeDevice", b =>

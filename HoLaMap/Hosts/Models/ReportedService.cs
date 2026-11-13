@@ -19,5 +19,10 @@ namespace HoLaMap.Hosts.Models
         /// Gets or sets the group it was started with, such as its Docker Compose project, if any.
         /// </summary>
         public string? Group { get; set; }
+
+        /// <summary>
+        /// Gets or sets the ports it listens on, when the report says.
+        /// </summary>
+        public List<int> Ports { get; set; } = [];
     }
 }

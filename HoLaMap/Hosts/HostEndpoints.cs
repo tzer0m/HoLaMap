@@ -19,6 +19,7 @@ namespace HoLaMap.Hosts
         {
             app.MapPost("/api/services/{host}/systemd", ReportSystemdAsync);
             app.MapPost("/api/services/{host}/docker", ReportDockerAsync);
+            app.MapPost("/api/services/{host}/ports", ReportPortsAsync);
         }
 
         /// <summary>
@@ -47,6 +48,26 @@ namespace HoLaMap.Hosts
         private static Task<IResult> ReportDockerAsync(string host, HttpRequest request, HostSyncService sync, IOptionsSnapshot<HostReportOptions> options, CancellationToken cancellationToken)
         {
             return ReportAsync(host, request, sync, options.Value.Token, ServiceKind.Docker, output => DockerParser.Services(output, options.Value.DockerIgnore), cancellationToken);
+        }
+
+        /// <summary>
+        /// Saves which ports a host's systemd services listen on, from the output of ss -tlnpH, sent as the request body.
+        /// </summary>
+        /// <param name="host">The host's device name or MAC address.</param>
+        /// <param name="request">The request.</param>
+        /// <param name="sync">The host sync service.</param>
+        /// <param name="options">The host report settings.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The number of services with a port, unauthorised, or not found if the host isn't on the map.</returns>
+        private static async Task<IResult> ReportPortsAsync(string host, HttpRequest request, HostSyncService sync, IOptionsSnapshot<HostReportOptions> options, CancellationToken cancellationToken)
+        {
+            if (!IsAuthorised(request, options.Value.Token))
+            {
+                return Results.Unauthorized();
+            }
+            using StreamReader reader = new(request.Body);
+            int? count = await sync.SyncPortsAsync(host, PortsParser.Parse(await reader.ReadToEndAsync(cancellationToken)), cancellationToken);
+            return count == null ? Results.NotFound($"No device called {host}.") : Results.Ok(new { Services = count });
         }
 
         /// <summary>
