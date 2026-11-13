@@ -6,7 +6,7 @@ namespace HoLaMap.Zigbee
     public class HomeAssistantOptions
     {
         /// <summary>
-        /// Gets or sets the Home Assistant base URL, e.g. http://192.168.20.132:8123/.
+        /// Gets or sets the Home Assistant base URL, e.g. http://homeassistant.local:8123/.
         /// </summary>
         public string Url { get; set; } = string.Empty;
 

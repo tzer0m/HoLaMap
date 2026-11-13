@@ -1,0 +1,27 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: tzer0m
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish
+        run: dotnet publish HoLaMap/HoLaMap.csproj -c Release -r linux-x64 --self-contained false -o publish
+
+      - name: Deploy
+        run: |
+          sudo systemctl stop HoLaMap.service
+          rsync -a --delete publish/ /home/tzer0m/Services/HoLaMap/
+          sudo systemctl start HoLaMap.service
+
+      - name: Check
+        run: |
+          sleep 5
+          sudo systemctl status HoLaMap.service --no-pager
+          curl --fail --silent --show-error --output /dev/null http://localhost:7170/health

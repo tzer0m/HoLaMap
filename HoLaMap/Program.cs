@@ -31,10 +31,12 @@ builder.Services.AddHostedService<OpenApiSyncWorker>();
 builder.Services.Configure<CloudflareOptions>(builder.Configuration.GetSection("Cloudflare"));
 builder.Services.AddHttpClient<CloudflareSyncService>();
 builder.Services.AddHostedService<CloudflareSyncWorker>();
+builder.Services.AddHealthChecks();
 
 WebApplication app = builder.Build();
 app.UseRouting();
 app.MapStaticAssets();
 app.MapRazorPages().WithStaticAssets();
 app.MapHostEndpoints();
+app.MapHealthChecks("/health");
 app.Run();
