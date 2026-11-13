@@ -19,8 +19,6 @@
 - Service dependencies: manual links between services, drawn on the Services view. Plain hardware like the receipt printer is a link target through a Device-type service added by hand, so every link is service to service. Layout must follow the links so they're as clear as possible: switch the view to ELK with hosts and project boxes as nested containers (like `layoutNested`), so linked hosts sit together, chips face their links and lines route with few crossings. Hosts with no links keep the current pile-and-wrap packing.
 - Cloudflare view on the map: each tunnel (the cloudflared services) and the hostnames and services it exposes, kept off the Services view so those lines don't swamp it.
 - Schedule page (own nav link): everything scheduled across the fleet on three bars. Daily runs noon to noon so overnight jobs sit in the middle, weekly Mon to Sun, monthly 1 to 31. Overlapping jobs stack, block width from run duration where known (fixed minimum otherwise), click for host, command and schedule in words. Own `ScheduledTask` table reported per host like services; sources: TrueNAS cron jobs first (RebelBackup on Davos), then Semaphore schedules, TrueNAS Cloud Syncs and systemd timers.
-- Pocket ID sign-in (OIDC in the app) when it's deployed to Tyrion.
 - New `Hosts:Token` for the services endpoint when it's deployed (the dev one has been shared).
 - README (what it does, settings, secrets) when it's deployed.
-- Leave HoLaMap itself off the Services view once it's deployed, through a `Hosts:SystemdIgnore` list like `DockerIgnore`, with its unit name in it.
 - Install node_exporter on Jorah, the only host reporting services without one (spotted on the Services view).

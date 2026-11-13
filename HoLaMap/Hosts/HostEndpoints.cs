@@ -33,7 +33,7 @@ namespace HoLaMap.Hosts
         /// <returns>The number of services, unauthorised, or not found if the host isn't on the map.</returns>
         private static Task<IResult> ReportSystemdAsync(string host, HttpRequest request, HostSyncService sync, IOptionsSnapshot<HostReportOptions> options, CancellationToken cancellationToken)
         {
-            return ReportAsync(host, request, sync, options.Value.Token, ServiceKind.Systemd, output => SystemdParser.Services(output, options.Value.SystemdInclude), cancellationToken);
+            return ReportAsync(host, request, sync, options.Value.Token, ServiceKind.Systemd, output => SystemdParser.Services(output, options.Value.SystemdInclude, options.Value.SystemdIgnore), cancellationToken);
         }
 
         /// <summary>

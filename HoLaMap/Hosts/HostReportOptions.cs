@@ -23,6 +23,11 @@ namespace HoLaMap.Hosts
         public List<string> SystemdInclude { get; set; } = [];
 
         /// <summary>
+        /// Gets or sets custom systemd units to leave out, such as HoLaMap itself.
+        /// </summary>
+        public List<string> SystemdIgnore { get; set; } = [];
+
+        /// <summary>
         /// Gets or sets Docker Compose service names to leave out, such as one-off helpers that run at start-up and exit.
         /// </summary>
         public List<string> DockerIgnore { get; set; } = [];

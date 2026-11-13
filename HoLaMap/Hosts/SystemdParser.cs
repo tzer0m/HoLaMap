@@ -40,14 +40,15 @@ namespace HoLaMap.Hosts
         }
 
         /// <summary>
-        /// Gets the services set up by hand, plus any packaged ones asked for, named without the .service suffix.
+        /// Gets the services set up by hand, plus any packaged ones asked for and less any left out, named without the .service suffix.
         /// </summary>
         /// <param name="output">The output of systemctl show.</param>
         /// <param name="include">Packaged services to keep as well.</param>
+        /// <param name="ignore">Services to leave out, such as HoLaMap itself.</param>
         /// <returns>The services.</returns>
-        public static List<ReportedService> Services(string output, List<string> include)
+        public static List<ReportedService> Services(string output, List<string> include, List<string> ignore)
         {
-            return [.. Parse(output).Where(unit => IsCustom(unit) || (!string.IsNullOrEmpty(unit.FragmentPath) && include.Contains(Name(unit), StringComparer.OrdinalIgnoreCase))).DistinctBy(Name).OrderBy(Name).Select(unit => new ReportedService { Name = Name(unit), Custom = IsCustom(unit) })];
+            return [.. Parse(output).Where(unit => !ignore.Contains(Name(unit), StringComparer.OrdinalIgnoreCase)).Where(unit => IsCustom(unit) || (!string.IsNullOrEmpty(unit.FragmentPath) && include.Contains(Name(unit), StringComparer.OrdinalIgnoreCase))).DistinctBy(Name).OrderBy(Name).Select(unit => new ReportedService { Name = Name(unit), Custom = IsCustom(unit) })];
         }
 
         /// <summary>
