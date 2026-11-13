@@ -21,6 +21,8 @@
     const chipHeight = 24;
     const laneGap = 10;
     const stackGap = 8;
+    // Room at the right of a public service's chip for its globe.
+    const globeSpace = 14;
     // The All view's device cards: the space above the device at the top of its card, the gap between the device and its services,
     // and the height of a device's title in a rack's card.
     const cardTop = 10;
@@ -431,9 +433,16 @@
         services.forEach(host => host.services.forEach(service => servicesById.set(service.id, { ...service, host: host })));
         tunnels.forEach(tunnel => {
             tunnelsById.set(tunnel.id, tunnel);
-            tunnel.routes.forEach(route => routesById.set(route.id, { ...route, tunnel: tunnel }));
+            tunnel.routes.forEach(route => {
+                routesById.set(route.id, { ...route, tunnel: tunnel });
+                if (route.service) {
+                    publicServices.add(route.service);
+                }
+            });
         });
     })();
+    // Services with a public hostname, which get a globe on their chip.
+    const publicServices = new Set();
     const serviceGroupId = (hostId, group) => `group:${hostId}:${group}`;
     const serviceCategoryNames = { Data: 'Documents/Data', ThirdParty: '3rd Party' };
     const serviceKindNames = { Systemd: 'Systemd', Docker: 'Docker', TrueNasApp: 'TrueNAS App', PythonScript: 'Python Script', ApiRoute: 'API Route', Cloud: 'Cloud', Device: 'Device', Other: 'Other' };
@@ -806,6 +815,14 @@
         create('rect', { width: width, height: height, rx: compact ? 4 : 8, class: 'map-node-box' }, group);
         const label = create('text', { x: width / 2, y: !compact && node.ports.length ? 18 : height / 2 + 4, class: 'map-node-label' }, group);
         label.textContent = node.label;
+        // A service with a public hostname has a small globe at the right of its chip, with its name centred in the rest.
+        if (compact && publicServices.has(node.id)) {
+            label.setAttribute('x', (width - globeSpace) / 2);
+            const globe = create('g', { class: 'map-globe', transform: `translate(${width - 12}, ${height / 2})` }, group);
+            create('circle', { r: 5 }, globe);
+            create('ellipse', { rx: 2, ry: 5 }, globe);
+            create('line', { x1: -5, y1: 0, x2: 5, y2: 0 }, globe);
+        }
         group.addEventListener('click', event => {
             event.stopPropagation();
             showDevice(node.id);
@@ -857,7 +874,7 @@
             const side = roundUp(Math.max(textWidth(node.label, true) + 16, 64), 8);
             return { width: side, height: side };
         }
-        return { width: roundUp(textWidth(node.label, isInfrastructure(node)) + 16, 8), height: chipHeight };
+        return { width: roundUp(textWidth(node.label, isInfrastructure(node)) + 16 + (publicServices.has(node.id) ? globeSpace : 0), 8), height: chipHeight };
     };
 
     // Lays out a set of devices with ELK and routes their lines. Client devices at the end of a chain are stacked in a column under their parent instead of spreading sideways.
@@ -1071,7 +1088,7 @@
     };
     // A device's links include its Zigbee arcs to other rooms, and a service's its dependencies on the All view, which only show while it's selected.
     const focusNode = nodeId => {
-        const edges = [...graph.edges, ...(graph.zigbeeArcs ?? []), ...(graph.dependencies ?? [])].filter(edge => edge.source === nodeId || edge.target === nodeId);
+        const edges = [...graph.edges, ...(graph.zigbeeArcs ?? []), ...(graph.dependencies ?? []), ...(graph.tunnelLinks ?? [])].filter(edge => edge.source === nodeId || edge.target === nodeId);
         focusOn(new Set([nodeId, ...edges.flatMap(edge => [edge.source, edge.target])]), new Set(edges.map(edge => edge.id)));
     };
     const focusEdges = edges => focusOn(new Set(edges.flatMap(edge => [edge.source, edge.target])), new Set(edges.map(edge => edge.id)));
@@ -1618,6 +1635,13 @@
             const group = create('g', { class: 'map-edge dependency map-hover-arc', 'data-edge': link.id }, layers.trunks);
             traced(create('path', { d: curveD(curve), class: 'map-edge-line', 'marker-end': 'url(#dependency-arrow)' }, group), curvePoints(...curve));
         });
+        // A tunnel's lines start at its cloudflared service's chip, or at its device or rack when it has none.
+        const spotOf = itemId => spots.get(itemId) ?? boxes.get(itemId);
+        (graph.tunnelLinks ?? []).filter(link => spotOf(link.source) && spotOf(link.target)).forEach(link => {
+            const curve = arcBetween(spotOf(link.source), spotOf(link.target));
+            const group = create('g', { class: 'map-edge tunnel-route map-hover-arc', 'data-edge': link.id }, layers.trunks);
+            traced(create('path', { d: curveD(curve), class: 'map-edge-line' }, group), curvePoints(...curve));
+        });
         return { width: arranged.width, height: arranged.height };
     };
 
@@ -1932,9 +1956,13 @@
         return { ...host, services: host.services.filter(service => service.group || !groups.has(service.label)) };
     };
     // Links as lines between drawn things. A link to a service that's its group's box itself, like Api, ends at the box.
-    const serviceEdges = links => {
+    const serviceEnds = () => {
         const ends = new Map();
         services.forEach(host => host.services.forEach(service => ends.set(service.id, !service.group && host.services.some(other => other.group === service.label) ? serviceGroupId(host.id, service.label) : service.id)));
+        return ends;
+    };
+    const serviceEdges = links => {
+        const ends = serviceEnds();
         return links.filter(link => ends.has(link.source) && ends.has(link.target)).map(link => ({ ...link, source: ends.get(link.source), target: ends.get(link.target), online: true }));
     };
 
@@ -2133,7 +2161,21 @@
     };
 
     // The All view also gets the service links, drawn as single-style dependency lines that only show while a service at either end is selected.
-    const withServices = data => services ? { ...data, dependencies: serviceEdges(serviceLinks) } : data;
+    // Each tunnel also gets lines to the services it exposes, shown the same way, from its cloudflared service, or from its device when it has none.
+    // A tunnel with no cloudflared service that's built into the service it exposes, like Uptime Kuma's, would only loop back to its own device, so it gets no line.
+    const withServices = data => {
+        if (!services) {
+            return data;
+        }
+        const ends = serviceEnds();
+        const tunnelLinks = tunnels.flatMap(tunnel => {
+            const connector = services.find(host => host.id === tunnel.host)?.services.find(service => service.category === 'Cloudflare' && service.kind !== 'Cloud')?.id;
+            const source = connector ?? rackOf.get(tunnel.host) ?? tunnel.host;
+            const targets = [...new Set(tunnel.routes.filter(route => ends.has(route.service) && (connector || servicesById.get(route.service)?.host.id !== tunnel.host)).map(route => ends.get(route.service)))];
+            return source ? targets.map(target => ({ id: `tl:${tunnel.id}:${target}`, source: source, target: target, online: true, route: true })) : [];
+        });
+        return { ...data, dependencies: serviceEdges(serviceLinks), tunnelLinks: tunnelLinks };
+    };
     const drawServices = async (layers, bounds, id) => {
         const hostGap = 32;
         const endpoints = new Set(graph.edges.flatMap(edge => [edge.source, edge.target]));
@@ -2497,6 +2539,13 @@
             const zigbeeOnly = zigbeeById.has(node.id) && !rawById.has(node.id);
             shown.add(node.hue ? 'hue' : ['gateway', 'switch', 'accesspoint'].includes(node.kind) ? 'unifi' : node.kind === 'client' ? zigbeeOnly ? 'end-device' : 'client' : node.kind);
         });
+        // The All view's tunnel lines, and the globe on public services wherever service chips are drawn.
+        if (graph.tunnelLinks?.length) {
+            shown.add('route');
+        }
+        if ((graph.dependencies || graph.hosts || mode === 'cloudflare') && publicServices.size) {
+            shown.add('public');
+        }
         // The All view's services boxes and dependency lines.
         if (graph.dependencies) {
             services.forEach(host => shownServices(host).services.forEach(service => shown.add(serviceNode(host, service).kind)));

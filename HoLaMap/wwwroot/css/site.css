@@ -1604,6 +1604,20 @@ body:has(.map-layout) .details {
     stroke: #e06cb5;
 }
 
+/* The globe on a public service's chip, in Cloudflare orange. */
+.map-globe,
+.swatch-globe {
+    fill: none;
+    stroke: #f38020;
+    stroke-width: 1.2;
+    pointer-events: none;
+}
+
+.swatch-globe {
+    width: 12px;
+    height: 12px;
+}
+
 .map-zone-divider {
     stroke: #e06cb5;
     stroke-width: 1;
