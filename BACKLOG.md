@@ -13,12 +13,16 @@
 - Hue Bridge as a second Zigbee network over its local API, every device hanging off the bridge, with All, Zigbee and Hue tabs on the Zigbee view.
 - Key that only lists what the current view shows, including the rack view.
 - Devices that leave ZHA or the Hue Bridge stay greyed out with their room, and untouched UniFi clients (no room, rack, manual link, patch or merge) are forgotten, both after `ForgetAfterDays` (30 by default).
+- Services view with service dependencies: manual links between services, ELK layout with hosts and project boxes as nested containers, categories (Custom, 3rd Party, Cloud, Cloudflare, Semaphore, GitHub, Asterisk, Home, Media, Monitoring, Documents/Data, Other) with a category picker.
+- Cloudflare tunnels from the API (synced hourly): Cloudflare view (tunnel to domain to hostname to service), Domains page for the tunnel host and manual service overrides, routes matched to services by the listening ports hosts report.
+- All view shows each device's services in its card, with dependency and tunnel lines on click, and rows arranged to fit the box.
+- Details pane walks with the selection, switching views when a link points elsewhere (never back to All), and the rack popup reports picks to it.
+- Gaps where lines cross, consistent across every view.
+- Deployed to Tyrion on port 7170 (LAN and Tailscale, plain HTTP), deploy by GitHub Actions on push to master, `/health` monitored in Uptime Kuma.
+- Automated host reports: `holamap-report.yml` in the Ansible repo posts each host's systemd services, Docker containers and listening ports from Semaphore daily at midday (token in `~/.config/holamap-token.json` on Tyrion).
 
 ## Next Up
-- More layers: services and dependencies, firewall zones, Tailscale, and policies, public exposure.
-- Service dependencies: manual links between services, drawn on the Services view. Plain hardware like the receipt printer is a link target through a Device-type service added by hand, so every link is service to service. Layout must follow the links so they're as clear as possible: switch the view to ELK with hosts and project boxes as nested containers (like `layoutNested`), so linked hosts sit together, chips face their links and lines route with few crossings. Hosts with no links keep the current pile-and-wrap packing.
-- Cloudflare view on the map: each tunnel (the cloudflared services) and the hostnames and services it exposes, kept off the Services view so those lines don't swamp it.
+- More layers: firewall zones and policies, Tailscale, GitHub.
 - Schedule page (own nav link): everything scheduled across the fleet on three bars. Daily runs noon to noon so overnight jobs sit in the middle, weekly Mon to Sun, monthly 1 to 31. Overlapping jobs stack, block width from run duration where known (fixed minimum otherwise), click for host, command and schedule in words. Own `ScheduledTask` table reported per host like services; sources: TrueNAS cron jobs first (RebelBackup on Davos), then Semaphore schedules, TrueNAS Cloud Syncs and systemd timers.
-- New `Hosts:Token` for the services endpoint when it's deployed (the dev one has been shared).
-- README (what it does, settings, secrets) when it's deployed.
+- README (what it does, settings, secrets).
 - Install node_exporter on Jorah, the only host reporting services without one (spotted on the Services view).

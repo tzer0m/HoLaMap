@@ -465,13 +465,13 @@
         };
         list('Uses', serviceLinks.filter(link => link.source === nodeId), link => link.target);
         list('Used By', serviceLinks.filter(link => link.target === nodeId), link => link.source);
-        // The public hostnames reaching it through a tunnel, each opening the site.
+        // The public hostnames reaching it through a tunnel, each walking to the hostname on the Cloudflare view.
         const domains = [...routesById.values()].filter(route => route.service === nodeId);
         if (domains.length) {
             const items = element('ul', 'details-list');
             domains.forEach(route => {
                 const item = element('li');
-                item.append(domainLink(route));
+                item.append(routeButton(route.id));
                 meta(item, route.tunnel.name);
                 items.append(item);
             });
