@@ -2570,7 +2570,8 @@
         const placements = new Map();
         const widths = new Map();
         const lines = [...svg.querySelectorAll('.map-edge-line, .map-trunk-line')].map((path, order) => {
-            if (!(path.traced?.length > 1)) {
+            // Lines that only show while something is selected, like dependencies, are left out altogether, neither gapped nor gapping anything.
+            if (!(path.traced?.length > 1) || path.closest('.map-hover-arc')) {
                 return null;
             }
             // A line's own group can be hidden, like a Zigbee arc waiting for hover, so its position comes from the first group above it that has none of its own.
@@ -2592,7 +2593,7 @@
             }
             const scale = Math.hypot(toView.a, toView.b);
             const points = path.traced.map(point => new DOMPoint(point.x, point.y).matrixTransform(toView));
-            return { path: path, order: order, owner: path.closest('.map-edge, .map-trunk'), arc: path.classList.contains('map-trunk-line') || path.closest('.map-hover-arc') !== null, points: points, ends: [points[0], points[points.length - 1]], scale: scale, width: widths.get(look) * scale, toView: toView, gaps: [] };
+            return { path: path, order: order, owner: path.closest('.map-edge, .map-trunk'), arc: path.classList.contains('map-trunk-line'), points: points, ends: [points[0], points[points.length - 1]], scale: scale, width: widths.get(look) * scale, toView: toView, gaps: [] };
         }).filter(line => line);
 
         // Every straight piece goes into a grid so only pieces near each other are compared.
