@@ -3,6 +3,7 @@ using System.Text.Json;
 using HoLaMap.Data;
 using HoLaMap.Models;
 using HoLaMap.Schedules;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,12 +21,18 @@ namespace HoLaMap.Pages.Schedule
         private static readonly string[] Palette = ["#4e9af1", "#f2a03d", "#63c27a", "#e0629a", "#a77de8", "#3fc4c4", "#e5d34a", "#ef6b5b", "#8fb3ff", "#b5d86a"];
 
         /// <summary>
-        /// The day, week and month bars.
+        /// Gets or sets the host to show on its own, from the query string, or null to show every host.
+        /// </summary>
+        [BindProperty(SupportsGet = true)]
+        public string? Host { get; set; }
+
+        /// <summary>
+        /// The hour, day, week and month bars.
         /// </summary>
         public List<ScheduleBar> Bars { get; private set; } = [];
 
         /// <summary>
-        /// Each host's colour, in name order.
+        /// Each host's colour, in name order. Every host is listed, even when only one is shown, so the key can switch between them.
         /// </summary>
         public Dictionary<string, string> Colours { get; private set; } = [];
 
@@ -45,16 +52,22 @@ namespace HoLaMap.Pages.Schedule
         public bool Any { get; private set; }
 
         /// <summary>
-        /// Lays out the tasks on the bars.
+        /// Lays out the tasks on the bars, only those for the chosen host if one is picked.
         /// </summary>
         /// <returns>A task that completes when the page has loaded.</returns>
         public async Task OnGetAsync()
         {
-            List<ScheduledTask> tasks = await context.ScheduledTasks.Include(task => task.Device).OrderBy(task => task.Name).ToListAsync();
-            Any = tasks.Count > 0;
+            List<ScheduledTask> all = await context.ScheduledTasks.Include(task => task.Device).OrderBy(task => task.Name).ToListAsync();
+            Any = all.Count > 0;
+            // Colours come from every host, so a host keeps its colour when it's shown on its own.
+            List<string> hosts = [.. all.Select(ScheduleLayout.HostOf).Distinct().Order()];
+            if (Host != null && !hosts.Contains(Host))
+            {
+                Host = null;
+            }
+            List<ScheduledTask> tasks = [.. all.Where(task => Host == null || ScheduleLayout.HostOf(task) == Host)];
             TimeZoneInfo zone = TimeZoneInfo.Local;
             Bars = ScheduleLayout.Build(tasks, DateTime.UtcNow, zone);
-            List<string> hosts = [.. tasks.Select(ScheduleLayout.HostOf).Distinct().Order()];
             Colours = hosts.Select((host, index) => (host, index)).ToDictionary(item => item.host, item => Palette[item.index % Palette.Length]);
             Unread = [.. tasks.Where(task => CronSchedule.Parse(task.Schedule) == null)];
             Details = JsonSerializer.Serialize(tasks.Select(task => Describe(task, zone)), JsonSerializerOptions.Web);

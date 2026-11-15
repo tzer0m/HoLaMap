@@ -10,7 +10,8 @@
     <ul class="legend">
         @foreach (KeyValuePair<string, string> host in Model.Colours)
         {
-            <li><span class="swatch" style="background: @host.Value"></span>@host.Key</li>
+            string state = Model.Host == null ? string.Empty : Model.Host == host.Key ? " active" : " faded";
+            <li><a class="legend-filter@(state)" asp-page="/Schedule/Index" asp-route-host="@(Model.Host == host.Key ? null : host.Key)" title="@(Model.Host == host.Key ? "Show every host" : $"Show only {host.Key}")"><span class="swatch" style="background: @host.Value"></span>@host.Key</a></li>
         }
     </ul>
 </header>
