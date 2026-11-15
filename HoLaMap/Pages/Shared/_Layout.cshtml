@@ -1,6 +1,9 @@
 ﻿@inject HoLaMapContext Database
 @{
     int actionCount = Database.ActionItems.Count(item => !item.Dismissed);
+    string page = ViewContext.RouteData.Values["page"] as string ?? string.Empty;
+    string[] managed = ["/Floorplan/", "/Racks/", "/Devices/", "/Links/", "/Services/", "/Domains/"];
+    bool managing = managed.Any(prefix => page.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -15,14 +18,19 @@
     <header class="site-header">
         <a class="brand" asp-page="/Index" title="HoLaMap"><img src="~/logo.png" alt="HoLaMap" asp-append-version="true" /></a>
         <nav class="site-nav">
-            <a asp-page="/Floorplan/Index">Floor Plan</a>
-            <a asp-page="/Racks/Index">Racks</a>
-            <a asp-page="/Devices/Index">Devices</a>
-            <a asp-page="/Links/Index">Links</a>
-            <a asp-page="/Services/Index">Services</a>
-            <a asp-page="/Domains/Index">Domains</a>
-            <a asp-page="/Schedule/Index">Schedule</a>
-            <a asp-page="/Actions/Index">
+            <a asp-page="/Schedule/Index" class="@(page.StartsWith("/Schedule/", StringComparison.OrdinalIgnoreCase) ? "active" : null)">Schedule</a>
+            <div class="nav-menu">
+                <button type="button" class="nav-menu-button@(managing ? " active" : "")" aria-haspopup="true">Manage ▾</button>
+                <div class="nav-menu-items">
+                    <a asp-page="/Floorplan/Index">Floor Plan</a>
+                    <a asp-page="/Racks/Index">Racks</a>
+                    <a asp-page="/Devices/Index">Devices</a>
+                    <a asp-page="/Links/Index">Links</a>
+                    <a asp-page="/Services/Index">Services</a>
+                    <a asp-page="/Domains/Index">Domains</a>
+                </div>
+            </div>
+            <a asp-page="/Actions/Index" class="@(page.StartsWith("/Actions/", StringComparison.OrdinalIgnoreCase) ? "active" : null)">
                 Actions
                 @if (actionCount > 0)
                 {

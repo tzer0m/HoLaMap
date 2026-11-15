@@ -176,8 +176,57 @@ body {
     text-decoration: none;
 }
 
-.site-nav a:hover {
+.site-nav a:hover,
+.site-nav a.active,
+.nav-menu-button:hover,
+.nav-menu-button.active {
     color: #fff;
+}
+
+.site-nav {
+    align-items: center;
+}
+
+/* Manage opens on hover or when it has keyboard focus, so it needs no script. */
+.nav-menu {
+    position: relative;
+}
+
+.nav-menu-button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #9aa3b5;
+    font: inherit;
+    cursor: pointer;
+}
+
+.nav-menu-items {
+    position: absolute;
+    top: 100%;
+    left: -12px;
+    z-index: 20;
+    display: none;
+    flex-direction: column;
+    min-width: 150px;
+    padding: 6px 0;
+    border: 1px solid #2a2f3a;
+    border-radius: 6px;
+    background: #11141a;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.nav-menu:hover .nav-menu-items,
+.nav-menu:focus-within .nav-menu-items {
+    display: flex;
+}
+
+.nav-menu-items a {
+    padding: 6px 12px;
+}
+
+.nav-menu-items a:hover {
+    background: #1a1e26;
 }
 
 .map-layout {

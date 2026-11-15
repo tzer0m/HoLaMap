@@ -20,9 +20,9 @@
 - Gaps where lines cross, consistent across every view.
 - Deployed to Tyrion on port 7170 (LAN and Tailscale, plain HTTP), deploy by GitHub Actions on push to master, `/health` monitored in Uptime Kuma.
 - Automated host reports: `holamap-report.yml` in the Ansible repo posts each host's systemd services, Docker containers and listening ports from Semaphore daily at midday (token in `~/.config/holamap-token.json` on Tyrion).
+- Schedule page: everything scheduled across the fleet on four columns (hour, day noon to noon, week, month), trimmed to the busy range, blocks sized by typical run time, filters by host and source. Sources: Semaphore schedules (read from its API hourly), systemd timers and TrueNAS tasks (cron jobs, Cloud Syncs, rsync, scrubs, snapshots, replication) from the host reports, with durations from each run.
 
 ## Next Up
 - More layers: firewall zones and policies, Tailscale, GitHub.
-- Schedule page (own nav link): everything scheduled across the fleet on three bars. Daily runs noon to noon so overnight jobs sit in the middle, weekly Mon to Sun, monthly 1 to 31. Overlapping jobs stack, block width from run duration where known (fixed minimum otherwise), click for host, command and schedule in words. Own `ScheduledTask` table reported per host like services; sources: TrueNAS cron jobs first (RebelBackup on Davos), then Semaphore schedules, TrueNAS Cloud Syncs and systemd timers.
 - README (what it does, settings, secrets).
 - Install node_exporter on Jorah, the only host reporting services without one (spotted on the Services view).
