@@ -64,7 +64,7 @@ namespace HoLaMap.Schedules
                 Bar(new ScheduleBarSpec(SchedulePeriod.Hour, "Hour", $"Every hour, shown for {hour:HH:mm} to {hour.AddHours(1):HH:mm}", hour, TimeSpan.FromHours(1), 12, minute), minutes, tasks, zone),
                 Bar(new ScheduleBarSpec(SchedulePeriod.Day, "Day", $"Noon {day:ddd d MMM} to noon {day.AddDays(1):ddd d MMM}", day, TimeSpan.FromDays(1), 24, clock), hours, tasks, zone),
                 Bar(new ScheduleBarSpec(SchedulePeriod.Week, "Week", $"Monday {week:d MMM} to Sunday {week.AddDays(6):d MMM}", week, TimeSpan.FromDays(7), 7, null), weekdays, tasks, zone),
-                Bar(new ScheduleBarSpec(SchedulePeriod.Month, "Month", $"{month:MMMM yyyy}", month, TimeSpan.FromDays(31), 31, null), days, tasks, zone)
+                Bar(new ScheduleBarSpec(SchedulePeriod.Month, "Month", $"{month:MMMM yyyy}", month, TimeSpan.FromDays(31), 31, null, month.AddMonths(1) - month), days, tasks, zone)
             ];
         }
 
@@ -104,7 +104,8 @@ namespace HoLaMap.Schedules
         private static ScheduleBar Bar(ScheduleBarSpec spec, List<ScheduleTick> ticks, List<ScheduledTask> tasks, TimeZoneInfo zone)
         {
             DateTime fromUtc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(spec.Start, DateTimeKind.Unspecified), zone);
-            DateTime toUtc = fromUtc + spec.Length;
+            // A short month stops at its last day, so the next month's 1st doesn't land in the 31st's place.
+            DateTime toUtc = fromUtc + (spec.Covers ?? spec.Length);
             double Position(DateTime time) => (time - fromUtc).TotalSeconds / spec.Length.TotalSeconds;
             ScheduleBar bar = new() { Period = spec.Period, Title = spec.Title, Span = spec.Span };
             foreach (ScheduledTask task in tasks)
