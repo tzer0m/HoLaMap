@@ -33,7 +33,7 @@ namespace HoLaMap.Hosts
         public List<string> TimerInclude { get; set; } = [];
 
         /// <summary>
-        /// Gets or sets how many recent run durations to keep for each timer.
+        /// Gets or sets how many recent run durations to keep for each timer and TrueNAS task.
         /// </summary>
         public int TimerDurations { get; set; } = 10;
 

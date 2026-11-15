@@ -16,6 +16,12 @@ namespace HoLaMap.Models
         /// A systemd timer, reported by its host.
         /// </summary>
         [Display(Name = "Systemd Timer")]
-        SystemdTimer
+        SystemdTimer,
+
+        /// <summary>
+        /// A TrueNAS task, such as a cron job, Cloud Sync, rsync, scrub, snapshot or replication, reported by its host.
+        /// </summary>
+        [Display(Name = "TrueNAS Task")]
+        TrueNas
     }
 }

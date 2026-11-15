@@ -1813,13 +1813,28 @@ body:has(.map-layout) .details {
     vector-effect: non-scaling-stroke;
 }
 
-/* Sources are told apart by pattern, since colour shows the host: Semaphore plain, systemd timers striped. */
+/* Sources are told apart by pattern, since colour shows the host: Semaphore plain, systemd timers striped, TrueNAS tasks dotted. */
 .schedule-block.source-systemdtimer {
     background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 3px, transparent 3px 7px);
 }
 
 .schedule-strip.source-systemdtimer {
     background-image: repeating-linear-gradient(135deg, #1a1e26 0 3px, transparent 3px 7px);
+}
+
+.schedule-block.source-truenas {
+    background-image: radial-gradient(rgba(0, 0, 0, 0.4) 1px, transparent 1.5px);
+    background-size: 5px 5px;
+}
+
+.schedule-strip.source-truenas {
+    background-image: radial-gradient(#2a2f3a 1px, transparent 1.5px);
+    background-size: 5px 5px;
+}
+
+.swatch.schedule-source.source-truenas {
+    background-image: radial-gradient(rgba(0, 0, 0, 0.5) 1px, transparent 1.5px);
+    background-size: 4px 4px;
 }
 
 .swatch.schedule-source {

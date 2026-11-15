@@ -21,6 +21,7 @@ namespace HoLaMap.Hosts
             app.MapPost("/api/services/{host}/docker", ReportDockerAsync);
             app.MapPost("/api/services/{host}/ports", ReportPortsAsync);
             app.MapPost("/api/schedules/{host}/systemd", ReportTimersAsync);
+            app.MapPost("/api/schedules/{host}/truenas", ReportTrueNasAsync);
         }
 
         /// <summary>
@@ -90,6 +91,30 @@ namespace HoLaMap.Hosts
             string output = await reader.ReadToEndAsync(cancellationToken);
             int? count = await sync.SyncTimersAsync(host, TimerParser.TimeZone(output), TimerParser.Timers(output, options.Value.TimerInclude), cancellationToken);
             return count == null ? Results.NotFound($"No device called {host}.") : Results.Ok(new { Timers = count });
+        }
+
+        /// <summary>
+        /// Syncs a TrueNAS host's scheduled tasks from the JSON its report script sends.
+        /// </summary>
+        /// <param name="host">The host's device name or MAC address.</param>
+        /// <param name="request">The request.</param>
+        /// <param name="sync">The host sync service.</param>
+        /// <param name="options">The host report settings.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The number of tasks, bad request if the report can't be read, unauthorised, or not found if the host isn't on the map.</returns>
+        private static async Task<IResult> ReportTrueNasAsync(string host, HttpRequest request, HostSyncService sync, IOptionsSnapshot<HostReportOptions> options, CancellationToken cancellationToken)
+        {
+            if (!IsAuthorised(request, options.Value.Token))
+            {
+                return Results.Unauthorized();
+            }
+            TrueNasReport? report = await request.ReadFromJsonAsync<TrueNasReport>(cancellationToken);
+            if (report == null)
+            {
+                return Results.BadRequest("The report is empty.");
+            }
+            int? count = await sync.SyncTrueNasAsync(host, report, cancellationToken);
+            return count == null ? Results.NotFound($"No device called {host}.") : Results.Ok(new { Tasks = count });
         }
 
         /// <summary>

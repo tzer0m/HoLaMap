@@ -151,6 +151,76 @@ namespace HoLaMap.Hosts
         }
 
         /// <summary>
+        /// Updates a TrueNAS host's tasks to match what it just reported, adding the durations of runs finished since the last report. Tasks no longer reported are removed.
+        /// </summary>
+        /// <param name="host">The host's device name or MAC address.</param>
+        /// <param name="report">The report.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The number of tasks, or null if no device matches the host.</returns>
+        public async Task<int?> SyncTrueNasAsync(string host, TrueNasReport report, CancellationToken cancellationToken)
+        {
+            string name = host.Trim().ToLowerInvariant();
+            string mac = name.Replace('-', ':');
+            Device? device = await context.Devices.FirstOrDefaultAsync(item => item.Name.ToLower() == name || item.Mac == mac, cancellationToken);
+            if (device == null)
+            {
+                return null;
+            }
+            List<ScheduledTask> tasks = await context.ScheduledTasks.Where(task => task.Source == ScheduleSource.TrueNas && task.DeviceId == device.Id).ToListAsync(cancellationToken);
+            HashSet<string> ids = [.. report.Tasks.Select(item => $"{device.Id}:{item.Kind}:{item.Id}")];
+            context.ScheduledTasks.RemoveRange(tasks.Where(task => !ids.Contains(task.ExternalId)));
+            DateTime now = DateTime.UtcNow;
+            foreach (TrueNasTask item in report.Tasks)
+            {
+                string id = $"{device.Id}:{item.Kind}:{item.Id}";
+                ScheduledTask? task = tasks.FirstOrDefault(existing => existing.ExternalId == id);
+                if (task == null)
+                {
+                    task = new ScheduledTask { Source = ScheduleSource.TrueNas, ExternalId = id, DeviceId = device.Id };
+                    context.ScheduledTasks.Add(task);
+                }
+                List<TrueNasRun> runs = [.. item.Runs.Where(run => run.Start != null).OrderByDescending(run => run.Start)];
+                // Runs that finished since the last report add their durations, newest first. The run last seen still going counts too once it ends.
+                DateTime? since = task.LastRun;
+                bool waiting = task.LastStatus == Running;
+                List<int> added = [.. runs.Where(run => run.End != null && Status(run.State) == "success" && (since == null || Time(run.Start) > since || (waiting && Time(run.Start) == since))).Select(run => (int)Math.Round((run.End!.Value - run.Start!.Value) / 1000.0))];
+                task.Durations = [.. added.Concat(task.Durations).Take(options.Value.TimerDurations)];
+                task.Name = item.Name;
+                task.Schedule = item.Schedule;
+                task.TimeZone = string.IsNullOrEmpty(report.TimeZone) ? "UTC" : report.TimeZone;
+                task.Command = item.Detail;
+                task.Target = device.Name;
+                task.Active = item.Enabled;
+                TrueNasRun? last = runs.FirstOrDefault();
+                task.LastRun = last == null ? task.LastRun : Time(last.Start);
+                task.LastStatus = last == null ? task.LastStatus : last.End == null && Status(last.State) == "success" ? "success" : Status(last.State);
+                task.LastSeen = now;
+            }
+            await context.SaveChangesAsync(cancellationToken);
+            return report.Tasks.Count;
+        }
+
+        /// <summary>
+        /// Turns a TrueNAS job state into the statuses used elsewhere, like success or failed.
+        /// </summary>
+        /// <param name="state">The state, such as SUCCESS, FINISHED, FAILED or RUNNING.</param>
+        /// <returns>The status.</returns>
+        private static string? Status(string? state) => state == null ? null : state.ToUpperInvariant() switch
+        {
+            "SUCCESS" or "FINISHED" => "success",
+            "FAILED" or "ERROR" => "failed",
+            "RUNNING" or "WAITING" or "PENDING" => Running,
+            _ => state.ToLowerInvariant()
+        };
+
+        /// <summary>
+        /// Reads a time in milliseconds since 1970.
+        /// </summary>
+        /// <param name="milliseconds">The milliseconds, or null.</param>
+        /// <returns>The time (UTC), or null.</returns>
+        private static DateTime? Time(long? milliseconds) => milliseconds == null ? null : DateTime.UnixEpoch.AddMilliseconds(milliseconds.Value);
+
+        /// <summary>
         /// Works out a service's category from the settings, where a trailing * matches the start of the name.
         /// </summary>
         /// <param name="name">The service name.</param>
