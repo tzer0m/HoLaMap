@@ -28,6 +28,11 @@ namespace HoLaMap.Schedules
         private const int MostBlocksPerHour = 30;
 
         /// <summary>
+        /// The least space between two labels along a bar, as a share of the bar.
+        /// </summary>
+        private const double MinLabelGap = 0.03;
+
+        /// <summary>
         /// Builds the four bars around now.
         /// </summary>
         /// <param name="tasks">The tasks, with their devices loaded.</param>
@@ -47,12 +52,14 @@ namespace HoLaMap.Schedules
             List<ScheduleTick> hours = [.. Enumerable.Range(0, 25).Select(index => new ScheduleTick { Position = index / 24.0, Label = index % 3 == 0 ? day.AddHours(index).ToString("HH:mm") : string.Empty, Line = true })];
             List<ScheduleTick> weekdays = [.. Enumerable.Range(0, 8).Select(index => new ScheduleTick { Position = index / 7.0, Line = true }), .. Enumerable.Range(0, 7).Select(index => new ScheduleTick { Position = (index + 0.5) / 7, Label = week.AddDays(index).ToString("ddd") })];
             List<ScheduleTick> days = [.. Enumerable.Range(0, 32).Select(index => new ScheduleTick { Position = index / 31.0, Line = true }), .. Enumerable.Range(0, 31).Select(index => new ScheduleTick { Position = (index + 0.5) / 31, Label = (index + 1).ToString() })];
+            Func<int, string> minute = index => $":{index * 5 % 60:00}";
+            Func<int, string> clock = index => day.AddHours(index).ToString("HH:mm");
             return
             [
-                Bar(SchedulePeriod.Hour, "Hour", $"Every hour, shown for {hour:HH:mm} to {hour.AddHours(1):HH:mm}", hour, TimeSpan.FromHours(1), minutes, tasks, zone),
-                Bar(SchedulePeriod.Day, "Day", $"Noon {day:ddd d MMM} to noon {day.AddDays(1):ddd d MMM}", day, TimeSpan.FromDays(1), hours, tasks, zone),
-                Bar(SchedulePeriod.Week, "Week", $"Monday {week:d MMM} to Sunday {week.AddDays(6):d MMM}", week, TimeSpan.FromDays(7), weekdays, tasks, zone),
-                Bar(SchedulePeriod.Month, "Month", $"{month:MMMM yyyy}", month, TimeSpan.FromDays(31), days, tasks, zone)
+                Bar(new ScheduleBarSpec(SchedulePeriod.Hour, "Hour", $"Every hour, shown for {hour:HH:mm} to {hour.AddHours(1):HH:mm}", hour, TimeSpan.FromHours(1), 12, minute), minutes, tasks, zone),
+                Bar(new ScheduleBarSpec(SchedulePeriod.Day, "Day", $"Noon {day:ddd d MMM} to noon {day.AddDays(1):ddd d MMM}", day, TimeSpan.FromDays(1), 24, clock), hours, tasks, zone),
+                Bar(new ScheduleBarSpec(SchedulePeriod.Week, "Week", $"Monday {week:d MMM} to Sunday {week.AddDays(6):d MMM}", week, TimeSpan.FromDays(7), 7, null), weekdays, tasks, zone),
+                Bar(new ScheduleBarSpec(SchedulePeriod.Month, "Month", $"{month:MMMM yyyy}", month, TimeSpan.FromDays(31), 31, null), days, tasks, zone)
             ];
         }
 
@@ -82,27 +89,23 @@ namespace HoLaMap.Schedules
         }
 
         /// <summary>
-        /// Builds one bar, placing every run of the tasks that belong on it and stacking runs that overlap.
+        /// Builds one bar, placing every run of the tasks that belong on it, trimming the empty start and end and stacking runs that overlap.
         /// </summary>
-        /// <param name="period">Which bar it is.</param>
-        /// <param name="title">The heading.</param>
-        /// <param name="span">The dates it covers in words.</param>
-        /// <param name="start">Where it starts, in the bars' time zone.</param>
-        /// <param name="length">How long it covers.</param>
+        /// <param name="spec">What the bar covers.</param>
         /// <param name="ticks">The marks along it.</param>
         /// <param name="tasks">Every task.</param>
         /// <param name="zone">The time zone the bars are drawn in.</param>
         /// <returns>The bar.</returns>
-        private static ScheduleBar Bar(SchedulePeriod period, string title, string span, DateTime start, TimeSpan length, List<ScheduleTick> ticks, List<ScheduledTask> tasks, TimeZoneInfo zone)
+        private static ScheduleBar Bar(ScheduleBarSpec spec, List<ScheduleTick> ticks, List<ScheduledTask> tasks, TimeZoneInfo zone)
         {
-            DateTime fromUtc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(start, DateTimeKind.Unspecified), zone);
-            DateTime toUtc = fromUtc + length;
-            double Position(DateTime time) => (time - fromUtc).TotalSeconds / length.TotalSeconds;
-            ScheduleBar bar = new() { Period = period, Title = title, Span = span, Ticks = ticks };
+            DateTime fromUtc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(spec.Start, DateTimeKind.Unspecified), zone);
+            DateTime toUtc = fromUtc + spec.Length;
+            double Position(DateTime time) => (time - fromUtc).TotalSeconds / spec.Length.TotalSeconds;
+            ScheduleBar bar = new() { Period = spec.Period, Title = spec.Title, Span = spec.Span };
             foreach (ScheduledTask task in tasks)
             {
                 CronSchedule? cron = CronSchedule.Parse(task.Schedule);
-                if (cron == null || cron.Period != period)
+                if (cron == null || cron.Period != spec.Period)
                 {
                     continue;
                 }
@@ -112,20 +115,22 @@ namespace HoLaMap.Schedules
                     continue;
                 }
                 string host = HostOf(task);
-                bool crowded = period == SchedulePeriod.Hour ? runs.Count > MostBlocksPerHour : runs.GroupBy(run => TimeZoneInfo.ConvertTimeFromUtc(run, zone).Date).Max(group => group.Count()) > MostBlocksPerDay;
+                bool crowded = spec.Period == SchedulePeriod.Hour ? runs.Count > MostBlocksPerHour : runs.GroupBy(run => TimeZoneInfo.ConvertTimeFromUtc(run, zone).Date).Max(group => group.Count()) > MostBlocksPerDay;
                 if (crowded)
                 {
                     bar.Strips.Add(new ScheduleStrip { TaskId = task.Id, Label = $"{task.Name} · {cron.Describe()}", Host = host, Positions = [.. runs.Select(Position)], Inactive = !task.Active });
                     continue;
                 }
-                double width = Math.Max(MinWidth, (Typical(task) ?? 0) / length.TotalSeconds);
+                // Blocks start out as long as the run really takes, to work out where the bar can be trimmed, and get their least length once trimmed.
+                double width = (Typical(task) ?? 0) / spec.Length.TotalSeconds;
                 foreach (DateTime run in runs)
                 {
                     double at = Position(run);
-                    string time = TimeZoneInfo.ConvertTimeFromUtc(run, zone).ToString(period is SchedulePeriod.Hour or SchedulePeriod.Day ? "HH:mm" : "ddd d HH:mm");
+                    string time = TimeZoneInfo.ConvertTimeFromUtc(run, zone).ToString(spec.Period is SchedulePeriod.Hour or SchedulePeriod.Day ? "HH:mm" : "ddd d HH:mm");
                     bar.Blocks.Add(new ScheduleBlock { TaskId = task.Id, Name = task.Name, Title = $"{task.Name} · {host} · {time}", Host = host, Start = at, Width = Math.Min(width, 1 - at), Inactive = !task.Active });
                 }
             }
+            Trim(bar, new ScheduleTrim(Busy(spec.Cells, bar)), spec, ticks);
             // Each block goes in the first column with room for it, so runs that overlap sit side by side instead of hiding each other.
             List<double> ends = [];
             foreach (ScheduleBlock block in bar.Blocks.OrderBy(block => block.Start).ThenByDescending(block => block.Width))
@@ -142,6 +147,67 @@ namespace HoLaMap.Schedules
             bar.Lanes = ends.Count;
             bar.Strips = [.. bar.Strips.OrderBy(strip => strip.Host).ThenBy(strip => strip.Label)];
             return bar;
+        }
+
+        /// <summary>
+        /// Works out which cells of a bar have a run in them, from the blocks' real lengths and the strips' marks.
+        /// </summary>
+        /// <param name="cells">How many cells the bar is split into.</param>
+        /// <param name="bar">The bar, with its runs placed but not yet trimmed.</param>
+        /// <returns>Whether each cell is busy.</returns>
+        private static bool[] Busy(int cells, ScheduleBar bar)
+        {
+            bool[] busy = new bool[cells];
+            void Mark(double start, double end)
+            {
+                int first = Math.Clamp((int)Math.Floor(start * cells), 0, cells - 1);
+                int last = Math.Clamp((int)Math.Ceiling(end * cells) - 1, first, cells - 1);
+                for (int cell = first; cell <= last; cell++)
+                {
+                    busy[cell] = true;
+                }
+            }
+            bar.Blocks.ForEach(block => Mark(block.Start, block.Start + block.Width));
+            bar.Strips.ForEach(strip => strip.Positions.ForEach(position => Mark(position, position)));
+            return busy;
+        }
+
+        /// <summary>
+        /// Moves everything on a bar to its place on the trimmed bar, dropping the marks trimmed off and labelling the new ends.
+        /// </summary>
+        /// <param name="bar">The bar, with its runs placed.</param>
+        /// <param name="trim">The trim to apply.</param>
+        /// <param name="spec">What the bar covers.</param>
+        /// <param name="ticks">The marks along it, before trimming.</param>
+        private static void Trim(ScheduleBar bar, ScheduleTrim trim, ScheduleBarSpec spec, List<ScheduleTick> ticks)
+        {
+            foreach (ScheduleBlock block in bar.Blocks)
+            {
+                double start = trim.Map(block.Start);
+                block.Width = Math.Min(Math.Max(MinWidth, trim.Map(block.Start + block.Width) - start), 1 - start);
+                block.Start = start;
+            }
+            bar.Strips.ForEach(strip => strip.Positions = [.. strip.Positions.Select(trim.Map)]);
+            List<ScheduleTick> kept = [.. ticks.Where(tick => !trim.Cuts(tick.Position))];
+            if (spec.Edge != null)
+            {
+                // Trimming can cut off the labelled marks, so the new ends get labels of their own.
+                kept.Add(new ScheduleTick { Position = trim.Start, Label = spec.Edge(trim.First) });
+                kept.Add(new ScheduleTick { Position = trim.End, Label = spec.Edge(trim.Next) });
+            }
+            kept.ForEach(tick => tick.Position = trim.Map(tick.Position));
+            // Labels that would sit on top of each other are thinned out, keeping the first.
+            double last = double.MinValue;
+            List<ScheduleTick> labels = [];
+            foreach (ScheduleTick tick in kept.Where(tick => tick.Label.Length > 0).DistinctBy(tick => (tick.Label, Math.Round(tick.Position, 6))).OrderBy(tick => tick.Position))
+            {
+                if (tick.Position - last >= MinLabelGap)
+                {
+                    labels.Add(tick);
+                    last = tick.Position;
+                }
+            }
+            bar.Ticks = [.. kept.Where(tick => tick.Line).Select(tick => new ScheduleTick { Position = tick.Position, Line = true }), .. labels.Select(tick => new ScheduleTick { Position = tick.Position, Label = tick.Label })];
         }
     }
 }
