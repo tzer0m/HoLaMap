@@ -6,6 +6,11 @@ namespace HoLaMap.Schedules
     public enum SchedulePeriod
     {
         /// <summary>
+        /// Every hour or more often, drawn as one hour.
+        /// </summary>
+        Hour,
+
+        /// <summary>
         /// Every day, drawn noon to noon.
         /// </summary>
         Day,

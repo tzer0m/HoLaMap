@@ -39,9 +39,9 @@ namespace HoLaMap.Schedules
         private bool WeekdayLimited => fields[4] != "*";
 
         /// <summary>
-        /// Gets the bar it belongs on: the month bar if it picks days of the month or months, the week bar if it picks days of the week, otherwise the day bar.
+        /// Gets the bar it belongs on: the month bar if it picks days of the month or months, the week bar if it picks days of the week, the hour bar if it runs every hour, otherwise the day bar.
         /// </summary>
-        public SchedulePeriod Period => DayLimited || fields[3] != "*" ? SchedulePeriod.Month : WeekdayLimited ? SchedulePeriod.Week : SchedulePeriod.Day;
+        public SchedulePeriod Period => DayLimited || fields[3] != "*" ? SchedulePeriod.Month : WeekdayLimited ? SchedulePeriod.Week : fields[1] == "*" ? SchedulePeriod.Hour : SchedulePeriod.Day;
 
         /// <summary>
         /// Reads an expression.

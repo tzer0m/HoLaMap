@@ -1,7 +1,7 @@
 namespace HoLaMap.Schedules
 {
     /// <summary>
-    /// One of the three bars on the Schedule page, with the runs that fall on it.
+    /// One of the four bars on the Schedule page, with the runs that fall on it.
     /// </summary>
     public class ScheduleBar
     {

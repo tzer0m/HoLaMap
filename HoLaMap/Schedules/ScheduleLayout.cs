@@ -3,7 +3,7 @@ using HoLaMap.Models;
 namespace HoLaMap.Schedules
 {
     /// <summary>
-    /// Lays the scheduled tasks out on the three bars: the day noon to noon, this week Monday to Sunday and this month 1 to 31.
+    /// Lays the scheduled tasks out on the four bars: this hour, the day noon to noon, this week Monday to Sunday and this month 1 to 31.
     /// </summary>
     public static class ScheduleLayout
     {
@@ -23,12 +23,17 @@ namespace HoLaMap.Schedules
         private const int MostBlocksPerDay = 6;
 
         /// <summary>
-        /// Builds the three bars around now.
+        /// The most runs in an hour before a task on the hour bar is drawn as a strip rather than blocks.
+        /// </summary>
+        private const int MostBlocksPerHour = 30;
+
+        /// <summary>
+        /// Builds the four bars around now.
         /// </summary>
         /// <param name="tasks">The tasks, with their devices loaded.</param>
         /// <param name="nowUtc">The current time (UTC).</param>
         /// <param name="zone">The time zone the bars are drawn in.</param>
-        /// <returns>The day, week and month bars.</returns>
+        /// <returns>The hour, day, week and month bars.</returns>
         public static List<ScheduleBar> Build(List<ScheduledTask> tasks, DateTime nowUtc, TimeZoneInfo zone)
         {
             DateTime now = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, zone);
@@ -37,11 +42,14 @@ namespace HoLaMap.Schedules
             DateTime day = now < noon ? noon.AddDays(-1) : noon;
             DateTime week = now.Date.AddDays(-(((int)now.DayOfWeek + 6) % 7));
             DateTime month = new(now.Year, now.Month, 1);
-            List<ScheduleTick> hours = [.. Enumerable.Range(0, 25).Select(hour => new ScheduleTick { Position = hour / 24.0, Label = hour % 3 == 0 ? day.AddHours(hour).ToString("HH:mm") : string.Empty, Line = true })];
+            DateTime hour = now.Date.AddHours(now.Hour);
+            List<ScheduleTick> minutes = [.. Enumerable.Range(0, 13).Select(index => new ScheduleTick { Position = index / 12.0, Label = $":{index * 5 % 60:00}", Line = true })];
+            List<ScheduleTick> hours = [.. Enumerable.Range(0, 25).Select(index => new ScheduleTick { Position = index / 24.0, Label = index % 3 == 0 ? day.AddHours(index).ToString("HH:mm") : string.Empty, Line = true })];
             List<ScheduleTick> weekdays = [.. Enumerable.Range(0, 8).Select(index => new ScheduleTick { Position = index / 7.0, Line = true }), .. Enumerable.Range(0, 7).Select(index => new ScheduleTick { Position = (index + 0.5) / 7, Label = week.AddDays(index).ToString("ddd") })];
             List<ScheduleTick> days = [.. Enumerable.Range(0, 32).Select(index => new ScheduleTick { Position = index / 31.0, Line = true }), .. Enumerable.Range(0, 31).Select(index => new ScheduleTick { Position = (index + 0.5) / 31, Label = (index + 1).ToString() })];
             return
             [
+                Bar(SchedulePeriod.Hour, "Hour", $"Every hour, shown for {hour:HH:mm} to {hour.AddHours(1):HH:mm}", hour, TimeSpan.FromHours(1), minutes, tasks, nowUtc, zone),
                 Bar(SchedulePeriod.Day, "Day", $"Noon {day:ddd d MMM} to noon {day.AddDays(1):ddd d MMM}", day, TimeSpan.FromDays(1), hours, tasks, nowUtc, zone),
                 Bar(SchedulePeriod.Week, "Week", $"Monday {week:d MMM} to Sunday {week.AddDays(6):d MMM}", week, TimeSpan.FromDays(7), weekdays, tasks, nowUtc, zone),
                 Bar(SchedulePeriod.Month, "Month", $"{month:MMMM yyyy}", month, TimeSpan.FromDays(31), days, tasks, nowUtc, zone)
@@ -105,7 +113,8 @@ namespace HoLaMap.Schedules
                     continue;
                 }
                 string host = HostOf(task);
-                if (runs.GroupBy(run => TimeZoneInfo.ConvertTimeFromUtc(run, zone).Date).Max(group => group.Count()) > MostBlocksPerDay)
+                bool crowded = period == SchedulePeriod.Hour ? runs.Count > MostBlocksPerHour : runs.GroupBy(run => TimeZoneInfo.ConvertTimeFromUtc(run, zone).Date).Max(group => group.Count()) > MostBlocksPerDay;
+                if (crowded)
                 {
                     bar.Strips.Add(new ScheduleStrip { TaskId = task.Id, Label = $"{task.Name} · {cron.Describe()}", Host = host, Positions = [.. runs.Select(Position)], Inactive = !task.Active });
                     continue;
@@ -114,7 +123,7 @@ namespace HoLaMap.Schedules
                 foreach (DateTime run in runs)
                 {
                     double at = Position(run);
-                    string time = TimeZoneInfo.ConvertTimeFromUtc(run, zone).ToString(period == SchedulePeriod.Day ? "HH:mm" : "ddd d HH:mm");
+                    string time = TimeZoneInfo.ConvertTimeFromUtc(run, zone).ToString(period is SchedulePeriod.Hour or SchedulePeriod.Day ? "HH:mm" : "ddd d HH:mm");
                     bar.Blocks.Add(new ScheduleBlock { TaskId = task.Id, Name = task.Name, Title = $"{task.Name} · {host} · {time}", Host = host, Start = at, Width = Math.Min(width, 1 - at), Inactive = !task.Active });
                 }
             }

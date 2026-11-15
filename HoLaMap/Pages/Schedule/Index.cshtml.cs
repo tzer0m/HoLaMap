@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace HoLaMap.Pages.Schedule
 {
     /// <summary>
-    /// Shows everything scheduled across the fleet on three bars, a day, a week and a month, so clashes and quiet spells stand out.
+    /// Shows everything scheduled across the fleet on four bars, an hour, a day, a week and a month, so clashes and quiet spells stand out.
     /// </summary>
     /// <param name="context">The database context.</param>
     public class IndexModel(HoLaMapContext context) : PageModel
