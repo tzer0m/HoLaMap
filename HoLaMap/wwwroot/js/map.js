@@ -419,6 +419,14 @@
     const tunnelsById = new Map();
     const routesById = new Map();
     let servicesLoading = null;
+    let schedulesLoading = null;
+    const loadSchedules = () => schedulesLoading ??= (async () => {
+        try {
+            return await (await fetch(container.dataset.schedulesUrl)).json();
+        } catch (error) {
+            return [];
+        }
+    })();
     const loadServices = () => servicesLoading ??= (async () => {
         try {
             const data = await (await fetch(container.dataset.servicesUrl)).json();
@@ -638,14 +646,49 @@
                 running.remove();
                 return;
             }
-            const items = element('ul', 'details-list');
+            // Services in the same Compose project share a line, like paperless-ngx: gotenberg, paperless, postgres, so a busy host stays short.
+            const lines = new Map();
             list.forEach(service => {
+                const key = service.group ? `group:${service.group}` : `service:${service.id}`;
+                lines.set(key, [...(lines.get(key) ?? []), service]);
+            });
+            const items = element('ul', 'details-list');
+            [...lines.values()].toSorted((a, b) => (a[0].group || a[0].label).localeCompare(b[0].group || b[0].label)).forEach(group => {
                 const item = element('li');
-                item.append(serviceButton(service.id, service.label));
-                meta(item, [serviceKindNames[service.kind] ?? service.kind, service.group].filter(part => part).join(' · '));
+                const first = group[0];
+                if (first.group && !(group.length === 1 && first.label === first.group)) {
+                    item.append(element('span', 'details-group', `${first.group}: `));
+                }
+                group.forEach((service, index) => {
+                    if (index > 0) {
+                        item.append(', ');
+                    }
+                    item.append(serviceButton(service.id, service.label));
+                });
+                meta(item, serviceKindNames[first.kind] ?? first.kind);
                 items.append(item);
             });
             running.append(items);
+        });
+
+        // What it runs on a schedule, each opening the Schedule page on this host.
+        const scheduled = section('Scheduled');
+        loadSchedules().then(tasks => {
+            const list = tasks.filter(task => task.device === nodeId);
+            if (!list.length) {
+                scheduled.remove();
+                return;
+            }
+            const items = element('ul', 'details-list');
+            list.forEach(task => {
+                const item = element('li');
+                const link = element('a', 'details-link', task.name);
+                link.href = `${container.dataset.scheduleUrl}?host=${encodeURIComponent(task.host)}`;
+                item.append(link);
+                meta(item, [task.when, task.source, task.active ? '' : 'Off'].filter(part => part).join(' · '));
+                items.append(item);
+            });
+            scheduled.append(items);
         });
 
         if (node.ports.length) {
@@ -2937,5 +2980,11 @@
         }
         render('services');
     });
-    await render(mode);
+    // A link like /?device=d12, from the Schedule page say, opens the map on that device as if it had been picked from the details pane.
+    const linked = new URLSearchParams(location.search).get('device');
+    if (linked && (rawById.has(linked) || raw.racks.some(rack => rack.id === linked))) {
+        await follow(linked.startsWith('k') ? 'floorplan' : 'network', 'node', linked, () => showDevice(linked), () => focusNode(linked));
+    } else {
+        await render(mode);
+    }
 })();

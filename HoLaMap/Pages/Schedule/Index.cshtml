@@ -19,7 +19,7 @@
             @foreach (ScheduleSource source in Model.Sources)
             {
                 string state = Model.Source == null ? string.Empty : Model.Source == source ? " active" : " faded";
-                string label = IndexModel.Label(source);
+                string label = SourceLabels.Of(source);
                 <li><a class="legend-filter@(state)" asp-page="/Schedule/Index" asp-route-host="@Model.Host" asp-route-source="@(Model.Source == source ? null : source.ToString())" title="@(Model.Source == source ? "Show every source" : $"Show only {label}")"><span class="swatch schedule-source source-@source.ToString().ToLowerInvariant()"></span>@label</a></li>
             }
         </ul>
@@ -56,7 +56,7 @@ else
                             }
                             @foreach (ScheduleBlock block in bar.Blocks)
                             {
-                                <button type="button" class="schedule-block source-@block.Source.ToString().ToLowerInvariant()@(block.Inactive ? " inactive" : "")" data-task="@block.TaskId" title="@block.Title · @IndexModel.Label(block.Source)" style="top: @IndexModel.Percent(block.Start); height: @IndexModel.Percent(block.Width); --lane: @block.Lane; --host-colour: @Model.Colours[block.Host]">@block.Name</button>
+                                <button type="button" class="schedule-block source-@block.Source.ToString().ToLowerInvariant()@(block.Inactive ? " inactive" : "")" data-task="@block.TaskId" title="@block.Title · @SourceLabels.Of(block.Source)" style="top: @IndexModel.Percent(block.Start); height: @IndexModel.Percent(block.Width); --lane: @block.Lane; --host-colour: @Model.Colours[block.Host]">@block.Name</button>
                             }
                             @if (bar.Blocks.Count == 0 && bar.Strips.Count == 0)
                             {
@@ -65,7 +65,7 @@ else
                         </div>
                         @foreach (ScheduleStrip strip in bar.Strips)
                         {
-                            <button type="button" class="schedule-strip source-@strip.Source.ToString().ToLowerInvariant()@(strip.Inactive ? " inactive" : "")" data-task="@strip.TaskId" title="@strip.Label · @IndexModel.Label(strip.Source)" style="--host-colour: @Model.Colours[strip.Host]">
+                            <button type="button" class="schedule-strip source-@strip.Source.ToString().ToLowerInvariant()@(strip.Inactive ? " inactive" : "")" data-task="@strip.TaskId" title="@strip.Label · @SourceLabels.Of(strip.Source)" style="--host-colour: @Model.Colours[strip.Host]">
                                 <svg viewBox="0 0 10 1000" preserveAspectRatio="none" aria-hidden="true"><path d="@IndexModel.Marks(strip.Positions)" /></svg>
                             </button>
                         }
@@ -73,7 +73,7 @@ else
                 </section>
             }
         </div>
-        <aside id="schedule-details" class="details">Select a task to see its details.</aside>
+        <aside id="schedule-details" class="details" data-map-url="@Url.Page("/Index")">Select a task to see its details.</aside>
     </div>
     <script id="schedule-data" type="application/json">@Html.Raw(Model.Details)</script>
 }

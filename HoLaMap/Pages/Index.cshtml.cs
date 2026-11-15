@@ -3,6 +3,7 @@ using HoLaMap.Data;
 using HoLaMap.Display;
 using HoLaMap.Graph;
 using HoLaMap.Models;
+using HoLaMap.Schedules;
 using HoLaMap.Zigbee;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -141,6 +142,16 @@ namespace HoLaMap.Pages
                 Networks = [.. networks.Select(network => new GraphNetwork { Name = network.Name, VlanId = network.VlanId, Subnet = network.Subnet ?? string.Empty })]
             };
             return new JsonResult(graph);
+        }
+
+        /// <summary>
+        /// Returns every scheduled task that runs against a device, for the device's details.
+        /// </summary>
+        /// <returns>The tasks as JSON, each with its device's node ID, its schedule in words and its source.</returns>
+        public async Task<JsonResult> OnGetSchedulesAsync()
+        {
+            List<ScheduledTask> tasks = await context.ScheduledTasks.Where(task => task.DeviceId != null).Include(task => task.Device).OrderBy(task => task.Name).ToListAsync();
+            return new JsonResult(tasks.Select(task => new { Device = $"d{task.DeviceId}", Host = task.Device?.Name ?? task.Target, task.Name, When = CronSchedule.Parse(task.Schedule)?.Describe() ?? task.Schedule, Source = SourceLabels.Of(task.Source), task.Active }));
         }
 
         /// <summary>

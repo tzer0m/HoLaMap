@@ -1,6 +1,4 @@
-using System.ComponentModel.DataAnnotations;
 using System.Globalization;
-using System.Reflection;
 using System.Text.Json;
 using HoLaMap.Data;
 using HoLaMap.Models;
@@ -92,13 +90,6 @@ namespace HoLaMap.Pages.Schedule
         }
 
         /// <summary>
-        /// Gets a source's name as shown on the page.
-        /// </summary>
-        /// <param name="source">The source.</param>
-        /// <returns>The name, like Systemd Timer.</returns>
-        public static string Label(ScheduleSource source) => typeof(ScheduleSource).GetField(source.ToString())?.GetCustomAttribute<DisplayAttribute>()?.GetName() ?? source.ToString();
-
-        /// <summary>
         /// Writes a share of a bar as a CSS percentage.
         /// </summary>
         /// <param name="share">The share, from 0 to 1.</param>
@@ -141,8 +132,9 @@ namespace HoLaMap.Pages.Schedule
             {
                 task.Id,
                 task.Name,
-                Source = Label(task.Source),
+                Source = SourceLabels.Of(task.Source),
                 Host = ScheduleLayout.HostOf(task),
+                Device = task.DeviceId == null ? null : $"d{task.DeviceId}",
                 task.Target,
                 task.Command,
                 Schedule = schedule,

@@ -261,8 +261,18 @@ body:has(.map-layout) .map {
     min-height: 0;
 }
 
+/* The details pane still scrolls for a busy device, just without a scroll bar taking room. */
 body:has(.map-layout) .details {
     overflow: auto;
+    scrollbar-width: none;
+}
+
+body:has(.map-layout) .details::-webkit-scrollbar {
+    display: none;
+}
+
+.details-group {
+    color: #c4c9d4;
 }
 
 .map {

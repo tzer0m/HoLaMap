@@ -28,7 +28,9 @@
         const list = element('dl', 'details-rows');
         pairs.filter(([, value]) => value !== null && value !== undefined && value !== '').forEach(([label, value]) => {
             list.append(element('dt', null, label));
-            list.append(element('dd', null, value));
+            const cell = element('dd');
+            cell.append(value);
+            list.append(cell);
         });
         parent.append(list);
     };
@@ -51,7 +53,13 @@
         }
         head.append(badges);
         details.append(head);
-        rows(section(), [['Host', task.host], ['Inventory', task.target !== task.host ? task.target : ''], ['Runs', task.command], ['Schedule', task.schedule], ['Cron', task.cron]]);
+        // The host opens the map on that machine when it's one HoLaMap knows.
+        let host = task.host;
+        if (task.device) {
+            host = element('a', 'details-link', task.host);
+            host.href = `${details.dataset.mapUrl}?device=${encodeURIComponent(task.device)}`;
+        }
+        rows(section(), [['Host', host], ['Inventory', task.target !== task.host ? task.target : ''], ['Runs', task.command], ['Schedule', task.schedule], ['Cron', task.cron]]);
         rows(section('Runs'), [['Last Run', task.lastRun || 'Not yet'], ['Usually Takes', task.typical || 'Not known yet'], ['Recent', task.durations.join(', ')]]);
     };
 
