@@ -8,14 +8,14 @@ namespace HoLaMap.Schedules
     public static class ScheduleLayout
     {
         /// <summary>
-        /// The narrowest a block is drawn, as a share of the bar, so short runs still show.
+        /// The shortest a block is drawn, as a share of the bar, so its name can be read. At the shortest the bars are drawn, 480px, this is about 14px.
         /// </summary>
-        private const double MinWidth = 0.006;
+        private const double MinWidth = 0.03;
 
         /// <summary>
         /// The space kept between blocks in the same row, as a share of the bar.
         /// </summary>
-        private const double Gap = 0.002;
+        private const double Gap = 0.004;
 
         /// <summary>
         /// The most runs in a day before a task is drawn as a strip rather than blocks.
@@ -49,7 +49,7 @@ namespace HoLaMap.Schedules
             DateTime month = new(now.Year, now.Month, 1);
             DateTime hour = now.Date.AddHours(now.Hour);
             List<ScheduleTick> minutes = [.. Enumerable.Range(0, 13).Select(index => new ScheduleTick { Position = index / 12.0, Label = $":{index * 5 % 60:00}", Line = true })];
-            List<ScheduleTick> hours = [.. Enumerable.Range(0, 25).Select(index => new ScheduleTick { Position = index / 24.0, Label = index % 3 == 0 ? day.AddHours(index).ToString("HH:mm") : string.Empty, Line = true })];
+            List<ScheduleTick> hours = [.. Enumerable.Range(0, 25).Select(index => new ScheduleTick { Position = index / 24.0, Label = day.AddHours(index).ToString("HH:mm"), Line = true })];
             List<ScheduleTick> weekdays = [.. Enumerable.Range(0, 8).Select(index => new ScheduleTick { Position = index / 7.0, Line = true }), .. Enumerable.Range(0, 7).Select(index => new ScheduleTick { Position = (index + 0.5) / 7, Label = week.AddDays(index).ToString("ddd") })];
             List<ScheduleTick> days = [.. Enumerable.Range(0, 32).Select(index => new ScheduleTick { Position = index / 31.0, Line = true }), .. Enumerable.Range(0, 31).Select(index => new ScheduleTick { Position = (index + 0.5) / 31, Label = (index + 1).ToString() })];
             Func<int, string> minute = index => $":{index * 5 % 60:00}";
@@ -183,9 +183,10 @@ namespace HoLaMap.Schedules
         {
             foreach (ScheduleBlock block in bar.Blocks)
             {
+                // A short run near the bottom is nudged up rather than cut short, so it still has room for its name.
                 double start = trim.Map(block.Start);
-                block.Width = Math.Min(Math.Max(MinWidth, trim.Map(block.Start + block.Width) - start), 1 - start);
-                block.Start = start;
+                block.Width = Math.Min(Math.Max(MinWidth, trim.Map(block.Start + block.Width) - start), 1);
+                block.Start = Math.Min(start, 1 - block.Width);
             }
             bar.Strips.ForEach(strip => strip.Positions = [.. strip.Positions.Select(trim.Map)]);
             List<ScheduleTick> kept = [.. ticks.Where(tick => !trim.Cuts(tick.Position))];

@@ -1754,14 +1754,14 @@ body:has(.map-layout) .details {
     left: calc(var(--lane) * (100% - 6px) / var(--lanes) + 3px);
     box-sizing: border-box;
     width: calc((100% - 6px) / var(--lanes) - 2px);
-    min-height: 4px;
+    min-height: 14px;
     padding: 0 4px;
     overflow: hidden;
     border: 0;
     border-radius: 3px;
     background: var(--host-colour);
     color: #000;
-    font: 600 0.72rem/16px system-ui, sans-serif;
+    font: 600 0.68rem/14px system-ui, sans-serif;
     text-align: left;
     text-overflow: ellipsis;
     white-space: nowrap;
