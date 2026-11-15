@@ -1657,3 +1657,157 @@ body:has(.map-layout) .details {
 .map-node.router .map-node-label {
     font-weight: 600;
 }
+
+/* Schedule page: three bars with a details pane beside them. */
+.schedule-layout {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 16px;
+    align-items: start;
+}
+
+.schedule-layout .details {
+    position: sticky;
+    top: 16px;
+}
+
+@media (max-width: 1000px) {
+    .schedule-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+.schedule-bars {
+    min-width: 0;
+    padding: 0 16px;
+}
+
+.schedule-bar {
+    margin-bottom: 32px;
+}
+
+.schedule-bar h2 {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 0 0 6px -16px;
+    font-size: 1.1rem;
+}
+
+.schedule-bar h2 span {
+    color: #9aa3b5;
+    font-size: 0.85rem;
+    font-weight: 400;
+}
+
+.schedule-axis {
+    position: relative;
+    height: 18px;
+    color: #9aa3b5;
+    font-size: 0.75rem;
+}
+
+.schedule-axis span {
+    position: absolute;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.schedule-track {
+    position: relative;
+    height: calc(var(--lanes) * 22px + 6px);
+    min-height: 28px;
+    border: 1px solid #2a2f3a;
+    border-radius: 6px;
+    background: #0b0d11;
+}
+
+.schedule-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: #1c2029;
+}
+
+.schedule-now {
+    position: absolute;
+    top: -5px;
+    bottom: -5px;
+    width: 2px;
+    margin-left: -1px;
+    background: #ef6b5b;
+}
+
+.schedule-block {
+    position: absolute;
+    top: calc(var(--lane) * 22px + 4px);
+    box-sizing: border-box;
+    min-width: 4px;
+    height: 18px;
+    padding: 0 4px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 3px;
+    background: var(--host-colour);
+    color: #000;
+    font: 600 0.72rem/18px system-ui, sans-serif;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.schedule-strip {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 18px;
+    margin-top: 4px;
+    padding: 0;
+    border: 1px solid #2a2f3a;
+    border-radius: 4px;
+    background: #0b0d11;
+    cursor: pointer;
+}
+
+.schedule-strip svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.schedule-strip path {
+    stroke: var(--host-colour);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+.schedule-strip span {
+    position: absolute;
+    top: 0;
+    left: 6px;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.75);
+    color: #c4c9d4;
+    font-size: 0.72rem;
+    line-height: 16px;
+}
+
+.schedule-block.inactive,
+.schedule-strip.inactive {
+    opacity: 0.35;
+}
+
+.schedule-block.selected,
+.schedule-strip.selected {
+    outline: 2px solid #fff;
+    outline-offset: 1px;
+    z-index: 1;
+}
+
+.details-badge.failed {
+    border-color: #a33;
+    color: #ef6b5b;
+}

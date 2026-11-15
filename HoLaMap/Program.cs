@@ -2,6 +2,7 @@ using HoLaMap.Cloudflare;
 using HoLaMap.Data;
 using HoLaMap.Hosts;
 using HoLaMap.Hue;
+using HoLaMap.Semaphore;
 using HoLaMap.UniFi;
 using HoLaMap.Zigbee;
 using Microsoft.EntityFrameworkCore;
@@ -31,6 +32,9 @@ builder.Services.AddHostedService<OpenApiSyncWorker>();
 builder.Services.Configure<CloudflareOptions>(builder.Configuration.GetSection("Cloudflare"));
 builder.Services.AddHttpClient<CloudflareSyncService>();
 builder.Services.AddHostedService<CloudflareSyncWorker>();
+builder.Services.Configure<SemaphoreOptions>(builder.Configuration.GetSection("Semaphore"));
+builder.Services.AddHttpClient<SemaphoreSyncService>();
+builder.Services.AddHostedService<SemaphoreSyncWorker>();
 builder.Services.AddHealthChecks();
 
 WebApplication app = builder.Build();

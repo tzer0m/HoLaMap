@@ -1,0 +1,76 @@
+@page
+@model HoLaMap.Pages.Schedule.IndexModel
+@using HoLaMap.Schedules
+@{
+    ViewData["Title"] = "Schedule";
+}
+
+<header class="page-header">
+    <h1>Schedule</h1>
+    <ul class="legend">
+        @foreach (KeyValuePair<string, string> host in Model.Colours)
+        {
+            <li><span class="swatch" style="background: @host.Value"></span>@host.Key</li>
+        }
+    </ul>
+</header>
+
+@if (!Model.Any)
+{
+    <p class="empty">Nothing scheduled yet. Semaphore's schedules show here once its address and API token are set.</p>
+}
+else
+{
+    <div class="schedule-layout">
+        <div class="schedule-bars">
+            @foreach (ScheduleBar bar in Model.Bars)
+            {
+                <section class="schedule-bar">
+                    <h2>@bar.Title <span>@bar.Span</span></h2>
+                    @if (bar.Blocks.Count == 0 && bar.Strips.Count == 0)
+                    {
+                        <p class="empty">Nothing runs on this bar.</p>
+                        continue;
+                    }
+                    <div class="schedule-axis">
+                        @foreach (ScheduleTick tick in bar.Ticks.Where(tick => tick.Label.Length > 0))
+                        {
+                            <span style="left: @IndexModel.Percent(tick.Position)">@tick.Label</span>
+                        }
+                    </div>
+                    <div class="schedule-track" style="--lanes: @bar.Lanes">
+                        @foreach (ScheduleTick tick in bar.Ticks.Where(tick => tick.Line))
+                        {
+                            <span class="schedule-line" style="left: @IndexModel.Percent(tick.Position)"></span>
+                        }
+                        @foreach (ScheduleBlock block in bar.Blocks)
+                        {
+                            <button type="button" class="schedule-block@(block.Inactive ? " inactive" : "")" data-task="@block.TaskId" title="@block.Title" style="left: @IndexModel.Percent(block.Start); width: @IndexModel.Percent(block.Width); --lane: @block.Lane; --host-colour: @Model.Colours[block.Host]">@block.Name</button>
+                        }
+                        @if (bar.Now is >= 0 and <= 1)
+                        {
+                            <span class="schedule-now" style="left: @IndexModel.Percent(bar.Now)" title="Now"></span>
+                        }
+                    </div>
+                    @foreach (ScheduleStrip strip in bar.Strips)
+                    {
+                        <button type="button" class="schedule-strip@(strip.Inactive ? " inactive" : "")" data-task="@strip.TaskId" title="@strip.Label" style="--host-colour: @Model.Colours[strip.Host]">
+                            <svg viewBox="0 0 1000 10" preserveAspectRatio="none" aria-hidden="true"><path d="@IndexModel.Marks(strip.Positions)" /></svg>
+                            <span>@strip.Label</span>
+                        </button>
+                    }
+                </section>
+            }
+            @if (Model.Unread.Count > 0)
+            {
+                <p class="empty">Couldn't read the schedule of @string.Join(", ", Model.Unread.Select(task => $"{task.Name} ({task.Schedule})")), so they're not on any bar.</p>
+            }
+        </div>
+        <aside id="schedule-details" class="details">Select a task to see its details.</aside>
+    </div>
+    <script id="schedule-data" type="application/json">@Html.Raw(Model.Details)</script>
+}
+
+@section Scripts {
+    <script src="~/js/schedule.js" asp-append-version="true"></script>
+}

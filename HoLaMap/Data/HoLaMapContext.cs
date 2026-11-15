@@ -95,6 +95,11 @@ namespace HoLaMap.Data
         public DbSet<TunnelRoute> TunnelRoutes => Set<TunnelRoute>();
 
         /// <summary>
+        /// Gets the tasks that run on a schedule.
+        /// </summary>
+        public DbSet<ScheduledTask> ScheduledTasks => Set<ScheduledTask>();
+
+        /// <summary>
         /// Configures keys, indexes and relationships.
         /// </summary>
         /// <param name="modelBuilder">The model builder.</param>
@@ -145,6 +150,9 @@ namespace HoLaMap.Data
             modelBuilder.Entity<TunnelRoute>().HasOne(route => route.Tunnel).WithMany(tunnel => tunnel.Routes).HasForeignKey(route => route.TunnelId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<TunnelRoute>().HasOne(route => route.Service).WithMany().HasForeignKey(route => route.ServiceId).OnDelete(DeleteBehavior.SetNull);
             modelBuilder.Entity<TunnelRoute>().HasIndex(route => new { route.TunnelId, route.Hostname, route.Path }).IsUnique();
+            modelBuilder.Entity<ScheduledTask>().HasIndex(task => new { task.Source, task.ExternalId }).IsUnique();
+            modelBuilder.Entity<ScheduledTask>().Property(task => task.Source).HasConversion<string>();
+            modelBuilder.Entity<ScheduledTask>().HasOne(task => task.Device).WithMany().HasForeignKey(task => task.DeviceId).OnDelete(DeleteBehavior.SetNull);
         }
     }
 }
