@@ -33,6 +33,11 @@ namespace HoLaMap.Schedules
         private const double MinLabelGap = 0.03;
 
         /// <summary>
+        /// The most days a week or month bar can be trimmed to before it's marked in hours rather than days.
+        /// </summary>
+        private const int MostDaysForHours = 3;
+
+        /// <summary>
         /// Builds the four bars around now.
         /// </summary>
         /// <param name="tasks">The tasks, with their devices loaded.</param>
@@ -173,7 +178,7 @@ namespace HoLaMap.Schedules
         }
 
         /// <summary>
-        /// Moves everything on a bar to its place on the trimmed bar, dropping the marks trimmed off and labelling the new ends.
+        /// Moves everything on a bar to its place on the trimmed bar, dropping the marks trimmed off and labelling the new ends. A week or month bar trimmed to a few days is marked in hours instead of days, so its times can be read.
         /// </summary>
         /// <param name="bar">The bar, with its runs placed.</param>
         /// <param name="trim">The trim to apply.</param>
@@ -189,6 +194,12 @@ namespace HoLaMap.Schedules
                 block.Start = Math.Min(start, 1 - block.Width);
             }
             bar.Strips.ForEach(strip => strip.Positions = [.. strip.Positions.Select(trim.Map)]);
+            int days = trim.Next - trim.First;
+            if (spec.Period is SchedulePeriod.Week or SchedulePeriod.Month && days <= MostDaysForHours)
+            {
+                // One mark an hour for a single day, every two hours for two days and so on, with each day's start named instead of timed.
+                ticks = [.. Enumerable.Range(0, 25).Select(index => trim.First * 24 + index * days).Select(hour => new ScheduleTick { Position = hour / (spec.Cells * 24.0), Label = hour % 24 == 0 ? spec.Start.AddHours(hour).ToString(spec.Period == SchedulePeriod.Week ? "ddd" : "d MMM") : spec.Start.AddHours(hour).ToString("HH:mm"), Line = true })];
+            }
             List<ScheduleTick> kept = [.. ticks.Where(tick => !trim.Cuts(tick.Position))];
             if (spec.Edge != null)
             {
