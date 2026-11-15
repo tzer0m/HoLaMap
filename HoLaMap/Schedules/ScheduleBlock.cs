@@ -1,3 +1,5 @@
+using HoLaMap.Models;
+
 namespace HoLaMap.Schedules
 {
     /// <summary>
@@ -24,6 +26,11 @@ namespace HoLaMap.Schedules
         /// Gets or sets the host it runs against, which sets its colour.
         /// </summary>
         public string Host { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets where its task comes from, which sets its pattern.
+        /// </summary>
+        public ScheduleSource Source { get; set; }
 
         /// <summary>
         /// Gets or sets how far along the bar it starts, from 0 to 1.

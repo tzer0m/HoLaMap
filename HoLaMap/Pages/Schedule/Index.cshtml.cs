@@ -1,4 +1,6 @@
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.Reflection;
 using System.Text.Json;
 using HoLaMap.Data;
 using HoLaMap.Models;
@@ -27,6 +29,17 @@ namespace HoLaMap.Pages.Schedule
         public string? Host { get; set; }
 
         /// <summary>
+        /// Gets or sets the source to show on its own, from the query string, or null to show every source.
+        /// </summary>
+        [BindProperty(SupportsGet = true)]
+        public ScheduleSource? Source { get; set; }
+
+        /// <summary>
+        /// The sources tasks come from, in order, for the key.
+        /// </summary>
+        public List<ScheduleSource> Sources { get; private set; } = [];
+
+        /// <summary>
         /// The hour, day, week and month bars.
         /// </summary>
         public List<ScheduleBar> Bars { get; private set; } = [];
@@ -52,7 +65,7 @@ namespace HoLaMap.Pages.Schedule
         public bool Any { get; private set; }
 
         /// <summary>
-        /// Lays out the tasks on the bars, only those for the chosen host if one is picked.
+        /// Lays out the tasks on the bars, only those for the chosen host and source if either is picked.
         /// </summary>
         /// <returns>A task that completes when the page has loaded.</returns>
         public async Task OnGetAsync()
@@ -65,13 +78,25 @@ namespace HoLaMap.Pages.Schedule
             {
                 Host = null;
             }
-            List<ScheduledTask> tasks = [.. all.Where(task => Host == null || ScheduleLayout.HostOf(task) == Host)];
+            Sources = [.. all.Select(task => task.Source).Distinct().Order()];
+            if (Source != null && !Sources.Contains(Source.Value))
+            {
+                Source = null;
+            }
+            List<ScheduledTask> tasks = [.. all.Where(task => (Host == null || ScheduleLayout.HostOf(task) == Host) && (Source == null || task.Source == Source))];
             TimeZoneInfo zone = TimeZoneInfo.Local;
             Bars = ScheduleLayout.Build(tasks, DateTime.UtcNow, zone);
             Colours = hosts.Select((host, index) => (host, index)).ToDictionary(item => item.host, item => Palette[item.index % Palette.Length]);
             Unread = [.. tasks.Where(task => CronSchedule.Parse(task.Schedule) == null)];
             Details = JsonSerializer.Serialize(tasks.Select(task => Describe(task, zone)), JsonSerializerOptions.Web);
         }
+
+        /// <summary>
+        /// Gets a source's name as shown on the page.
+        /// </summary>
+        /// <param name="source">The source.</param>
+        /// <returns>The name, like Systemd Timer.</returns>
+        public static string Label(ScheduleSource source) => typeof(ScheduleSource).GetField(source.ToString())?.GetCustomAttribute<DisplayAttribute>()?.GetName() ?? source.ToString();
 
         /// <summary>
         /// Writes a share of a bar as a CSS percentage.
@@ -116,7 +141,7 @@ namespace HoLaMap.Pages.Schedule
             {
                 task.Id,
                 task.Name,
-                Source = task.Source.ToString(),
+                Source = Label(task.Source),
                 Host = ScheduleLayout.HostOf(task),
                 task.Target,
                 task.Command,

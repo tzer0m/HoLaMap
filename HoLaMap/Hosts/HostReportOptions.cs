@@ -28,6 +28,16 @@ namespace HoLaMap.Hosts
         public List<string> SystemdIgnore { get; set; } = [];
 
         /// <summary>
+        /// Gets or sets systemd timers to keep even though they came with a package, without the .timer suffix. Timers set up by hand are always kept.
+        /// </summary>
+        public List<string> TimerInclude { get; set; } = [];
+
+        /// <summary>
+        /// Gets or sets how many recent run durations to keep for each timer.
+        /// </summary>
+        public int TimerDurations { get; set; } = 10;
+
+        /// <summary>
         /// Gets or sets Docker Compose service names to leave out, such as one-off helpers that run at start-up and exit.
         /// </summary>
         public List<string> DockerIgnore { get; set; } = [];

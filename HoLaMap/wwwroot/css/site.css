@@ -1813,6 +1813,23 @@ body:has(.map-layout) .details {
     vector-effect: non-scaling-stroke;
 }
 
+/* Sources are told apart by pattern, since colour shows the host: Semaphore plain, systemd timers striped. */
+.schedule-block.source-systemdtimer {
+    background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 3px, transparent 3px 7px);
+}
+
+.schedule-strip.source-systemdtimer {
+    background-image: repeating-linear-gradient(135deg, #1a1e26 0 3px, transparent 3px 7px);
+}
+
+.swatch.schedule-source {
+    background: #9aa3b5;
+}
+
+.swatch.schedule-source.source-systemdtimer {
+    background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.45) 0 2px, transparent 2px 5px);
+}
+
 .schedule-block.inactive,
 .schedule-strip.inactive {
     opacity: 0.35;

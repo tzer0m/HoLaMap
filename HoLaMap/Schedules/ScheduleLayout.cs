@@ -118,7 +118,7 @@ namespace HoLaMap.Schedules
                 bool crowded = spec.Period == SchedulePeriod.Hour ? runs.Count > MostBlocksPerHour : runs.GroupBy(run => TimeZoneInfo.ConvertTimeFromUtc(run, zone).Date).Max(group => group.Count()) > MostBlocksPerDay;
                 if (crowded)
                 {
-                    bar.Strips.Add(new ScheduleStrip { TaskId = task.Id, Label = $"{task.Name} · {cron.Describe()}", Host = host, Positions = [.. runs.Select(Position)], Inactive = !task.Active });
+                    bar.Strips.Add(new ScheduleStrip { TaskId = task.Id, Label = $"{task.Name} · {cron.Describe()}", Host = host, Source = task.Source, Positions = [.. runs.Select(Position)], Inactive = !task.Active });
                     continue;
                 }
                 // Blocks start out as long as the run really takes, to work out where the bar can be trimmed, and get their least length once trimmed.
@@ -127,7 +127,7 @@ namespace HoLaMap.Schedules
                 {
                     double at = Position(run);
                     string time = TimeZoneInfo.ConvertTimeFromUtc(run, zone).ToString(spec.Period is SchedulePeriod.Hour or SchedulePeriod.Day ? "HH:mm" : "ddd d HH:mm");
-                    bar.Blocks.Add(new ScheduleBlock { TaskId = task.Id, Name = task.Name, Title = $"{task.Name} · {host} · {time}", Host = host, Start = at, Width = Math.Min(width, 1 - at), Inactive = !task.Active });
+                    bar.Blocks.Add(new ScheduleBlock { TaskId = task.Id, Name = task.Name, Title = $"{task.Name} · {host} · {time}", Host = host, Source = task.Source, Start = at, Width = Math.Min(width, 1 - at), Inactive = !task.Active });
                 }
             }
             Trim(bar, new ScheduleTrim(Busy(spec.Cells, bar)), spec, ticks);

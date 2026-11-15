@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace HoLaMap.Models
 {
     /// <summary>
@@ -8,6 +10,12 @@ namespace HoLaMap.Models
         /// <summary>
         /// A Semaphore template's schedule.
         /// </summary>
-        Semaphore
+        Semaphore,
+
+        /// <summary>
+        /// A systemd timer, reported by its host.
+        /// </summary>
+        [Display(Name = "Systemd Timer")]
+        SystemdTimer
     }
 }

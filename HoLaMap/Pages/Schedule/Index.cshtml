@@ -7,18 +7,28 @@
 
 <header class="page-header">
     <h1>Schedule</h1>
-    <ul class="legend">
-        @foreach (KeyValuePair<string, string> host in Model.Colours)
-        {
-            string state = Model.Host == null ? string.Empty : Model.Host == host.Key ? " active" : " faded";
-            <li><a class="legend-filter@(state)" asp-page="/Schedule/Index" asp-route-host="@(Model.Host == host.Key ? null : host.Key)" title="@(Model.Host == host.Key ? "Show every host" : $"Show only {host.Key}")"><span class="swatch" style="background: @host.Value"></span>@host.Key</a></li>
-        }
-    </ul>
+    <div class="legend-rows">
+        <ul class="legend">
+            @foreach (KeyValuePair<string, string> host in Model.Colours)
+            {
+                string state = Model.Host == null ? string.Empty : Model.Host == host.Key ? " active" : " faded";
+                <li><a class="legend-filter@(state)" asp-page="/Schedule/Index" asp-route-host="@(Model.Host == host.Key ? null : host.Key)" asp-route-source="@Model.Source" title="@(Model.Host == host.Key ? "Show every host" : $"Show only {host.Key}")"><span class="swatch" style="background: @host.Value"></span>@host.Key</a></li>
+            }
+        </ul>
+        <ul class="legend">
+            @foreach (ScheduleSource source in Model.Sources)
+            {
+                string state = Model.Source == null ? string.Empty : Model.Source == source ? " active" : " faded";
+                string label = IndexModel.Label(source);
+                <li><a class="legend-filter@(state)" asp-page="/Schedule/Index" asp-route-host="@Model.Host" asp-route-source="@(Model.Source == source ? null : source.ToString())" title="@(Model.Source == source ? "Show every source" : $"Show only {label}")"><span class="swatch schedule-source source-@source.ToString().ToLowerInvariant()"></span>@label</a></li>
+            }
+        </ul>
+    </div>
 </header>
 
 @if (!Model.Any)
 {
-    <p class="empty">Nothing scheduled yet. Semaphore's schedules show here once its address and API token are set.</p>
+    <p class="empty">Nothing scheduled yet. Tasks show here from Semaphore, once its address and API token are set, and from the systemd timers hosts report.</p>
 }
 else
 {
@@ -46,7 +56,7 @@ else
                             }
                             @foreach (ScheduleBlock block in bar.Blocks)
                             {
-                                <button type="button" class="schedule-block@(block.Inactive ? " inactive" : "")" data-task="@block.TaskId" title="@block.Title" style="top: @IndexModel.Percent(block.Start); height: @IndexModel.Percent(block.Width); --lane: @block.Lane; --host-colour: @Model.Colours[block.Host]">@block.Name</button>
+                                <button type="button" class="schedule-block source-@block.Source.ToString().ToLowerInvariant()@(block.Inactive ? " inactive" : "")" data-task="@block.TaskId" title="@block.Title · @IndexModel.Label(block.Source)" style="top: @IndexModel.Percent(block.Start); height: @IndexModel.Percent(block.Width); --lane: @block.Lane; --host-colour: @Model.Colours[block.Host]">@block.Name</button>
                             }
                             @if (bar.Blocks.Count == 0 && bar.Strips.Count == 0)
                             {
@@ -55,7 +65,7 @@ else
                         </div>
                         @foreach (ScheduleStrip strip in bar.Strips)
                         {
-                            <button type="button" class="schedule-strip@(strip.Inactive ? " inactive" : "")" data-task="@strip.TaskId" title="@strip.Label" style="--host-colour: @Model.Colours[strip.Host]">
+                            <button type="button" class="schedule-strip source-@strip.Source.ToString().ToLowerInvariant()@(strip.Inactive ? " inactive" : "")" data-task="@strip.TaskId" title="@strip.Label · @IndexModel.Label(strip.Source)" style="--host-colour: @Model.Colours[strip.Host]">
                                 <svg viewBox="0 0 10 1000" preserveAspectRatio="none" aria-hidden="true"><path d="@IndexModel.Marks(strip.Positions)" /></svg>
                             </button>
                         }

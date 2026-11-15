@@ -14,6 +14,11 @@ namespace HoLaMap.Hosts
     public class HostSyncService(HoLaMapContext context, IOptionsSnapshot<HostReportOptions> options)
     {
         /// <summary>
+        /// The status kept for a timer's run that hasn't finished yet.
+        /// </summary>
+        private const string Running = "running";
+
+        /// <summary>
         /// Updates one kind of synced service on a host to match what it just reported.
         /// </summary>
         /// <param name="host">The host's device name or MAC address.</param>
@@ -94,6 +99,55 @@ namespace HoLaMap.Hosts
             }
             await context.SaveChangesAsync(cancellationToken);
             return count;
+        }
+
+        /// <summary>
+        /// Updates a host's systemd timers to match what it just reported, adding the latest run's duration when it has finished. Timers no longer reported are removed.
+        /// </summary>
+        /// <param name="host">The host's device name or MAC address.</param>
+        /// <param name="timeZone">The host's time zone, which its calendar times are in, or null if it didn't say.</param>
+        /// <param name="timers">The timers.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The number of timers, or null if no device matches the host.</returns>
+        public async Task<int?> SyncTimersAsync(string host, string? timeZone, List<ReportedTimer> timers, CancellationToken cancellationToken)
+        {
+            string name = host.Trim().ToLowerInvariant();
+            string mac = name.Replace('-', ':');
+            Device? device = await context.Devices.FirstOrDefaultAsync(item => item.Name.ToLower() == name || item.Mac == mac, cancellationToken);
+            if (device == null)
+            {
+                return null;
+            }
+            List<ScheduledTask> tasks = await context.ScheduledTasks.Where(task => task.Source == ScheduleSource.SystemdTimer && task.DeviceId == device.Id).ToListAsync(cancellationToken);
+            context.ScheduledTasks.RemoveRange(tasks.Where(task => !timers.Any(timer => task.ExternalId == $"{device.Id}:{timer.Name}")));
+            DateTime now = DateTime.UtcNow;
+            foreach (ReportedTimer timer in timers)
+            {
+                string id = $"{device.Id}:{timer.Name}";
+                ScheduledTask? task = tasks.FirstOrDefault(existing => existing.ExternalId == id);
+                if (task == null)
+                {
+                    task = new ScheduledTask { Source = ScheduleSource.SystemdTimer, ExternalId = id, DeviceId = device.Id };
+                    context.ScheduledTasks.Add(task);
+                }
+                // A run is counted once it has finished: either it's a new run, or the one last seen still going has since ended.
+                bool finished = timer.LastStart != null && timer.LastEnd != null && (task.LastRun != timer.LastStart || task.LastStatus == Running);
+                if (finished && timer.Result == "success")
+                {
+                    task.Durations = [(int)Math.Round((timer.LastEnd!.Value - timer.LastStart!.Value).TotalSeconds), .. task.Durations.Take(options.Value.TimerDurations - 1)];
+                }
+                task.Name = timer.Name;
+                task.Schedule = timer.Schedule;
+                task.TimeZone = string.IsNullOrEmpty(timeZone) ? "UTC" : timeZone;
+                task.Command = timer.Unit;
+                task.Target = device.Name;
+                task.Active = timer.Active;
+                task.LastRun = timer.LastStart;
+                task.LastStatus = timer.LastStart == null ? null : timer.LastEnd == null ? Running : timer.Result;
+                task.LastSeen = now;
+            }
+            await context.SaveChangesAsync(cancellationToken);
+            return timers.Count;
         }
 
         /// <summary>
