@@ -1658,7 +1658,7 @@ body:has(.map-layout) .details {
     font-weight: 600;
 }
 
-/* Schedule page: three bars with a details pane beside them. */
+/* Schedule page: four bars side by side, time running down each, with a details pane beside them. */
 .schedule-layout {
     display: grid;
     grid-template-columns: 1fr 400px;
@@ -1671,52 +1671,65 @@ body:has(.map-layout) .details {
     top: 16px;
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1100px) {
     .schedule-layout {
         grid-template-columns: 1fr;
     }
 }
 
 .schedule-bars {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
     min-width: 0;
-    padding: 0 16px;
 }
 
 .schedule-bar {
-    margin-bottom: 32px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
 }
 
 .schedule-bar h2 {
     display: flex;
-    align-items: baseline;
-    gap: 10px;
-    margin: 0 0 6px -16px;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 3em;
+    margin: 0 0 10px;
     font-size: 1.1rem;
 }
 
 .schedule-bar h2 span {
     color: #9aa3b5;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 400;
+}
+
+.schedule-body {
+    display: flex;
+    gap: 4px;
+    height: max(480px, calc(100vh - 220px));
 }
 
 .schedule-axis {
     position: relative;
-    height: 18px;
+    flex: 0 0 40px;
     color: #9aa3b5;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
+    text-align: right;
 }
 
 .schedule-axis span {
     position: absolute;
-    transform: translateX(-50%);
+    right: 4px;
+    transform: translateY(-50%);
     white-space: nowrap;
 }
 
 .schedule-track {
     position: relative;
-    height: calc(var(--lanes) * 22px + 6px);
-    min-height: 28px;
+    flex: 1;
+    min-width: 0;
     border: 1px solid #2a2f3a;
     border-radius: 6px;
     background: #0b0d11;
@@ -1724,34 +1737,31 @@ body:has(.map-layout) .details {
 
 .schedule-line {
     position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 1px;
+    right: 0;
+    left: 0;
+    height: 1px;
     background: #1c2029;
 }
 
-.schedule-now {
-    position: absolute;
-    top: -5px;
-    bottom: -5px;
-    width: 2px;
-    margin-left: -1px;
-    background: #ef6b5b;
+.schedule-empty {
+    margin: 12px;
+    color: #9aa3b5;
+    font-size: 0.85rem;
 }
 
 .schedule-block {
     position: absolute;
-    top: calc(var(--lane) * 22px + 4px);
+    left: calc(var(--lane) * (100% - 6px) / var(--lanes) + 3px);
     box-sizing: border-box;
-    min-width: 4px;
-    height: 18px;
+    width: calc((100% - 6px) / var(--lanes) - 2px);
+    min-height: 4px;
     padding: 0 4px;
     overflow: hidden;
     border: 0;
     border-radius: 3px;
     background: var(--host-colour);
     color: #000;
-    font: 600 0.72rem/18px system-ui, sans-serif;
+    font: 600 0.72rem/16px system-ui, sans-serif;
     text-align: left;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1760,10 +1770,7 @@ body:has(.map-layout) .details {
 
 .schedule-strip {
     position: relative;
-    display: block;
-    width: 100%;
-    height: 18px;
-    margin-top: 4px;
+    flex: 0 0 14px;
     padding: 0;
     border: 1px solid #2a2f3a;
     border-radius: 4px;
@@ -1781,18 +1788,6 @@ body:has(.map-layout) .details {
     stroke: var(--host-colour);
     stroke-width: 1;
     vector-effect: non-scaling-stroke;
-}
-
-.schedule-strip span {
-    position: absolute;
-    top: 0;
-    left: 6px;
-    padding: 0 4px;
-    border-radius: 3px;
-    background: rgba(0, 0, 0, 0.75);
-    color: #c4c9d4;
-    font-size: 0.72rem;
-    line-height: 16px;
 }
 
 .schedule-block.inactive,

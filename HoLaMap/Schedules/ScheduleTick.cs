@@ -16,7 +16,7 @@ namespace HoLaMap.Schedules
         public string Label { get; set; } = string.Empty;
 
         /// <summary>
-        /// Gets or sets whether a line is drawn down the bar here.
+        /// Gets or sets whether a line is drawn across the bar here.
         /// </summary>
         public bool Line { get; set; }
     }

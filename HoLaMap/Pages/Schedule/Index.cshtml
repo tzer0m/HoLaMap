@@ -21,49 +21,45 @@
 }
 else
 {
+    @if (Model.Unread.Count > 0)
+    {
+        <p class="empty">Couldn't read the schedule of @string.Join(", ", Model.Unread.Select(task => $"{task.Name} ({task.Schedule})")), so they're not on any bar.</p>
+    }
     <div class="schedule-layout">
         <div class="schedule-bars">
             @foreach (ScheduleBar bar in Model.Bars)
             {
                 <section class="schedule-bar">
                     <h2>@bar.Title <span>@bar.Span</span></h2>
-                    @if (bar.Blocks.Count == 0 && bar.Strips.Count == 0)
-                    {
-                        <p class="empty">Nothing runs on this bar.</p>
-                        continue;
-                    }
-                    <div class="schedule-axis">
-                        @foreach (ScheduleTick tick in bar.Ticks.Where(tick => tick.Label.Length > 0))
+                    <div class="schedule-body">
+                        <div class="schedule-axis">
+                            @foreach (ScheduleTick tick in bar.Ticks.Where(tick => tick.Label.Length > 0))
+                            {
+                                <span style="top: @IndexModel.Percent(tick.Position)">@tick.Label</span>
+                            }
+                        </div>
+                        <div class="schedule-track" style="--lanes: @Math.Max(bar.Lanes, 1)">
+                            @foreach (ScheduleTick tick in bar.Ticks.Where(tick => tick.Line))
+                            {
+                                <span class="schedule-line" style="top: @IndexModel.Percent(tick.Position)"></span>
+                            }
+                            @foreach (ScheduleBlock block in bar.Blocks)
+                            {
+                                <button type="button" class="schedule-block@(block.Inactive ? " inactive" : "")" data-task="@block.TaskId" title="@block.Title" style="top: @IndexModel.Percent(block.Start); height: @IndexModel.Percent(block.Width); --lane: @block.Lane; --host-colour: @Model.Colours[block.Host]">@block.Name</button>
+                            }
+                            @if (bar.Blocks.Count == 0 && bar.Strips.Count == 0)
+                            {
+                                <p class="schedule-empty">Nothing runs here.</p>
+                            }
+                        </div>
+                        @foreach (ScheduleStrip strip in bar.Strips)
                         {
-                            <span style="left: @IndexModel.Percent(tick.Position)">@tick.Label</span>
+                            <button type="button" class="schedule-strip@(strip.Inactive ? " inactive" : "")" data-task="@strip.TaskId" title="@strip.Label" style="--host-colour: @Model.Colours[strip.Host]">
+                                <svg viewBox="0 0 10 1000" preserveAspectRatio="none" aria-hidden="true"><path d="@IndexModel.Marks(strip.Positions)" /></svg>
+                            </button>
                         }
                     </div>
-                    <div class="schedule-track" style="--lanes: @bar.Lanes">
-                        @foreach (ScheduleTick tick in bar.Ticks.Where(tick => tick.Line))
-                        {
-                            <span class="schedule-line" style="left: @IndexModel.Percent(tick.Position)"></span>
-                        }
-                        @foreach (ScheduleBlock block in bar.Blocks)
-                        {
-                            <button type="button" class="schedule-block@(block.Inactive ? " inactive" : "")" data-task="@block.TaskId" title="@block.Title" style="left: @IndexModel.Percent(block.Start); width: @IndexModel.Percent(block.Width); --lane: @block.Lane; --host-colour: @Model.Colours[block.Host]">@block.Name</button>
-                        }
-                        @if (bar.Now is >= 0 and <= 1)
-                        {
-                            <span class="schedule-now" style="left: @IndexModel.Percent(bar.Now)" title="Now"></span>
-                        }
-                    </div>
-                    @foreach (ScheduleStrip strip in bar.Strips)
-                    {
-                        <button type="button" class="schedule-strip@(strip.Inactive ? " inactive" : "")" data-task="@strip.TaskId" title="@strip.Label" style="--host-colour: @Model.Colours[strip.Host]">
-                            <svg viewBox="0 0 1000 10" preserveAspectRatio="none" aria-hidden="true"><path d="@IndexModel.Marks(strip.Positions)" /></svg>
-                            <span>@strip.Label</span>
-                        </button>
-                    }
                 </section>
-            }
-            @if (Model.Unread.Count > 0)
-            {
-                <p class="empty">Couldn't read the schedule of @string.Join(", ", Model.Unread.Select(task => $"{task.Name} ({task.Schedule})")), so they're not on any bar.</p>
             }
         </div>
         <aside id="schedule-details" class="details">Select a task to see its details.</aside>

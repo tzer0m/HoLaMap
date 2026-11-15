@@ -68,11 +68,11 @@ namespace HoLaMap.Pages.Schedule
         public static string Percent(double share) => $"{(share * 100).ToString("0.###", CultureInfo.InvariantCulture)}%";
 
         /// <summary>
-        /// Writes an SVG path with a short upright mark for each run, on a strip 1000 wide and 10 high.
+        /// Writes an SVG path with a short level mark for each run, on a strip 10 wide and 1000 high.
         /// </summary>
-        /// <param name="positions">How far along the bar each run is, from 0 to 1.</param>
+        /// <param name="positions">How far down the bar each run is, from 0 to 1.</param>
         /// <returns>The path data.</returns>
-        public static string Marks(List<double> positions) => string.Concat(positions.Select(position => $"M{(position * 1000).ToString("0.#", CultureInfo.InvariantCulture)} 0v10"));
+        public static string Marks(List<double> positions) => string.Concat(positions.Select(position => $"M0 {(position * 1000).ToString("0.#", CultureInfo.InvariantCulture)}h10"));
 
         /// <summary>
         /// Writes a number of seconds as a short duration, like 45s, 3m 20s or 1h 05m.

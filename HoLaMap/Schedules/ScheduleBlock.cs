@@ -1,7 +1,7 @@
 namespace HoLaMap.Schedules
 {
     /// <summary>
-    /// One run of a task on a bar, as wide as the run usually takes.
+    /// One run of a task on a bar, as long as the run usually takes.
     /// </summary>
     public class ScheduleBlock
     {
@@ -31,12 +31,12 @@ namespace HoLaMap.Schedules
         public double Start { get; set; }
 
         /// <summary>
-        /// Gets or sets how much of the bar it covers, from 0 to 1.
+        /// Gets or sets how much of the bar's length it covers, from 0 to 1.
         /// </summary>
         public double Width { get; set; }
 
         /// <summary>
-        /// Gets or sets the row it's stacked in, 0 being the top.
+        /// Gets or sets the column it sits in when runs overlap, 0 being the left.
         /// </summary>
         public int Lane { get; set; }
 

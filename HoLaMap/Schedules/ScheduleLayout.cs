@@ -49,10 +49,10 @@ namespace HoLaMap.Schedules
             List<ScheduleTick> days = [.. Enumerable.Range(0, 32).Select(index => new ScheduleTick { Position = index / 31.0, Line = true }), .. Enumerable.Range(0, 31).Select(index => new ScheduleTick { Position = (index + 0.5) / 31, Label = (index + 1).ToString() })];
             return
             [
-                Bar(SchedulePeriod.Hour, "Hour", $"Every hour, shown for {hour:HH:mm} to {hour.AddHours(1):HH:mm}", hour, TimeSpan.FromHours(1), minutes, tasks, nowUtc, zone),
-                Bar(SchedulePeriod.Day, "Day", $"Noon {day:ddd d MMM} to noon {day.AddDays(1):ddd d MMM}", day, TimeSpan.FromDays(1), hours, tasks, nowUtc, zone),
-                Bar(SchedulePeriod.Week, "Week", $"Monday {week:d MMM} to Sunday {week.AddDays(6):d MMM}", week, TimeSpan.FromDays(7), weekdays, tasks, nowUtc, zone),
-                Bar(SchedulePeriod.Month, "Month", $"{month:MMMM yyyy}", month, TimeSpan.FromDays(31), days, tasks, nowUtc, zone)
+                Bar(SchedulePeriod.Hour, "Hour", $"Every hour, shown for {hour:HH:mm} to {hour.AddHours(1):HH:mm}", hour, TimeSpan.FromHours(1), minutes, tasks, zone),
+                Bar(SchedulePeriod.Day, "Day", $"Noon {day:ddd d MMM} to noon {day.AddDays(1):ddd d MMM}", day, TimeSpan.FromDays(1), hours, tasks, zone),
+                Bar(SchedulePeriod.Week, "Week", $"Monday {week:d MMM} to Sunday {week.AddDays(6):d MMM}", week, TimeSpan.FromDays(7), weekdays, tasks, zone),
+                Bar(SchedulePeriod.Month, "Month", $"{month:MMMM yyyy}", month, TimeSpan.FromDays(31), days, tasks, zone)
             ];
         }
 
@@ -86,20 +86,19 @@ namespace HoLaMap.Schedules
         /// </summary>
         /// <param name="period">Which bar it is.</param>
         /// <param name="title">The heading.</param>
-        /// <param name="span">The span in words.</param>
+        /// <param name="span">The dates it covers in words.</param>
         /// <param name="start">Where it starts, in the bars' time zone.</param>
         /// <param name="length">How long it covers.</param>
         /// <param name="ticks">The marks along it.</param>
         /// <param name="tasks">Every task.</param>
-        /// <param name="nowUtc">The current time (UTC).</param>
         /// <param name="zone">The time zone the bars are drawn in.</param>
         /// <returns>The bar.</returns>
-        private static ScheduleBar Bar(SchedulePeriod period, string title, string span, DateTime start, TimeSpan length, List<ScheduleTick> ticks, List<ScheduledTask> tasks, DateTime nowUtc, TimeZoneInfo zone)
+        private static ScheduleBar Bar(SchedulePeriod period, string title, string span, DateTime start, TimeSpan length, List<ScheduleTick> ticks, List<ScheduledTask> tasks, TimeZoneInfo zone)
         {
             DateTime fromUtc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(start, DateTimeKind.Unspecified), zone);
             DateTime toUtc = fromUtc + length;
             double Position(DateTime time) => (time - fromUtc).TotalSeconds / length.TotalSeconds;
-            ScheduleBar bar = new() { Period = period, Title = title, Span = span, Ticks = ticks, Now = Position(nowUtc) };
+            ScheduleBar bar = new() { Period = period, Title = title, Span = span, Ticks = ticks };
             foreach (ScheduledTask task in tasks)
             {
                 CronSchedule? cron = CronSchedule.Parse(task.Schedule);
@@ -127,7 +126,7 @@ namespace HoLaMap.Schedules
                     bar.Blocks.Add(new ScheduleBlock { TaskId = task.Id, Name = task.Name, Title = $"{task.Name} · {host} · {time}", Host = host, Start = at, Width = Math.Min(width, 1 - at), Inactive = !task.Active });
                 }
             }
-            // Each block goes in the first row with room for it, so runs that overlap stack instead of hiding each other.
+            // Each block goes in the first column with room for it, so runs that overlap sit side by side instead of hiding each other.
             List<double> ends = [];
             foreach (ScheduleBlock block in bar.Blocks.OrderBy(block => block.Start).ThenByDescending(block => block.Width))
             {

@@ -36,13 +36,8 @@ namespace HoLaMap.Schedules
         public List<ScheduleStrip> Strips { get; set; } = [];
 
         /// <summary>
-        /// Gets or sets how many rows the blocks are stacked in.
+        /// Gets or sets how many columns the blocks are spread over where runs overlap.
         /// </summary>
         public int Lanes { get; set; }
-
-        /// <summary>
-        /// Gets or sets how far along it now is, from 0 to 1.
-        /// </summary>
-        public double Now { get; set; }
     }
 }

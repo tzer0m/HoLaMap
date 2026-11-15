@@ -1,7 +1,7 @@
 namespace HoLaMap.Schedules
 {
     /// <summary>
-    /// A task that runs too often to draw each run as a block, drawn as a thin row with a mark for each run.
+    /// A task that runs too often to draw each run as a block, drawn as a thin column with a mark for each run.
     /// </summary>
     public class ScheduleStrip
     {
@@ -11,7 +11,7 @@ namespace HoLaMap.Schedules
         public int TaskId { get; set; }
 
         /// <summary>
-        /// Gets or sets the label shown on the row.
+        /// Gets or sets the label shown on the column.
         /// </summary>
         public string Label { get; set; } = string.Empty;
 
