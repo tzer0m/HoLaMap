@@ -12,16 +12,16 @@ namespace HoLaMap.Hosts
     public static class HostEndpoints
     {
         /// <summary>
-        /// Maps the host report endpoints.
+        /// Maps the host report endpoints, which skip sign-in and check the host report token instead.
         /// </summary>
         /// <param name="app">The web application.</param>
         public static void MapHostEndpoints(this WebApplication app)
         {
-            app.MapPost("/api/services/{host}/systemd", ReportSystemdAsync);
-            app.MapPost("/api/services/{host}/docker", ReportDockerAsync);
-            app.MapPost("/api/services/{host}/ports", ReportPortsAsync);
-            app.MapPost("/api/schedules/{host}/systemd", ReportTimersAsync);
-            app.MapPost("/api/schedules/{host}/truenas", ReportTrueNasAsync);
+            app.MapPost("/api/services/{host}/systemd", ReportSystemdAsync).AllowAnonymous();
+            app.MapPost("/api/services/{host}/docker", ReportDockerAsync).AllowAnonymous();
+            app.MapPost("/api/services/{host}/ports", ReportPortsAsync).AllowAnonymous();
+            app.MapPost("/api/schedules/{host}/systemd", ReportTimersAsync).AllowAnonymous();
+            app.MapPost("/api/schedules/{host}/truenas", ReportTrueNasAsync).AllowAnonymous();
         }
 
         /// <summary>

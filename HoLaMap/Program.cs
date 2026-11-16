@@ -5,6 +5,11 @@ using HoLaMap.Hue;
 using HoLaMap.Semaphore;
 using HoLaMap.UniFi;
 using HoLaMap.Zigbee;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -37,10 +42,39 @@ builder.Services.AddHttpClient<SemaphoreSyncService>();
 builder.Services.AddHostedService<SemaphoreSyncWorker>();
 builder.Services.AddHealthChecks();
 
+// Sign in with Pocket ID, required everywhere unless an endpoint allows anonymous access.
+AuthenticationBuilder authentication = builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+});
+authentication.AddCookie(options =>
+{
+    options.ExpireTimeSpan = TimeSpan.FromDays(30);
+    options.SlidingExpiration = true;
+});
+authentication.AddOpenIdConnect(options =>
+{
+    options.Authority = builder.Configuration["Oidc:Authority"];
+    options.ClientId = builder.Configuration["Oidc:ClientId"];
+    options.ClientSecret = builder.Configuration["Oidc:ClientSecret"];
+    options.ResponseType = "code";
+    options.SaveTokens = true;
+    options.GetClaimsFromUserInfoEndpoint = true;
+    options.Scope.Clear();
+    options.Scope.Add("openid");
+    options.Scope.Add("profile");
+    options.Scope.Add("email");
+});
+builder.Services.AddAuthorizationBuilder().SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+
 WebApplication app = builder.Build();
+app.UseForwardedHeaders(new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto });
 app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapStaticAssets();
 app.MapRazorPages().WithStaticAssets();
 app.MapHostEndpoints();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();
