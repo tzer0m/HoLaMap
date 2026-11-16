@@ -39,7 +39,7 @@ else
                             @if (!string.IsNullOrWhiteSpace(device.WakeInterface))
                             {
                                 <form method="post" asp-page-handler="Wake" asp-route-id="@device.Id">
-                                    <button type="submit" class="button power-wake">Wake</button>
+                                    <button type="submit" class="button power-wake" disabled>Wake</button>
                                 </form>
                             }
                             @if (!string.IsNullOrWhiteSpace(device.SemaphoreHost))
@@ -47,11 +47,11 @@ else
                                 if (device.CanSleep)
                                 {
                                     <form method="post" asp-page-handler="Sleep" asp-route-id="@device.Id">
-                                        <button type="submit" class="button button-secondary power-down" data-confirm="Put @device.Name to sleep?">Sleep</button>
+                                        <button type="submit" class="button button-secondary power-down" disabled data-confirm="Put @device.Name to sleep?">Sleep</button>
                                     </form>
                                 }
                                 <form method="post" asp-page-handler="PowerOff" asp-route-id="@device.Id">
-                                    <button type="submit" class="button button-danger power-down" data-confirm="Power off @device.Name?">Power Off</button>
+                                    <button type="submit" class="button button-danger power-down" disabled data-confirm="Power off @device.Name?">Power Off</button>
                                 </form>
                             }
                         </div>

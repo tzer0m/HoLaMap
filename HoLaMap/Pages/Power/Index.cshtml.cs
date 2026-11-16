@@ -16,7 +16,8 @@ namespace HoLaMap.Pages.Power
     /// <param name="statusService">The status service.</param>
     /// <param name="wakeService">The wake on LAN service.</param>
     /// <param name="actionService">The Semaphore power service.</param>
-    public class IndexModel(HoLaMapContext context, IOptions<PowerOptions> options, PowerStatusService statusService, WakeOnLanService wakeService, PowerActionService actionService) : PageModel
+    /// <param name="logger">The logger.</param>
+    public class IndexModel(HoLaMapContext context, IOptions<PowerOptions> options, PowerStatusService statusService, WakeOnLanService wakeService, PowerActionService actionService, ILogger<IndexModel> logger) : PageModel
     {
         /// <summary>
         /// The machines on the page, by name.
@@ -67,7 +68,8 @@ namespace HoLaMap.Pages.Power
                 return NotFound();
             }
             PowerResult result = await wakeService.WakeAsync(device);
-            return Respond(result.Message);
+            Log(result);
+            return Respond(result);
         }
 
         /// <summary>
@@ -104,21 +106,38 @@ namespace HoLaMap.Pages.Power
                 return NotFound();
             }
             PowerResult result = await actionService.RunAsync(device, action);
-            return Respond(result.Message);
+            Log(result);
+            return Respond(result);
         }
 
         /// <summary>
-        /// Returns the message as JSON to the page's script, or shows it after a redirect without script.
+        /// Logs how a wake, sleep or power off went.
         /// </summary>
-        /// <param name="message">The message.</param>
+        /// <param name="result">The result.</param>
+        private void Log(PowerResult result)
+        {
+            if (result.Success)
+            {
+                logger.LogInformation("Power: {Message}", result.Message);
+            }
+            else
+            {
+                logger.LogWarning("Power: {Message}", result.Message);
+            }
+        }
+
+        /// <summary>
+        /// Returns the result as JSON to the page's script, or shows its message after a redirect without script.
+        /// </summary>
+        /// <param name="result">The result.</param>
         /// <returns>The response.</returns>
-        private IActionResult Respond(string message)
+        private IActionResult Respond(PowerResult result)
         {
             if (Request.Headers.XRequestedWith == "fetch")
             {
-                return new JsonResult(new { message });
+                return new JsonResult(new { result.Success, result.Message });
             }
-            Message = message;
+            Message = result.Message;
             return RedirectToPage();
         }
     }
