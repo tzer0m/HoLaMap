@@ -13,12 +13,13 @@ namespace HoLaMap.Pages.Schedule
     /// Shows everything scheduled across the fleet on four bars, an hour, a day, a week and a month, so clashes and quiet spells stand out.
     /// </summary>
     /// <param name="context">The database context.</param>
-    public class IndexModel(HoLaMapContext context) : PageModel
+    /// <param name="configuration">The app settings, for the colour set for each host.</param>
+    public class IndexModel(HoLaMapContext context, IConfiguration configuration) : PageModel
     {
         /// <summary>
-        /// The colours given to hosts in name order, repeating if there are more hosts than colours.
+        /// The colours given in name order to hosts without one set, Uptime Kuma's tag colours first, skipping any a host already has.
         /// </summary>
-        private static readonly string[] Palette = ["#4e9af1", "#f2a03d", "#63c27a", "#e0629a", "#a77de8", "#3fc4c4", "#e5d34a", "#ef6b5b", "#8fb3ff", "#b5d86a"];
+        private static readonly string[] Palette = ["#7C3AED", "#DB2777", "#059669", "#DC2626", "#D97706", "#2563EB", "#4F46E5", "#4B5563", "#0891B2", "#65A30D"];
 
         /// <summary>
         /// Gets or sets the host to show on its own, from the query string, or null to show every host.
@@ -84,7 +85,11 @@ namespace HoLaMap.Pages.Schedule
             List<ScheduledTask> tasks = [.. all.Where(task => (Host == null || ScheduleLayout.HostOf(task) == Host) && (Source == null || task.Source == Source))];
             TimeZoneInfo zone = TimeZoneInfo.Local;
             Bars = ScheduleLayout.Build(tasks, DateTime.UtcNow, zone);
-            Colours = hosts.Select((host, index) => (host, index)).ToDictionary(item => item.host, item => Palette[item.index % Palette.Length]);
+            Dictionary<string, string> set = configuration.GetSection("Schedule:Colours").Get<Dictionary<string, string>>() ?? [];
+            Dictionary<string, string> chosen = new(set, StringComparer.OrdinalIgnoreCase);
+            List<string> spare = [.. Palette.Where(colour => !chosen.Values.Contains(colour, StringComparer.OrdinalIgnoreCase))];
+            int next = 0;
+            Colours = hosts.ToDictionary(host => host, host => chosen.TryGetValue(host, out string? colour) ? colour : spare.Count > 0 ? spare[next++ % spare.Count] : Palette[next++ % Palette.Length]);
             Unread = [.. tasks.Where(task => CronSchedule.Parse(task.Schedule) == null)];
             Details = JsonSerializer.Serialize(tasks.Select(task => Describe(task, zone)), JsonSerializerOptions.Web);
         }

@@ -1843,7 +1843,7 @@ body:has(.map-layout) .details::-webkit-scrollbar {
     border: 0;
     border-radius: 3px;
     background: var(--host-colour);
-    color: #000;
+    color: #fff;
     font: 600 0.68rem/14px system-ui, sans-serif;
     text-align: left;
     text-overflow: ellipsis;
@@ -1876,17 +1876,17 @@ body:has(.map-layout) .details::-webkit-scrollbar {
 /* Sources are told apart by a band down the left of each block, so the name stays on plain colour, which shows the host: Semaphore solid, systemd timers dashed, TrueNAS tasks dotted. */
 .schedule-block.source-semaphore,
 .swatch.schedule-source.source-semaphore {
-    border-left: 5px solid rgba(0, 0, 0, 0.45);
+    border-left: 5px solid rgba(255, 255, 255, 0.55);
 }
 
 .schedule-block.source-systemdtimer,
 .swatch.schedule-source.source-systemdtimer {
-    border-left: 5px dashed rgba(0, 0, 0, 0.55);
+    border-left: 5px dashed rgba(255, 255, 255, 0.6);
 }
 
 .schedule-block.source-truenas,
 .swatch.schedule-source.source-truenas {
-    border-left: 5px dotted rgba(0, 0, 0, 0.6);
+    border-left: 5px dotted rgba(255, 255, 255, 0.65);
 }
 
 .schedule-strip.source-systemdtimer {
@@ -1900,7 +1900,7 @@ body:has(.map-layout) .details::-webkit-scrollbar {
 
 .swatch.schedule-source {
     box-sizing: border-box;
-    background: #9aa3b5;
+    background: #4b5563;
 }
 
 .schedule-block.inactive,
