@@ -606,6 +606,39 @@
             ['Last Seen', node.lastSeen]
         ]);
 
+        // Wake, sleep and power off, for a device set up on the Power page. Wake needs it down, the others need it up.
+        if (node.powerActions?.length && details.dataset.powerUrl) {
+            const part = section('Power');
+            const actions = element('div', 'details-power');
+            const message = element('p', 'details-power-message');
+            message.hidden = true;
+            const powerButton = (action, handler, text, className, question, enabled) => {
+                if (!node.powerActions.includes(action)) {
+                    return;
+                }
+                const item = button(text, async () => {
+                    if (question && !confirm(question)) {
+                        return;
+                    }
+                    item.disabled = true;
+                    try {
+                        const response = await fetch(`${details.dataset.powerUrl}?${new URLSearchParams({ handler, id: nodeId.substring(1) })}`, { method: 'POST', headers: { RequestVerificationToken: token, 'X-Requested-With': 'fetch' } });
+                        message.textContent = (await response.json()).message;
+                    } catch (error) {
+                        console.error(error);
+                        message.textContent = 'The request failed.';
+                    }
+                    message.hidden = false;
+                }, `button ${className}`);
+                item.disabled = !enabled;
+                actions.append(item);
+            };
+            powerButton('wake', 'Wake', 'Wake', '', null, !node.online);
+            powerButton('sleep', 'Sleep', 'Sleep', 'button-secondary', `Put ${node.label} to sleep?`, node.online);
+            powerButton('poweroff', 'PowerOff', 'Power Off', 'button-danger', `Power off ${node.label}?`, node.online);
+            part.append(actions, message);
+        }
+
         const wifi = raw.edges.find(edge => edge.wireless && edge.target === nodeId);
         if (wifi) {
             rows(section('Wi-Fi'), [['Access Point', deviceButton(wifi.source)], ['SSID', wifi.ssid], ['Band', wifi.band], ['Channel', wifi.channel ?? ''], ['Signal', wifi.signal ? `${wifi.signal} dBm` : ''], ['Rate', wifi.rate ? `${wifi.rate} Mbps` : '']]);

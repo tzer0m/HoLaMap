@@ -233,7 +233,34 @@ namespace HoLaMap.Pages
         /// <returns>The node.</returns>
         private static GraphNode ToNode(Device device, string kind, bool online)
         {
-            return new GraphNode { Id = $"d{device.Id}", Label = device.Name, Kind = kind, Online = online, Room = device.RoomId == null ? string.Empty : $"r{device.RoomId}", Model = device.Model ?? string.Empty, Ip = device.Ip ?? string.Empty, Mac = device.Mac, LastSeen = Time(device.LastSeen) };
+            return new GraphNode { Id = $"d{device.Id}", Label = device.Name, Kind = kind, Online = online, Room = device.RoomId == null ? string.Empty : $"r{device.RoomId}", Model = device.Model ?? string.Empty, Ip = device.Ip ?? string.Empty, Mac = device.Mac, LastSeen = Time(device.LastSeen), PowerActions = PowerActions(device) };
+        }
+
+        /// <summary>
+        /// Works out which power buttons a device gets, from how it's set up on the Power page.
+        /// </summary>
+        /// <param name="device">The device.</param>
+        /// <returns>The actions, or none if it isn't on the Power page.</returns>
+        private static List<string> PowerActions(Device device)
+        {
+            List<string> actions = [];
+            if (!device.PowerControl)
+            {
+                return actions;
+            }
+            if (!string.IsNullOrWhiteSpace(device.WakeInterface))
+            {
+                actions.Add("wake");
+            }
+            if (!string.IsNullOrWhiteSpace(device.SemaphoreHost))
+            {
+                if (device.CanSleep)
+                {
+                    actions.Add("sleep");
+                }
+                actions.Add("poweroff");
+            }
+            return actions;
         }
 
         /// <summary>

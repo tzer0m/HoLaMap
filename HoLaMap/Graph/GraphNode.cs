@@ -109,5 +109,10 @@ namespace HoLaMap.Graph
         /// How many rack units tall the device is.
         /// </summary>
         public int RackHeight { get; set; }
+
+        /// <summary>
+        /// The power buttons the device's details show: wake, sleep and poweroff, for a device on the Power page.
+        /// </summary>
+        public List<string> PowerActions { get; set; } = [];
     }
 }

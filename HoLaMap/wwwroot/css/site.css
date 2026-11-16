@@ -1958,3 +1958,20 @@ body:has(.map-layout) .details::-webkit-scrollbar {
 .power-remove {
     margin-top: 24px;
 }
+
+.details-power {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.details-power .button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.details-power-message {
+    margin: 8px 0 0;
+    color: #9aa3b5;
+    font-size: 0.85rem;
+}
