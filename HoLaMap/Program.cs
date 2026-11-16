@@ -2,6 +2,7 @@ using HoLaMap.Cloudflare;
 using HoLaMap.Data;
 using HoLaMap.Hosts;
 using HoLaMap.Hue;
+using HoLaMap.Power;
 using HoLaMap.Semaphore;
 using HoLaMap.UniFi;
 using HoLaMap.Zigbee;
@@ -40,6 +41,10 @@ builder.Services.AddHostedService<CloudflareSyncWorker>();
 builder.Services.Configure<SemaphoreOptions>(builder.Configuration.GetSection("Semaphore"));
 builder.Services.AddHttpClient<SemaphoreSyncService>();
 builder.Services.AddHostedService<SemaphoreSyncWorker>();
+builder.Services.Configure<PowerOptions>(builder.Configuration.GetSection("Power"));
+builder.Services.AddScoped<PowerStatusService>();
+builder.Services.AddScoped<WakeOnLanService>();
+builder.Services.AddHttpClient<PowerActionService>();
 builder.Services.AddHealthChecks();
 
 // Sign in with Pocket ID, required everywhere unless an endpoint allows anonymous access.

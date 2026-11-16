@@ -19,6 +19,7 @@
         <a class="brand" asp-page="/Index" title="HoLaMap"><img src="~/logo.png" alt="HoLaMap" asp-append-version="true" /></a>
         <nav class="site-nav">
             <a asp-page="/Schedule/Index" class="@(page.StartsWith("/Schedule/", StringComparison.OrdinalIgnoreCase) ? "active" : null)">Schedule</a>
+            <a asp-page="/Power/Index" class="@(page.StartsWith("/Power/", StringComparison.OrdinalIgnoreCase) ? "active" : null)">Power</a>
             <div class="nav-menu">
                 <button type="button" class="nav-menu-button@(managing ? " active" : "")" aria-haspopup="true">Manage ▾</button>
                 <div class="nav-menu-items">

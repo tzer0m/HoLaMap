@@ -64,6 +64,9 @@ namespace HoLaMap.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("CanSleep")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Ip")
                         .HasColumnType("text");
 
@@ -85,6 +88,12 @@ namespace HoLaMap.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("PowerCheckPort")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("PowerControl")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("RackColumn")
                         .HasColumnType("integer");
 
@@ -103,7 +112,19 @@ namespace HoLaMap.Migrations
                     b.Property<int?>("RoomId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SemaphoreHost")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("SemaphoreInventoryId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Ssid")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WakeInterface")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WakeMac")
                         .HasColumnType("text");
 
                     b.Property<string>("WifiBand")

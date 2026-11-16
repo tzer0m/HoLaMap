@@ -1919,3 +1919,42 @@ body:has(.map-layout) .details::-webkit-scrollbar {
     border-color: #a33;
     color: #ef6b5b;
 }
+
+.power-message {
+    margin: 0 0 12px;
+    color: #9aa3b5;
+}
+
+.power-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.power-actions form {
+    margin: 0;
+}
+
+.power-actions .button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.power-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #4a5068;
+    font-size: 0.8rem;
+}
+
+.power-status.online {
+    background: #4a8a1c;
+}
+
+.power-status.offline {
+    background: #a33;
+}
+
+.power-remove {
+    margin-top: 24px;
+}

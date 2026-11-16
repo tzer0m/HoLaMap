@@ -34,5 +34,10 @@ namespace HoLaMap.Semaphore
         /// Gets or sets the number of minutes between syncs.
         /// </summary>
         public int SyncIntervalMinutes { get; set; } = 60;
+
+        /// <summary>
+        /// Gets or sets the ID of the template that powers machines off or puts them to sleep.
+        /// </summary>
+        public int PowerTemplateId { get; set; }
     }
 }

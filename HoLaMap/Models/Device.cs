@@ -129,5 +129,40 @@ namespace HoLaMap.Models
         /// Gets or sets the last Wi-Fi link rate in Mbps.
         /// </summary>
         public int? WifiRate { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether the device is on the Power page.
+        /// </summary>
+        public bool PowerControl { get; set; }
+
+        /// <summary>
+        /// Gets or sets the MAC address to send the wake packet to, or null to use the device's own.
+        /// </summary>
+        public string? WakeMac { get; set; }
+
+        /// <summary>
+        /// Gets or sets the network interface the wake packet is sent from, or null if the device can't be woken.
+        /// </summary>
+        public string? WakeInterface { get; set; }
+
+        /// <summary>
+        /// Gets or sets the TCP port checked to see if the device is up, or null to ping it.
+        /// </summary>
+        public int? PowerCheckPort { get; set; }
+
+        /// <summary>
+        /// Gets or sets the device's host name in Semaphore, or null if it can't be powered off from here.
+        /// </summary>
+        public string? SemaphoreHost { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Semaphore inventory that holds the device and its credentials.
+        /// </summary>
+        public int? SemaphoreInventoryId { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether the device can be put to sleep.
+        /// </summary>
+        public bool CanSleep { get; set; }
     }
 }

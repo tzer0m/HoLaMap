@@ -1,0 +1,68 @@
+@page
+@model HoLaMap.Pages.Power.IndexModel
+@{
+    ViewData["Title"] = "Power";
+}
+
+<header class="page-header">
+    <h1>Power</h1>
+    <a class="button" asp-page="Edit">Add Machine</a>
+</header>
+
+<p id="power-message" class="power-message" hidden="@(Model.Message == null)">@Model.Message</p>
+
+@if (Model.Machines.Count == 0)
+{
+    <p class="empty">No machines yet. Add one to wake it, put it to sleep or power it off from here.</p>
+}
+else
+{
+    <table class="table power-table" data-status-url="@Url.Page("Index", "Status")" data-refresh="@Model.RefreshIntervalMs">
+        <thead>
+            <tr>
+                <th>Machine</th>
+                <th>IP</th>
+                <th>Status</th>
+                <th>Actions</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (Device device in Model.Machines)
+            {
+                <tr data-id="@device.Id">
+                    <td>@device.Name</td>
+                    <td>@device.Ip</td>
+                    <td><span class="power-status">Checking</span></td>
+                    <td>
+                        <div class="power-actions">
+                            @if (!string.IsNullOrWhiteSpace(device.WakeInterface))
+                            {
+                                <form method="post" asp-page-handler="Wake" asp-route-id="@device.Id">
+                                    <button type="submit" class="button power-wake">Wake</button>
+                                </form>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(device.SemaphoreHost))
+                            {
+                                if (device.CanSleep)
+                                {
+                                    <form method="post" asp-page-handler="Sleep" asp-route-id="@device.Id">
+                                        <button type="submit" class="button button-secondary power-down" data-confirm="Put @device.Name to sleep?">Sleep</button>
+                                    </form>
+                                }
+                                <form method="post" asp-page-handler="PowerOff" asp-route-id="@device.Id">
+                                    <button type="submit" class="button button-danger power-down" data-confirm="Power off @device.Name?">Power Off</button>
+                                </form>
+                            }
+                        </div>
+                    </td>
+                    <td><a asp-page="Edit" asp-route-id="@device.Id">Edit</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@section Scripts {
+    <script src="~/js/power.js" asp-append-version="true"></script>
+}
