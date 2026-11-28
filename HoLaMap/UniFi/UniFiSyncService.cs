@@ -62,7 +62,7 @@ namespace HoLaMap.UniFi
                 if (device.Mac == NormaliseMac(station.Mac))
                 {
                     device.Name = station.Name ?? station.Hostname ?? device.Mac;
-                    device.Ip = station.Ip;
+                    device.Ip = station.Ip ?? device.Ip;
                     SyncWireless(device, station, devices);
                 }
             }
