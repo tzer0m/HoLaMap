@@ -50,9 +50,12 @@ else
                                         <button type="submit" class="button button-secondary power-down" disabled data-confirm="Put @device.Name to sleep?">Sleep</button>
                                     </form>
                                 }
-                                <form method="post" asp-page-handler="PowerOff" asp-route-id="@device.Id">
-                                    <button type="submit" class="button button-danger power-down" disabled data-confirm="Power off @device.Name?">Power Off</button>
-                                </form>
+                                if (device.CanPowerOff)
+                                {
+                                    <form method="post" asp-page-handler="PowerOff" asp-route-id="@device.Id">
+                                        <button type="submit" class="button button-danger power-down" disabled data-confirm="Power off @device.Name?">Power Off</button>
+                                    </form>
+                                }
                             }
                         </div>
                     </td>

@@ -57,6 +57,12 @@ namespace HoLaMap.Pages.Power
         public bool CanSleep { get; set; }
 
         /// <summary>
+        /// Whether the device can be powered off, ticked by default for a new machine.
+        /// </summary>
+        [BindProperty]
+        public bool CanPowerOff { get; set; } = true;
+
+        /// <summary>
         /// The machine being edited, or null when adding one.
         /// </summary>
         public Device? Machine { get; private set; }
@@ -92,6 +98,7 @@ namespace HoLaMap.Pages.Power
                 SemaphoreHost = Machine.SemaphoreHost;
                 SemaphoreInventoryId = Machine.SemaphoreInventoryId;
                 CanSleep = Machine.CanSleep;
+                CanPowerOff = Machine.CanPowerOff;
             }
             await LoadOptionsAsync();
             return Page();
@@ -126,6 +133,7 @@ namespace HoLaMap.Pages.Power
             device.SemaphoreHost = Clean(SemaphoreHost);
             device.SemaphoreInventoryId = SemaphoreInventoryId;
             device.CanSleep = CanSleep;
+            device.CanPowerOff = CanPowerOff;
             await context.SaveChangesAsync();
             return RedirectToPage("Index");
         }
@@ -147,6 +155,7 @@ namespace HoLaMap.Pages.Power
                 device.SemaphoreHost = null;
                 device.SemaphoreInventoryId = null;
                 device.CanSleep = false;
+                device.CanPowerOff = true;
                 await context.SaveChangesAsync();
             }
             return RedirectToPage("Index");

@@ -31,6 +31,10 @@ namespace HoLaMap.Power
             {
                 return new PowerResult { Success = false, Message = $"{device.Name} can't be put to sleep." };
             }
+            if (action == PowerAction.Shutdown && !device.CanPowerOff)
+            {
+                return new PowerResult { Success = false, Message = $"{device.Name} can't be powered off." };
+            }
             SemaphoreOptions settings = options.Value;
             if (settings.BaseUrl.Length == 0 || settings.PowerTemplateId == 0)
             {

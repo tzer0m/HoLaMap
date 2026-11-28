@@ -164,5 +164,10 @@ namespace HoLaMap.Models
         /// Gets or sets whether the device can be put to sleep.
         /// </summary>
         public bool CanSleep { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether the device can be powered off.
+        /// </summary>
+        public bool CanPowerOff { get; set; } = true;
     }
 }

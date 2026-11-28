@@ -258,7 +258,10 @@ namespace HoLaMap.Pages
                 {
                     actions.Add("sleep");
                 }
-                actions.Add("poweroff");
+                if (device.CanPowerOff)
+                {
+                    actions.Add("poweroff");
+                }
             }
             return actions;
         }

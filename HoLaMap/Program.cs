@@ -74,6 +74,20 @@ authentication.AddOpenIdConnect(options =>
 builder.Services.AddAuthorizationBuilder().SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 
 WebApplication app = builder.Build();
+
+// Bring the database up to date on start. If Robert (and so Postgres) is off, log it and carry on, so the Power page can still be reached to wake it.
+using (IServiceScope scope = app.Services.CreateScope())
+{
+    try
+    {
+        scope.ServiceProvider.GetRequiredService<HoLaMapContext>().Database.Migrate();
+    }
+    catch (Exception exception)
+    {
+        app.Logger.LogWarning(exception, "Couldn't apply database migrations on start.");
+    }
+}
+
 app.UseForwardedHeaders(new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto });
 app.UseRouting();
 app.UseAuthentication();

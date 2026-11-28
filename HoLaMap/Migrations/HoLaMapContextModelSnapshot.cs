@@ -64,6 +64,9 @@ namespace HoLaMap.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("CanPowerOff")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("CanSleep")
                         .HasColumnType("boolean");
 
